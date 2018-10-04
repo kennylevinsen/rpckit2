@@ -473,7 +473,7 @@ func (c *RPCConnection) gotMessage(msg *message) {
 			reply.WriteVarint(result.RPCID())
 			result.RPCEncode(reply)
 			c.send(reply)
-		} // }
+		}
 
 		break
 	case 2: // method return

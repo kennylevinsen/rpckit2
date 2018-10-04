@@ -12,7 +12,8 @@ func (c *ServerClient) {{ .Name}}( {{ range .Input }}
         {{- end }}
     })
 
-    if resultTypeID == 2 {
+    switch resultTypeID {
+    case 2:
         var r serverResponse_{{ .Name }}
         decodeError := r.RPCDecode(msg)
         if decodeError != nil {
@@ -22,9 +23,9 @@ func (c *ServerClient) {{ .Name}}( {{ range .Input }}
         {{ range .Output }}
         {{ .Name }} = r._{{ .Name }}
         {{- end}}
-        return
+    default:
+        err = &rpcError{id: ProtocolError, error: fmt.Sprintf("incorrect return type: expected %d, got %d", 2, resultTypeID)}
     }
 
-    fmt.Println("SOME ERROR RETURNED", resultTypeID)
     return
 }

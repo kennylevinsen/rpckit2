@@ -1,23 +1,23 @@
 package main
 
 import (
-    "bytes"
-    "encoding/binary"
+	"bytes"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
-    "math"
+	"math"
 	"net"
 	"sync"
 	"time"
 
-    "gitlab.com/exashape/rpckit2"
+	"gitlab.com/exashape/rpckit2"
 )
 
 type ServerMethod uint64
 
 type ServerClient struct {
-    c *RPCConnection
+	c *RPCConnection
 }
 
 func NewServerClient(c *RPCConnection) *ServerClient {
@@ -499,7 +499,7 @@ func (c *RPCConnection) gotMessage(msg *message) {
 			reply.WriteVarint(result.RPCID())
 			result.RPCEncode(reply)
 			c.send(reply)
-		} // }
+		}
 
 		break
 	case 2: // method return
@@ -712,7 +712,8 @@ func (c *ServerClient) Authenticate(
         _password: password,
     })
 
-    if resultTypeID == 2 {
+    switch resultTypeID {
+    case 2:
         var r serverResponse_Authenticate
         decodeError := r.RPCDecode(msg)
         if decodeError != nil {
@@ -721,10 +722,10 @@ func (c *ServerClient) Authenticate(
         }
         
         success = r._success
-        return
+    default:
+        err = &rpcError{id: ProtocolError, error: fmt.Sprintf("incorrect return type: expected %d, got %d", 2, resultTypeID)}
     }
 
-    fmt.Println("SOME ERROR RETURNED", resultTypeID)
     return
 }
 
@@ -812,7 +813,8 @@ func (c *ServerClient) PingWithReply(
         _name: name,
     })
 
-    if resultTypeID == 2 {
+    switch resultTypeID {
+    case 2:
         var r serverResponse_PingWithReply
         decodeError := r.RPCDecode(msg)
         if decodeError != nil {
@@ -821,10 +823,10 @@ func (c *ServerClient) PingWithReply(
         }
         
         greeting = r._greeting
-        return
+    default:
+        err = &rpcError{id: ProtocolError, error: fmt.Sprintf("incorrect return type: expected %d, got %d", 2, resultTypeID)}
     }
 
-    fmt.Println("SOME ERROR RETURNED", resultTypeID)
     return
 }
 
@@ -942,7 +944,8 @@ func (c *ServerClient) TestMethod(
         _double: double,
     })
 
-    if resultTypeID == 2 {
+    switch resultTypeID {
+    case 2:
         var r serverResponse_TestMethod
         decodeError := r.RPCDecode(msg)
         if decodeError != nil {
@@ -951,10 +954,10 @@ func (c *ServerClient) TestMethod(
         }
         
         success = r._success
-        return
+    default:
+        err = &rpcError{id: ProtocolError, error: fmt.Sprintf("incorrect return type: expected %d, got %d", 2, resultTypeID)}
     }
 
-    fmt.Println("SOME ERROR RETURNED", resultTypeID)
     return
 }
 
