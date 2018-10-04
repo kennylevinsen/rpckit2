@@ -46,6 +46,11 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+
+	_, err = serverClient.TestMethod("hello", true, 1234, 654, 3.454, 3.14)
+	if err != nil {
+		panic(err)
+	}
 	fmt.Println("greeting:", greeting)
 	fmt.Println("done")
 	time.Sleep(time.Millisecond * 200)
@@ -80,4 +85,9 @@ func (s *server) Authenticate(username string, password string) (success bool, e
 func (s *server) PingWithReply(name string) (greeting string, err error) {
 	//s.client.PingWithReply(name, err)
 	return "hello " + name, nil
+}
+
+func (s *server) TestMethod(a string, b bool, c int64, d int64, e float32, f float64) (success bool, err error) {
+	fmt.Printf("a: %s, b: %t, c: %d, d: %d, e: %f, f: %f\n", a, b, c, d, e, f)
+	return true, nil
 }
