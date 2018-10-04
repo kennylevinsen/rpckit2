@@ -1,0 +1,17 @@
+
+the rpc protocol is pretty simple,
+
+It's a binary connection where each message is framed like so.
+	[[length: uint64],[bytes: byte array with length]]
+
+The initial handshake is 
+	["RPCKIT", version]
+
+A message could be
+	[type:methodCall:varint, callId:varint, protocolID:varint, methodTypeId:varint, [message]] 
+	[type:methodReturn:varint, callId:varint, resultTypeID:varint, [message]]  // resultTypeId is the identifier of teh result or error object returned.
+
+	type is:
+		methodCall
+		methodReturnSuccess
+		methodReturnFailure
