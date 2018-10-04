@@ -1,5 +1,5 @@
 type server{{ capitalize .Prefix }}_{{ .Name }} struct { {{ range .Fields }}
-    {{ .Name }} {{ .T.GoType }}
+    _{{ .Name }} {{ .T.GoType }}
 {{- end }}
 }
 
@@ -8,7 +8,7 @@ func (s *server{{ capitalize .Prefix }}_{{ .Name }}) RPCID() uint64 {
 }
 
 func (s *server{{ capitalize .Prefix }}_{{ .Name }}) RPCEncode(m *message) error { {{ range .Fields }}
-    m.WritePB{{ .T.String }}({{ .ID }}, s.{{ .Name }})
+    m.WritePB{{ .T.String }}({{ .ID }}, s._{{ .Name }})
     {{- end }}
     return nil
 }
@@ -22,7 +22,7 @@ func (s *server{{ capitalize .Prefix }}_{{ .Name }}) RPCDecode(m *message) error
         tag, err = m.ReadVarint()
         switch tag { {{ range .Fields }}
         case uint64({{ .ID }} << 3) | uint64(wireTypeForPropertyType(rpckit2.{{ .T.String }})):
-            s.{{ .Name }}, err = m.Read{{ .T.String }}()
+            s._{{ .Name }}, err = m.Read{{ .T.String }}()
         {{- end }}
         default:
             if err != io.EOF {

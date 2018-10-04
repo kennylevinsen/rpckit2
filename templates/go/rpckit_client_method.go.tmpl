@@ -8,7 +8,7 @@ func (c *ServerClient) {{ .Name}}( {{ range .Input }}
     ) {
 
     resultTypeID, msg, err := c.c.call(true, 1, uint64(ServerMethod{{ .Name }}), &serverRequest_{{ .Name }}{ {{ range .Input }}
-        {{ .Name }}: {{ .Name }},
+        _{{ .Name }}: {{ .Name }},
         {{- end }}
     })
 
@@ -20,7 +20,7 @@ func (c *ServerClient) {{ .Name}}( {{ range .Input }}
             return
         }
         {{ range .Output }}
-        {{ .Name }} = r.{{ .Name }}
+        {{ .Name }} = r._{{ .Name }}
         {{- end}}
         return
     }

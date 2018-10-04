@@ -7,7 +7,7 @@ func (s *serverMethodsCallHandler) RPCCall(methodID uint64, m *message) rpcMessa
             return nil
         }
         {{ range .Output }}{{ .Name }}{{ end }}, err := s.methods.{{ .Name }}( {{ range .Input }}
-            args.{{ .Name }},
+            args._{{ .Name }},
             {{- end }}
         )
         if err != nil {
@@ -18,7 +18,7 @@ func (s *serverMethodsCallHandler) RPCCall(methodID uint64, m *message) rpcMessa
             return nil
         }
         return &serverResponse_{{ .Name }}{ {{ range .Output }}
-            {{ .Name }}: {{ .Name }},
+            _{{ .Name }}: {{ .Name }},
             {{- end }}
         }
     {{- end }}

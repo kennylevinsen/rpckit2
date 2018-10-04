@@ -48,6 +48,8 @@ const (
 	Bool
 	Int64
 	Int
+	Float
+	Double
 )
 
 func (t PropertyType) String() string {
@@ -60,6 +62,10 @@ func (t PropertyType) String() string {
 		return "Int64"
 	case Int:
 		return "Int"
+	case Float:
+		return "Float"
+	case Double:
+		return "Double"
 	default:
 		panic("unknown property type")
 	}
@@ -74,7 +80,11 @@ func (t PropertyType) GoType() string {
 	case Int64:
 		return "int64"
 	case Int:
-		return "int"
+		return "int64"
+	case Float:
+		return "float32"
+	case Double:
+		return "float64"
 	default:
 		panic("unknown property type")
 	}
