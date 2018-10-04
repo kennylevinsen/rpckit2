@@ -10,6 +10,8 @@ import (
 	"text/template"
 )
 
+//go:generate go-bindata --pkg rpckit2 -o templates.go templates/...
+
 var template_deps = []string{
 	"rpckit_header.go.tmpl",
 	"rpckit_boilerplate.go.tmpl",
@@ -52,7 +54,7 @@ func (g GoGenerator) Generate(p string) error {
 
 	tmpl := template.New("").Funcs(funcs)
 	for _, name := range template_deps {
-		b, err := ioutil.ReadFile(path.Join("../../templates/go", name))
+		b, err := Asset(path.Join("templates/go", name))
 		if err != nil {
 			return fmt.Errorf("template reading failed: %+v\n", err)
 		}
