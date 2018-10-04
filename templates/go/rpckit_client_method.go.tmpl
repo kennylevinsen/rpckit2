@@ -1,0 +1,30 @@
+func (c *ServerClient) {{ .Name}}( {{ range .Input }}
+        {{ .Name }} {{ .T.GoType }},
+    {{- end }}
+    ) ( {{ range .Output }}
+        {{ .Name }} {{ .T.GoType }},
+    {{- end }}
+        err RPCError,
+    ) {
+
+    resultTypeID, msg, err := c.c.call(true, 1, uint64(ServerMethod{{ .Name }}), &serverRequest_{{ .Name }}{ {{ range .Input }}
+        {{ .Name }}: {{ .Name }},
+        {{- end }}
+    })
+
+    if resultTypeID == 2 {
+        var r serverResponse_{{ .Name }}
+        decodeError := r.RPCDecode(msg)
+        if decodeError != nil {
+            err = &rpcError{id: GenericError, error: fmt.Sprintf("could not decode result: %v", decodeError)}
+            return
+        }
+        {{ range .Output }}
+        {{ .Name }} = r.{{ .Name }}
+        {{- end}}
+        return
+    }
+
+    fmt.Println("SOME ERROR RETURNED", resultTypeID)
+    return
+}

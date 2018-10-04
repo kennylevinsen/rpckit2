@@ -1,0 +1,13 @@
+{{ define "rpckit" -}}
+{{ template "rpckit_header.go.tmpl" . }}
+{{ template "rpckit_boilerplate.go.tmpl" . }}
+{{ range .Methods }}
+const ServerMethod{{ .Name }} ServerMethod = {{ .ID }}
+
+{{ template "rpckit_serialization.go.tmpl" dict "Prefix" "Request" "Name" .Name "ID" "1" "Fields" .Input }}
+{{ template "rpckit_serialization.go.tmpl" dict "Prefix" "Response" "Name" .Name "ID" "2" "Fields" .Output }}
+{{ template "rpckit_client_method.go.tmpl" . }}
+{{ end }}
+{{ template "rpckit_server_method.go.tmpl" . }}
+{{ template "rpckit_rpccall.go.tmpl" . }}
+{{- end }}

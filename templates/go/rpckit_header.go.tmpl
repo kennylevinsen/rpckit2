@@ -1,0 +1,24 @@
+package {{ .PackageName }}
+
+import (
+    "bytes"
+	"encoding/binary"
+	"errors"
+	"fmt"
+	"io"
+	"net"
+	"sync"
+	"time"
+
+    "gitlab.com/exashape/rpckit2"
+)
+
+type ServerMethod uint64
+
+type ServerClient struct {
+    c *RPCConnection
+}
+
+func NewServerClient(c *RPCConnection) *ServerClient {
+	return &ServerClient{c: c}
+}

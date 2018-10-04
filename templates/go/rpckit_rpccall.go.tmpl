@@ -1,0 +1,29 @@
+func (s *serverMethodsCallHandler) RPCCall(methodID uint64, m *message) rpcMessage {
+    switch methodID { {{ range .Methods }}
+    case {{ .ID }}:
+        args := serverRequest_{{ .Name }}{}
+        if err := args.RPCDecode(m); err != nil {
+            // TODO: Wrap error
+            return nil
+        }
+        {{ range .Output }}{{ .Name }}{{ end }}, err := s.methods.{{ .Name }}( {{ range .Input }}
+            args.{{ .Name }},
+            {{- end }}
+        )
+        if err != nil {
+            if rpcMsg, ok := err.(rpcMessage); ok {
+                return rpcMsg
+            }
+            // TODO: Wrap error
+            return nil
+        }
+        return &serverResponse_{{ .Name }}{ {{ range .Output }}
+            {{ .Name }}: {{ .Name }},
+            {{- end }}
+        }
+    {{- end }}
+    default:
+        // TODO: Return error
+        return nil
+    }
+}

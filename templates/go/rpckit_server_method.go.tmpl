@@ -1,0 +1,19 @@
+type ServerMethods interface { {{ range .Methods }}
+    {{ .Name }}( {{ range .Input }}
+        {{ .Name }} {{ .T.GoType }},
+    {{- end }}
+    ) ( {{ range .Output }}
+        {{ .Name }} {{ .T.GoType }},
+    {{- end }}
+        err error,
+    )
+    {{- end }}
+}
+
+func RegisterRPCCallHandler(c *RPCConnection, s ServerMethods) {
+    c.setHandler(1, &serverMethodsCallHandler{methods: s})
+}
+
+type serverMethodsCallHandler struct {
+    methods ServerMethods
+}
