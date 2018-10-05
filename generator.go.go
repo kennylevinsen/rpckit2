@@ -25,18 +25,18 @@ var template_deps = []string{
 
 type GoGenerator struct {
 	PackageName string
-	Protocols    []*Protocol
+	Protocols   []*Protocol
 }
 
 type TemplateProtocol struct {
-	Name        string
-	ID          uint64
-	Methods     []Method
+	Name    string
+	ID      uint64
+	Methods []Method
 }
 
 type TemplateContext struct {
 	PackageName string
-	Protocols []TemplateProtocol
+	Protocols   []TemplateProtocol
 }
 
 func (g GoGenerator) Generate(p string) error {
@@ -80,8 +80,8 @@ func (g GoGenerator) Generate(p string) error {
 
 	for _, v := range g.Protocols {
 		ctx.Protocols = append(ctx.Protocols, TemplateProtocol{
-			Name: v.name,
-			ID: v.id,
+			Name:    v.name,
+			ID:      v.id,
 			Methods: v.methods,
 		})
 	}

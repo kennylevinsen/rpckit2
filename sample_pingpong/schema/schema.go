@@ -63,7 +63,7 @@ func main() {
 	})
 
 	if err := (rpckit2.GoGenerator{
-		Protocols:    []*rpckit2.Protocol{
+		Protocols: []*rpckit2.Protocol{
 			server1,
 			server2,
 		},

@@ -386,7 +386,7 @@ type RPCConnectionOption func(*RPCConnection)
 type DisconnectedHandler func(c *RPCConnection, err RPCError)
 
 type RPCConnection struct {
-	timeout         time.Duration
+	timeout          time.Duration
 	conn             net.Conn
 	keepAlive        time.Duration
 	dynamicKeepAlive bool
