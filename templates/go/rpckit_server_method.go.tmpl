@@ -1,8 +1,12 @@
-type ServerMethods interface { {{ range .Methods }}
-    {{ .Name }}( {{ range .Input }}
+type {{ capitalize .ProtoName }}Methods interface {
+    {{- range .Methods }}
+    {{ .Name }}(
+    ctx context.Context,
+    {{- range .Input }}
         {{ .Name }} {{ .T.GoType }},
     {{- end }}
-    ) ( {{ range .Output }}
+    ) (
+    {{- range .Output }}
         {{ .Name }} {{ .T.GoType }},
     {{- end }}
         err error,
@@ -10,10 +14,10 @@ type ServerMethods interface { {{ range .Methods }}
     {{- end }}
 }
 
-func RegisterRPCCallHandler(c *RPCConnection, s ServerMethods) {
-    c.setHandler(1, &serverMethodsCallHandler{methods: s})
+func Register{{ capitalize .ProtoName }}Handler(c *RPCConnection, s {{ capitalize .ProtoName }}Methods) {
+    c.setHandler({{ .ProtoID }}, &callHandlerFor{{ capitalize .ProtoName }}{methods: s})
 }
 
-type serverMethodsCallHandler struct {
-    methods ServerMethods
+type callHandlerFor{{ capitalize .ProtoName}} struct {
+    methods {{ capitalize .ProtoName }}Methods
 }

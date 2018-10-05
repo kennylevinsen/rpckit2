@@ -16,6 +16,7 @@ var template_deps = []string{
 	"rpckit_boilerplate.go.tmpl",
 	"rpckit_property_to_wiretype.go.tmpl",
 	"rpckit_serialization.go.tmpl",
+	"rpckit_client_definition.go.tmpl",
 	"rpckit_client_method.go.tmpl",
 	"rpckit_server_method.go.tmpl",
 	"rpckit_rpccall.go.tmpl",
@@ -24,13 +25,18 @@ var template_deps = []string{
 
 type GoGenerator struct {
 	PackageName string
-	Protocol    *Protocol
+	Protocols    []*Protocol
+}
+
+type TemplateProtocol struct {
+	Name        string
+	ID          uint64
+	Methods     []Method
 }
 
 type TemplateContext struct {
 	PackageName string
-	Name        string
-	Methods     []Method
+	Protocols []TemplateProtocol
 }
 
 func (g GoGenerator) Generate(p string) error {
@@ -67,12 +73,21 @@ func (g GoGenerator) Generate(p string) error {
 			return fmt.Errorf("template parsing failed: %+v\n", err)
 		}
 	}
-	var buf bytes.Buffer
-	if err := tmpl.ExecuteTemplate(&buf, "rpckit", TemplateContext{
+
+	ctx := TemplateContext{
 		PackageName: g.PackageName,
-		Name:        g.Protocol.name,
-		Methods:     g.Protocol.methods,
-	}); err != nil {
+	}
+
+	for _, v := range g.Protocols {
+		ctx.Protocols = append(ctx.Protocols, TemplateProtocol{
+			Name: v.name,
+			ID: v.id,
+			Methods: v.methods,
+		})
+	}
+
+	var buf bytes.Buffer
+	if err := tmpl.ExecuteTemplate(&buf, "rpckit", ctx); err != nil {
 		return fmt.Errorf("template execution failed: %+v\n", err)
 	}
 

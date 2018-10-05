@@ -1,12 +1,17 @@
 {{ define "rpckit" -}}
 {{ template "rpckit_boilerplate.go.tmpl" . }}
+{{ range .Protocols }}
+{{- $protoName := .Name -}}
+{{- $protoID := .ID -}}
+{{ template "rpckit_client_definition.go.tmpl" dict "ProtoName" $protoName "ProtoID" $protoID}}
 {{ range .Methods }}
-const ServerMethod{{ .Name }} ServerMethod = {{ .ID }}
+const {{ capitalize $protoName }}Method_{{ .Name }} {{ capitalize $protoName }}Method = {{ .ID }}
 
-{{ template "rpckit_serialization.go.tmpl" dict "Prefix" "Request" "Name" .Name "Fields" .Input }}
-{{ template "rpckit_serialization.go.tmpl" dict "Prefix" "Response" "Name" .Name "Fields" .Output }}
-{{ template "rpckit_client_method.go.tmpl" . }}
+{{ template "rpckit_serialization.go.tmpl" dict "Prefix" "request" "Name" .Name "Fields" .Input "ProtoName" $protoName "ProtoID" $protoID }}
+{{ template "rpckit_serialization.go.tmpl" dict "Prefix" "response" "Name" .Name "Fields" .Output "ProtoName" $protoName "ProtoID" $protoID }}
+{{ template "rpckit_client_method.go.tmpl" dict "ProtoName" $protoName "ProtoID" $protoID "Name" .Name "Input" .Input "Output" .Output }}
 {{ end }}
-{{ template "rpckit_server_method.go.tmpl" . }}
-{{ template "rpckit_rpccall.go.tmpl" . }}
+{{ template "rpckit_server_method.go.tmpl" dict "ProtoName" $protoName "ProtoID" $protoID "Methods" .Methods }}
+{{ template "rpckit_rpccall.go.tmpl" dict "ProtoName" $protoName "ProtoID" $protoID "Methods" .Methods }}
+{{ end }}
 {{- end }}

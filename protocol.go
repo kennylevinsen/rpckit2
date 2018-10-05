@@ -4,12 +4,13 @@ import (
 	"fmt"
 )
 
-func NewProtocol(name string) *Protocol {
-	return &Protocol{name: name}
+func NewProtocol(name string, id uint64) *Protocol {
+	return &Protocol{name: name, id: id}
 }
 
 type Protocol struct {
 	name    string
+	id      uint64
 	objects []Object
 	methods []Method
 }

@@ -1,17 +1,21 @@
-func (s *serverMethodsCallHandler) RPCCall(methodID uint64, m *message) (resp rpcMessage) {
+func (s *callHandlerFor{{ capitalize .ProtoName }}) RPCCall(ctx context.Context, methodID uint64, m *message) (resp rpcMessage) {
     defer func() {
         if r := recover(); r != nil {
             resp = &rpcError{id: ApplicationError, error: "unknown error occurred"}
         }
     }()
 
-    switch methodID { {{ range .Methods }}
-    case uint64(ServerMethod{{ .Name }}):
-        args := serverRequest_{{ .Name }}{}
+    {{ $protoName := .ProtoName -}}
+    switch methodID {
+    {{- range .Methods }}
+    case uint64({{ capitalize $protoName }}Method_{{ capitalize .Name }}):
+        args := request_{{ capitalize $protoName }}_{{ capitalize .Name }}{}
         if err := args.RPCDecode(m); err != nil {
             return &rpcError{id: ProtocolError, error: fmt.Sprintf("unable to decode method call: %v", err)}
         }
-        {{ range .Output }}{{ .Name }}{{ end }}, err := s.methods.{{ .Name }}( {{ range .Input }}
+        {{ range .Output }}{{ .Name }}{{ end }}, err := s.methods.{{ .Name }}(
+            ctx,
+            {{- range .Input }}
             args._{{ .Name }},
             {{- end }}
         )
@@ -21,7 +25,8 @@ func (s *serverMethodsCallHandler) RPCCall(methodID uint64, m *message) (resp rp
             }
             return &rpcError{id: ApplicationError, error: err.Error()}
         }
-        return &serverResponse_{{ .Name }}{ {{ range .Output }}
+        return &response_{{ capitalize $protoName }}_{{ capitalize .Name }}{
+            {{- range .Output }}
             _{{ .Name }}: {{ .Name }},
             {{- end }}
         }

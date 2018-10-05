@@ -1,26 +1,29 @@
-type server{{ capitalize .Prefix }}_{{ .Name }} struct { {{ range .Fields }}
+type {{ .Prefix }}_{{ capitalize .ProtoName }}_{{ capitalize .Name }} struct {
+{{- range .Fields }}
     _{{ .Name }} {{ .T.GoType }}
 {{- end }}
 }
 
-func (s *server{{ capitalize .Prefix }}_{{ .Name }}) RPCID() uint64 {
-    return uint64(ServerMethod{{ .Name }})
+func (s *{{ .Prefix }}_{{ capitalize .ProtoName }}_{{ capitalize .Name }}) RPCID() uint64 {
+    return uint64({{ capitalize .ProtoName }}Method_{{ capitalize .Name }})
 }
 
-func (s *server{{ capitalize .Prefix }}_{{ .Name }}) RPCEncode(m *message) error { {{ range .Fields }}
+func (s *{{ .Prefix }}_{{ capitalize .ProtoName }}_{{ capitalize .Name }}) RPCEncode(m *message) error {
+    {{- range .Fields }}
     m.WritePB{{ .T.String }}({{ .ID }}, s._{{ .Name }})
     {{- end }}
     return nil
 }
 
-func (s *server{{ capitalize .Prefix }}_{{ .Name }}) RPCDecode(m *message) error {
+func (s *{{ .Prefix }}_{{ capitalize .ProtoName }}_{{ capitalize .Name }}) RPCDecode(m *message) error {
     var (
         err error
         tag uint64
     )
     for err == nil {
         tag, err = m.ReadVarint()
-        switch tag { {{ range .Fields }}
+        switch tag {
+        {{- range .Fields }}
         case uint64({{ .ID }} << 3) | uint64({{ template "rpckit_property_to_wiretype.go.tmpl" .T.String}}):
             s._{{ .Name }}, err = m.Read{{ .T.String }}()
         {{- end }}
