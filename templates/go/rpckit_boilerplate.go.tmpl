@@ -319,6 +319,7 @@ const (
 	TimeoutError     RPCErrorID = 1
 	ProtocolError    RPCErrorID = 2
 	ApplicationError RPCErrorID = 3
+	ConnectionError  RPCErrorID = 4
 )
 
 type RPCError interface {
@@ -444,7 +445,7 @@ func NewRPCConnection(conn net.Conn, options ...RPCConnectionOption) (*RPCConnec
 	}
 
 	if _, err := c.conn.Write(rpcPreamble); err != nil {
-		return nil, &rpcError{id: GenericError, error: fmt.Sprintf("could not write preamble: %v", err)}
+		return nil, &rpcError{id: ConnectionError, error: fmt.Sprintf("could not write preamble: %v", err)}
 	}
 
 	go c.readLoop()
@@ -789,7 +790,7 @@ func (c *RPCConnection) healthCheck() RPCError {
 			}
 			return &rpcError{id: GenericError, error: c.endReason.Error()}
 		} else {
-			return &rpcError{id: GenericError, error: "not connected"}
+			return &rpcError{id: ConnectionError, error: "not connected"}
 		}
 	}
 	return nil
@@ -807,7 +808,7 @@ func (c *RPCConnection) send(msg *message) RPCError {
 
 	if err != nil {
 		c.Close()
-		return &rpcError{id: GenericError, error: fmt.Sprintf("error while writing message: %v", err)}
+		return &rpcError{id: ConnectionError, error: fmt.Sprintf("error while writing message: %v", err)}
 	}
 	return nil
 }
