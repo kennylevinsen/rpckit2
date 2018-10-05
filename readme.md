@@ -12,12 +12,12 @@ RpcKit defines a simple RPC system:
 
 TODO:
 	[x] Send preable
-	- Protobuf encoding/decoding of messages code generation
-	- Generating code
-	- Errors handling (both in return values, and in unexpected cases)
+	[x] Protobuf encoding/decoding of messages code generation
+	[x] Generating code
+	[x] Errors handling (both in return values, and in unexpected cases)
 
-	- ability to stay connected even in face of disconnects.
-	- Meta code generation (for inspecting properties and summary and such) (if not, just make the schema avaliable)
-	- http interface with support for json read/write
-	- swift client generation
-	- golang http client generation
+	[ ] ability to stay connected even in face of disconnects.
+	[ ] Meta code generation (for inspecting properties and summary and such) (if not, just make the schema avaliable)
+	[ ] http interface with support for json read/write
+	[ ] swift client generation
+	[ ] golang http client generation
