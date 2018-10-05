@@ -1,3 +1,49 @@
+package {{ .PackageName }}
+
+import (
+	"bytes"
+	"encoding/binary"
+	"errors"
+	"fmt"
+	"io"
+	"math"
+	"net"
+	"sync"
+	"sync/atomic"
+	"time"
+)
+
+const (
+	rpcRequest = 1
+	rpcResponse = 2
+)
+
+const (
+	privateTypeRPCError uint64 = math.MaxUint64
+)
+
+const (
+	methodCall = 1
+	methodReturn = 2
+)
+
+const messageCapacity = 1024
+
+var (
+	ErrOverflow = errors.New("overflow in varint")
+	rpcPreamble = []byte{82, 80, 67, 75, 73, 84, 0, 0, 0, 1} //R,P,C,K,I,T .. version 1
+)
+
+type ServerMethod uint64
+
+type ServerClient struct {
+	c *RPCConnection
+}
+
+func NewServerClient(c *RPCConnection) *ServerClient {
+	return &ServerClient{c: c}
+}
+
 type rpcMessage interface {
 	RPCEncode(m *message) error
 	RPCID() uint64
@@ -48,12 +94,10 @@ func (m *message) Bytes() []byte {
 
 func (m *message) WriteVarint(v uint64) {
 	m.grow(9)
-	//i := 0
 	for v >= 0x80 {
 		m.buf[m.len] = byte(v) | 0x80
 		m.len++
 		v >>= 7
-		//i++
 	}
 	m.buf[m.len] = byte(v)
 	m.len++
@@ -71,7 +115,7 @@ func (m *message) WriteString(v string) {
 func (m *message) Write32Bit(v uint32) {
 	m.grow(4)
 	binary.LittleEndian.PutUint32(m.buf[m.len:], v)
-	m.len+= 4
+	m.len += 4
 }
 
 func (m *message) Write64Bit(v uint64) {
@@ -107,8 +151,6 @@ func (m *message) ReadString() (string, error) {
 
 	return string(str), nil
 }
-
-var ErrOverflow = errors.New("Overflow in varint")
 
 func (m *message) ReadVarint() (uint64, error) {
 	var x uint64
@@ -214,25 +256,6 @@ func (w wireType) String() string {
 	}
 }
 
-func wireTypeForPropertyType(t rpckit2.PropertyType) wireType {
-	switch t {
-	case rpckit2.String:
-		return wireTypeLengthDelimited
-	case rpckit2.Bool:
-		return wireTypeVarint
-	case rpckit2.Int64:
-		return wireType64bit
-	case rpckit2.Int:
-		return wireTypeVarint
-	case rpckit2.Float:
-		return wireType32bit
-	case rpckit2.Double:
-		return wireType64bit
-	default:
-		panic("unknown property type")
-	}
-}
-
 func (m *message) ReadPBSkip(tag uint64) error {
 	var err error
 	switch wireType(tag & ((1 << 3) - 1)) {
@@ -298,9 +321,10 @@ func (m *message) WritePBDouble(fieldNumber uint64, value float64) {
 type RPCErrorID uint64
 
 const (
-	GenericError  RPCErrorID = 0
-	TimeoutError  RPCErrorID = 1
-	ProtocolError RPCErrorID = 2
+	GenericError     RPCErrorID = 0
+	TimeoutError     RPCErrorID = 1
+	ProtocolError    RPCErrorID = 2
+	ApplicationError RPCErrorID = 3
 )
 
 type RPCError interface {
@@ -321,6 +345,46 @@ func (e *rpcError) Error() string {
 	return e.error
 }
 
+func (e *rpcError) RPCID() uint64 {
+	return privateTypeRPCError
+}
+
+func (e *rpcError) RPCEncode(m *message) error {
+	m.WritePBInt(1, int64(e.id))
+	m.WritePBString(2, e.error)
+	return nil
+}
+
+func (e *rpcError) RPCDecode(m *message) error {
+    var (
+        err error
+        tag uint64
+    )
+    for err == nil {
+        tag, err = m.ReadVarint()
+		switch tag {
+		case uint64(1 << 3) | uint64({{ template "rpckit_property_to_wiretype.go.tmpl" "Int" }}):
+			var id int64
+			id, err = m.ReadInt()
+			e.id = RPCErrorID(id)
+		case uint64(2 << 3) | uint64({{ template "rpckit_property_to_wiretype.go.tmpl" "String" }}):
+			e.error, err = m.ReadString()
+        default:
+            if err != io.EOF {
+                err = m.ReadPBSkip(tag)
+            }
+        }
+    }
+    if err == io.EOF {
+        return nil
+    }
+    return err
+}
+
+func isRPCError(typeID uint64) bool {
+	return typeID == privateTypeRPCError
+}
+
 // ************************
 
 type DisconnectedHandler func(c *RPCConnection, err RPCError)
@@ -332,39 +396,42 @@ type RPCConnection struct {
 	onDisconnect DisconnectedHandler
 	handlers     map[uint64]rpcCallHandler
 	waitingCalls map[uint64]chan *message
+	nextID       uint32
+	timeout      time.Duration
 }
 
-var rpcPreamble = []byte{82, 80, 67, 75, 73, 84, 0, 0, 0, 1} //R,P,C,K,I,T .. version 1
 func NewRPCConnection(conn net.Conn) (*RPCConnection, RPCError) {
+	return NewRPCConnectionWithTimeout(conn, 30 * time.Second)
+}
+
+func NewRPCConnectionWithTimeout(conn net.Conn, timeout time.Duration) (*RPCConnection, RPCError) {
 	c := &RPCConnection{
 		connected:    true,
 		conn:         conn,
 		handlers:     make(map[uint64]rpcCallHandler),
 		waitingCalls: make(map[uint64]chan *message),
+		timeout:      timeout,
 	}
 
-	// send the preable
-	n, err := c.conn.Write(rpcPreamble)
-	if err != nil {
-		return nil, &rpcError{id: GenericError, error: fmt.Sprintf("Could not write preamble. Details: %v", err)}
-	}
-	if n != len(rpcPreamble) {
-		return nil, &rpcError{id: ProtocolError, error: "Could not send entire protocol preamble."}
+	if _, err := c.conn.Write(rpcPreamble); err != nil {
+		return nil, &rpcError{id: GenericError, error: fmt.Sprintf("could not write preamble: %v", err)}
 	}
 
 	go c.readLoop()
 	return c, nil
 }
 
+
 func (c *RPCConnection) RemoteAddr() net.Addr {
 	return c.conn.RemoteAddr()
 }
 
 func (c *RPCConnection) readLoop() {
-	receivedPreamble := false
-	buf := make([]byte, 0, 512)
-	off := 0
-	minRead := 256
+	var (
+		receivedPreamble bool
+		off, minRead int = 0, 256
+		buf = make([]byte, 0, 512)
+	)
 
 	// kill bad connections
 	defer func() {
@@ -378,10 +445,9 @@ func (c *RPCConnection) readLoop() {
 		if off >= len(buf) {
 			buf = buf[:0]
 			off = 0
-		} // }
+		}
 
 		if free := cap(buf) - len(buf); free < minRead {
-			//fmt.Println("grow")
 			// not enough space at end
 			newBuf := buf
 			if off+free < minRead {
@@ -393,13 +459,13 @@ func (c *RPCConnection) readLoop() {
 			buf = newBuf[:len(buf)-off]
 			off = 0
 		}
+
 		m, err := c.conn.Read(buf[len(buf):cap(buf)])
 		buf = buf[0 : len(buf)+m]
 		if err == io.EOF {
 			c.end(nil)
 			return
-		}
-		if err != nil {
+		} else if err != nil {
 			c.end(&rpcError{id: GenericError, error: fmt.Sprintf("error reading from connection in readLoop(): %v", err)})
 			return
 		}
@@ -412,11 +478,10 @@ func (c *RPCConnection) readLoop() {
 						off += len(rpcPreamble)
 						receivedPreamble = true
 					} else {
-						c.end(&rpcError{id: ProtocolError, error: "The first bytes received from the other end was not the expected rpckit preamble"})
+						c.end(&rpcError{id: ProtocolError, error: "did not receive expected rpckit2 preamble"})
 						return
 					}
-				} else { // }
-
+				} else {
 					break
 				}
 			}
@@ -434,52 +499,50 @@ func (c *RPCConnection) readLoop() {
 }
 
 func (c *RPCConnection) gotMessage(msg *message) {
-	t, err := msg.ReadVarint() // what kind of message is it
+	messageType, err := msg.ReadVarint()
 	if err != nil {
-		c.end(&rpcError{id: ProtocolError, error: "Could not read message type as the first varint in the incomming message."})
+		c.end(&rpcError{id: ProtocolError, error: "could not read message type of incoming message"})
 		return
 	}
 
-	switch t {
-	case 1: // method call
-		callID, err := msg.ReadVarint() // what is the id of this call?
+	switch messageType {
+	case methodCall:
+		callID, err := msg.ReadVarint()
 		if err != nil {
-			c.end(&rpcError{id: ProtocolError, error: "Could not read callId from message call."})
+			c.end(&rpcError{id: ProtocolError, error: "could not read callID from method call"})
 			return
 		}
-		protocolID, err := msg.ReadVarint() // what is the protocol being called?
+		protocolID, err := msg.ReadVarint()
 		if err != nil {
-			c.end(&rpcError{id: ProtocolError, error: "Could not read protocolId from message call. Closed connection."})
+			c.end(&rpcError{id: ProtocolError, error: "could not read protocolID from method call"})
 			return
 		}
-
 		handler, found := c.handlers[protocolID]
 		if !found {
-			c.end(&rpcError{id: ProtocolError, error: fmt.Sprintf("Unknown protocol: %v", protocolID)})
+			c.end(&rpcError{id: ProtocolError, error: fmt.Sprintf("unknown protocol: %d", protocolID)})
 			return
 		}
-
-		methodID, err := msg.ReadVarint() // what is the method being called?
+		methodID, err := msg.ReadVarint()
 		if err != nil {
-			c.end(&rpcError{id: ProtocolError, error: "Could not read methodID from message call. Closed connection."})
+			c.end(&rpcError{id: ProtocolError, error: "could not read methodID from method call"})
 			return
 		}
 
 		result := handler.RPCCall(methodID, msg)
 		if result != nil {
-			reply := newMessage(1024)
-			reply.WriteVarint(2)      // method return
-			reply.WriteVarint(callID) // callid
+			reply := newMessage(messageCapacity)
+			reply.WriteVarint(methodReturn)
+			reply.WriteVarint(callID)
 			reply.WriteVarint(result.RPCID())
 			result.RPCEncode(reply)
 			c.send(reply)
 		}
 
 		break
-	case 2: // method return
-		callID, err := msg.ReadVarint() // what is the id of this call?
+	case methodReturn:
+		callID, err := msg.ReadVarint()
 		if err != nil {
-			c.end(&rpcError{id: ProtocolError, error: "Could not read callId from message call. Closed connection."})
+			c.end(&rpcError{id: ProtocolError, error: "could not read callID from method return"})
 			return
 		}
 
@@ -487,7 +550,7 @@ func (c *RPCConnection) gotMessage(msg *message) {
 		ch, found := c.waitingCalls[callID]
 		c.RUnlock()
 		if !found {
-			c.end(&rpcError{id: ProtocolError, error: fmt.Sprintf("Could not find a waiting call for the call id: %v", callID)})
+			c.end(&rpcError{id: ProtocolError, error: fmt.Sprintf("method response received for unknown call: %v", callID)})
 			return
 		}
 
@@ -496,39 +559,99 @@ func (c *RPCConnection) gotMessage(msg *message) {
 	}
 }
 
-func (c *RPCConnection) logError(err RPCError) {
-	fmt.Println("ERROR", err.Error())
+func (c *RPCConnection) acquireCallSlot() (uint64, RPCError) {
+	c.Lock()
+	defer c.Unlock()
+
+	// Check if any slots exist
+	if len(c.waitingCalls) >= math.MaxUint32 {
+		return 0, &rpcError{id: GenericError, error: "no callID slots available"}
+	}
+
+	// Find a slot
+	var n uint32
+	taken := true
+	for taken {
+		n = atomic.AddUint32(&c.nextID, 1)
+		_, taken = c.waitingCalls[uint64(n)]
+	}
+
+	// Take the slot
+	c.waitingCalls[uint64(n)] = nil
+	return uint64(n), nil
+}
+
+func (c *RPCConnection) abandonCallSlot(callID uint64) {
+	c.Lock()
+	defer c.Unlock()
+
+	if callID > math.MaxUint32 {
+		panic("attempted to abandon invalid callID")
+	}
+
+	v, ok := c.waitingCalls[callID]
+	if !ok {
+		panic("attempted to abandon free call slot")
+	}
+	if v != nil {
+		panic("attempted to abandon used call slot")
+	}
+	delete(c.waitingCalls, callID)
+}
+
+func (c *RPCConnection) releaseCallSlot(callID uint64) {
+	c.Lock()
+	defer c.Unlock()
+
+	if callID > math.MaxUint32 {
+		panic("attempted to release invalid callID")
+	}
+
+	v, ok := c.waitingCalls[callID]
+	if !ok {
+		panic("attempted to release free call slot")
+	}
+	if v == nil {
+		panic("attempted to release unused call slot")
+	}
+	close(v)
+	delete(c.waitingCalls, callID)
 }
 
 func (c *RPCConnection) call(waitForReply bool, protocolID uint64, methodID uint64, callArgs rpcMessage) (uint64, *message, RPCError) {
-	// create the call message
-	callID := uint64(1234) // TODO:  proper call id.
-	m := newMessage(1024)
-	m.WriteVarint(1)          // it's a method call
-	m.WriteVarint(callID)     // method callid)
-	m.WriteVarint(protocolID) // protocol id
-	m.WriteVarint(methodID)   // method id
-	err := callArgs.RPCEncode(m)
+	callID, err := c.acquireCallSlot()
 	if err != nil {
-		return 0, nil, &rpcError{id: GenericError, error: fmt.Sprintf("Unable to encode call args: %v", err)}
-	} // }
+		return 0, nil, err
+	}
+
+	m := newMessage(messageCapacity)
+	m.WriteVarint(methodCall)
+	m.WriteVarint(callID)
+	m.WriteVarint(protocolID)
+	m.WriteVarint(methodID)
+
+	if err := callArgs.RPCEncode(m); err != nil {
+		c.abandonCallSlot(callID)
+		return 0, nil, &rpcError{id: GenericError, error: fmt.Sprintf("unable to encode method call arguments: %v", err)}
+	}
 
 	if !waitForReply {
+		c.abandonCallSlot(callID)
 		return 0, nil, c.send(m)
 	}
 
 	// setup the call and timer
 	ch := make(chan *message, 1)
-	timer := time.NewTimer(5 * time.Second)
 	c.Lock()
 	c.waitingCalls[callID] = ch
 	c.Unlock()
+
+
+	// Configure call timeout and cleanup
+	timer := time.NewTimer(c.timeout)
 	defer func() {
-		close(ch)
 		timer.Stop()
-		c.Lock()
-		delete(c.waitingCalls, callID)
-		c.Unlock()
+		c.releaseCallSlot(callID)
 	}()
 
 	// send the call over to the otherside
@@ -543,23 +666,19 @@ func (c *RPCConnection) call(waitForReply bool, protocolID uint64, methodID uint
 		resultTypeID, err := msg.ReadVarint()
 		if err != nil {
 			c.Close()
-			return 0, nil, &rpcError{id: GenericError, error: fmt.Sprintf("Invalid message format received. Closed connection. Details: %v", err)}
+			return 0, nil, &rpcError{id: GenericError, error: fmt.Sprintf("error while decoding message type: %v", err)}
 		}
 		return resultTypeID, msg, nil
 	case <-timer.C:
-		return 0, nil, &rpcError{id: TimeoutError, error: "Timed out waiting for reply"}
+		return 0, nil, &rpcError{id: TimeoutError, error: "method call timed out"}
 	}
 }
 
 func (c *RPCConnection) send(msg *message) RPCError {
 	bytes := msg.Bytes()
-	n, err := c.conn.Write(bytes)
-	if err != nil {
-		return &rpcError{id: GenericError, error: fmt.Sprintf("Could not write message on connection: %v", err)}
-	}
-	if n != len(bytes) {
+	if _, err := c.conn.Write(bytes); err != nil {
 		c.Close()
-		return &rpcError{id: ProtocolError, error: "Message was not fully sent. Closed connection."}
+		return &rpcError{id: GenericError, error: fmt.Sprintf("error while writing message: %v", err)}
 	}
 	return nil
 }
@@ -594,4 +713,15 @@ func makeSlice(n int) []byte {
 		}
 	}()
 	return make([]byte, n)
+}
+
+func (c *RPCConnection) handlePrivateResponse(resultType uint64, msg *message) (RPCError, bool) {
+	if isRPCError(resultType) {
+		var r rpcError
+		if err := r.RPCDecode(msg); err != nil {
+			return &rpcError{id: GenericError, error: fmt.Sprintf("could not decode result: %v", err)}, true
+		}
+		return &r, true
+	}
+	return nil, false
 }

@@ -1,10 +1,15 @@
-func (s *serverMethodsCallHandler) RPCCall(methodID uint64, m *message) rpcMessage {
+func (s *serverMethodsCallHandler) RPCCall(methodID uint64, m *message) (resp rpcMessage) {
+    defer func() {
+        if r := recover(); r != nil {
+            resp = &rpcError{id: ApplicationError, error: "unknown error occurred"}
+        }
+    }()
+
     switch methodID { {{ range .Methods }}
-    case {{ .ID }}:
+    case uint64(ServerMethod{{ .Name }}):
         args := serverRequest_{{ .Name }}{}
         if err := args.RPCDecode(m); err != nil {
-            // TODO: Wrap error
-            return nil
+            return &rpcError{id: ProtocolError, error: fmt.Sprintf("unable to decode method call: %v", err)}
         }
         {{ range .Output }}{{ .Name }}{{ end }}, err := s.methods.{{ .Name }}( {{ range .Input }}
             args._{{ .Name }},
@@ -14,8 +19,7 @@ func (s *serverMethodsCallHandler) RPCCall(methodID uint64, m *message) rpcMessa
             if rpcMsg, ok := err.(rpcMessage); ok {
                 return rpcMsg
             }
-            // TODO: Wrap error
-            return nil
+            return &rpcError{id: ApplicationError, error: err.Error()}
         }
         return &serverResponse_{{ .Name }}{ {{ range .Output }}
             _{{ .Name }}: {{ .Name }},
@@ -23,7 +27,6 @@ func (s *serverMethodsCallHandler) RPCCall(methodID uint64, m *message) rpcMessa
         }
     {{- end }}
     default:
-        // TODO: Return error
-        return nil
+        return &rpcError{id: GenericError, error: fmt.Sprintf("unknown method ID: %d", methodID)}
     }
 }

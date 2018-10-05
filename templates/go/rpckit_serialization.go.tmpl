@@ -4,7 +4,7 @@ type server{{ capitalize .Prefix }}_{{ .Name }} struct { {{ range .Fields }}
 }
 
 func (s *server{{ capitalize .Prefix }}_{{ .Name }}) RPCID() uint64 {
-    return {{ .ID }}
+    return uint64(ServerMethod{{ .Name }})
 }
 
 func (s *server{{ capitalize .Prefix }}_{{ .Name }}) RPCEncode(m *message) error { {{ range .Fields }}
@@ -21,7 +21,7 @@ func (s *server{{ capitalize .Prefix }}_{{ .Name }}) RPCDecode(m *message) error
     for err == nil {
         tag, err = m.ReadVarint()
         switch tag { {{ range .Fields }}
-        case uint64({{ .ID }} << 3) | uint64(wireTypeForPropertyType(rpckit2.{{ .T.String }})):
+        case uint64({{ .ID }} << 3) | uint64({{ template "rpckit_property_to_wiretype.go.tmpl" .T.String}}):
             s._{{ .Name }}, err = m.Read{{ .T.String }}()
         {{- end }}
         default:

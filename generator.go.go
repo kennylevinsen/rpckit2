@@ -13,8 +13,8 @@ import (
 //go:generate go-bindata --pkg rpckit2 -o templates.go templates/...
 
 var template_deps = []string{
-	"rpckit_header.go.tmpl",
 	"rpckit_boilerplate.go.tmpl",
+	"rpckit_property_to_wiretype.go.tmpl",
 	"rpckit_serialization.go.tmpl",
 	"rpckit_client_method.go.tmpl",
 	"rpckit_server_method.go.tmpl",
@@ -35,6 +35,9 @@ type TemplateContext struct {
 
 func (g GoGenerator) Generate(p string) error {
 	funcs := template.FuncMap{
+		"error": func(s string) error {
+			return errors.New(s)
+		},
 		"capitalize": strings.Title,
 		"dict": func(values ...interface{}) (map[string]interface{}, error) {
 			if len(values)%2 != 0 {

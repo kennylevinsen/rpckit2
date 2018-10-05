@@ -1,30 +1,42 @@
-func (c *ServerClient) {{ .Name}}( {{ range .Input }}
-        {{ .Name }} {{ .T.GoType }},
+func (c *ServerClient) {{ .Name }}( {{ range .Input }}
+        _{{ .Name }} {{ .T.GoType }},
     {{- end }}
     ) ( {{ range .Output }}
-        {{ .Name }} {{ .T.GoType }},
+        _{{ .Name }} {{ .T.GoType }},
     {{- end }}
         err RPCError,
     ) {
 
     resultTypeID, msg, err := c.c.call(true, 1, uint64(ServerMethod{{ .Name }}), &serverRequest_{{ .Name }}{ {{ range .Input }}
-        _{{ .Name }}: {{ .Name }},
+        _{{ .Name }}: _{{ .Name }},
         {{- end }}
     })
 
+    if err != nil {
+        if rpcErr, ok := err.(RPCError); ok {
+            err = rpcErr
+        } else {
+            err = &rpcError{id: GenericError, error: fmt.Sprintf("call failed: %+v\n", err.Error())}
+        }
+        return
+    }
+
     switch resultTypeID {
-    case 2:
+    case uint64(ServerMethod{{ .Name }}):
         var r serverResponse_{{ .Name }}
-        decodeError := r.RPCDecode(msg)
-        if decodeError != nil {
-            err = &rpcError{id: GenericError, error: fmt.Sprintf("could not decode result: %v", decodeError)}
+        if decodeErr := r.RPCDecode(msg); decodeErr != nil {
+            err = &rpcError{id: GenericError, error: fmt.Sprintf("could not decode result: %v", decodeErr)}
             return
         }
         {{ range .Output }}
-        {{ .Name }} = r._{{ .Name }}
+        _{{ .Name }} = r._{{ .Name }}
         {{- end}}
     default:
-        err = &rpcError{id: ProtocolError, error: fmt.Sprintf("incorrect return type: expected %d, got %d", 2, resultTypeID)}
+        var isPrivate bool
+        err, isPrivate = c.c.handlePrivateResponse(resultTypeID, msg)
+        if !isPrivate {
+            err = &rpcError{id: ProtocolError, error: fmt.Sprintf("unexpected return type for call type %d: %d", uint64(ServerMethod{{ .Name }}), resultTypeID)}
+        }
     }
 
     return

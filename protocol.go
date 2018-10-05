@@ -4,9 +4,6 @@ import (
 	"fmt"
 )
 
-const PrivateIDMin = 90000000
-const PrivateIDMax = 99999999
-
 func NewProtocol(name string) *Protocol {
 	return &Protocol{name: name}
 }
@@ -136,9 +133,6 @@ func verifyProperties(properties []Property) {
 
 func verifyID(id int64) {
 	if id < 0 {
-		panicf("id must be larger than zero.")
-	}
-	if id >= PrivateIDMin && id <= PrivateIDMax {
-		panicf("id must not be in the private range %v-%v.", PrivateIDMin, PrivateIDMax)
+		panicf("ID must be a positive integer larger than zero")
 	}
 }
