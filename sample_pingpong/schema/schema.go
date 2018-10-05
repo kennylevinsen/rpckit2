@@ -11,9 +11,9 @@ import (
 
 func main() {
 	//fmt.Println("hello")
-	server := rpckit2.NewProtocol("pingpong")
+	server1 := rpckit2.NewProtocol("pingpong", 1)
 	//server.AddError(101, "not allowed")
-	server.AddMethod(rpckit2.Method{
+	server1.AddMethod(rpckit2.Method{
 		ID: 1, Name: "Authenticate",
 		Description: "Connect",
 		Input: []rpckit2.Property{
@@ -24,7 +24,7 @@ func main() {
 			rpckit2.Property{ID: 1, T: rpckit2.Bool, Name: "success"},
 		},
 	})
-	server.AddMethod(rpckit2.Method{
+	server1.AddMethod(rpckit2.Method{
 		ID: 2, Name: "PingWithReply",
 		Description: "Echo",
 		Input: []rpckit2.Property{
@@ -34,7 +34,7 @@ func main() {
 			rpckit2.Property{ID: 1, T: rpckit2.String, Name: "greeting"},
 		},
 	})
-	server.AddMethod(rpckit2.Method{
+	server1.AddMethod(rpckit2.Method{
 		ID: 3, Name: "TestMethod",
 		Description: "Echo",
 		Input: []rpckit2.Property{
@@ -50,8 +50,23 @@ func main() {
 		},
 	})
 
+	server2 := rpckit2.NewProtocol("echo", 2)
+	server2.AddMethod(rpckit2.Method{
+		ID: 1, Name: "Echo",
+		Description: "Echo",
+		Input: []rpckit2.Property{
+			rpckit2.Property{ID: 1, T: rpckit2.String, Name: "input"},
+		},
+		Output: []rpckit2.Property{
+			rpckit2.Property{ID: 1, T: rpckit2.String, Name: "output"},
+		},
+	})
+
 	if err := (rpckit2.GoGenerator{
-		Protocol:    server,
+		Protocols:    []*rpckit2.Protocol{
+			server1,
+			server2,
+		},
 		PackageName: "main",
 	}.Generate("../schema.generated.go")); err != nil {
 		fmt.Fprintf(os.Stderr, "err: %+v\n", err)
