@@ -20,7 +20,7 @@ func main() {
 				panic(err)
 			}
 
-			connection, err := NewRPCConnection(conn)
+			connection, err := NewRPCConnectionWithTimeout(conn, 2 * time.Second)
 			if err != nil {
 				panic(err)
 			}
@@ -33,7 +33,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	connection, err := NewRPCConnection(conn)
+	connection, err := NewRPCConnectionWithTimeout(conn, 2 * time.Second)
 	if err != nil {
 		panic(err)
 	}

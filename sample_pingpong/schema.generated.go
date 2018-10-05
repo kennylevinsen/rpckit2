@@ -9,9 +9,30 @@ import (
 	"math"
 	"net"
 	"sync"
+	"sync/atomic"
 	"time"
+)
 
-	"gitlab.com/exashape/rpckit2"
+const (
+	rpcRequest = 1
+	rpcResponse = 2
+)
+
+const (
+	privateTypeRPCError uint64 = math.MaxUint64
+)
+
+const (
+	methodCall = 1
+	methodReturn = 2
+)
+
+const messageCapacity = 1024
+
+var (
+	ErrOverflow = errors.New("overflow in varint")
+
+	rpcPreamble = []byte{82, 80, 67, 75, 73, 84, 0, 0, 0, 1} //R,P,C,K,I,T .. version 1
 )
 
 type ServerMethod uint64
@@ -74,12 +95,10 @@ func (m *message) Bytes() []byte {
 
 func (m *message) WriteVarint(v uint64) {
 	m.grow(9)
-	//i := 0
 	for v >= 0x80 {
 		m.buf[m.len] = byte(v) | 0x80
 		m.len++
 		v >>= 7
-		//i++
 	}
 	m.buf[m.len] = byte(v)
 	m.len++
@@ -97,7 +116,7 @@ func (m *message) WriteString(v string) {
 func (m *message) Write32Bit(v uint32) {
 	m.grow(4)
 	binary.LittleEndian.PutUint32(m.buf[m.len:], v)
-	m.len+= 4
+	m.len += 4
 }
 
 func (m *message) Write64Bit(v uint64) {
@@ -133,8 +152,6 @@ func (m *message) ReadString() (string, error) {
 
 	return string(str), nil
 }
-
-var ErrOverflow = errors.New("Overflow in varint")
 
 func (m *message) ReadVarint() (uint64, error) {
 	var x uint64
@@ -240,25 +257,6 @@ func (w wireType) String() string {
 	}
 }
 
-func wireTypeForPropertyType(t rpckit2.PropertyType) wireType {
-	switch t {
-	case rpckit2.String:
-		return wireTypeLengthDelimited
-	case rpckit2.Bool:
-		return wireTypeVarint
-	case rpckit2.Int64:
-		return wireType64bit
-	case rpckit2.Int:
-		return wireTypeVarint
-	case rpckit2.Float:
-		return wireType32bit
-	case rpckit2.Double:
-		return wireType64bit
-	default:
-		panic("unknown property type")
-	}
-}
-
 func (m *message) ReadPBSkip(tag uint64) error {
 	var err error
 	switch wireType(tag & ((1 << 3) - 1)) {
@@ -324,9 +322,10 @@ func (m *message) WritePBDouble(fieldNumber uint64, value float64) {
 type RPCErrorID uint64
 
 const (
-	GenericError  RPCErrorID = 0
-	TimeoutError  RPCErrorID = 1
-	ProtocolError RPCErrorID = 2
+	GenericError     RPCErrorID = 0
+	TimeoutError     RPCErrorID = 1
+	ProtocolError    RPCErrorID = 2
+	ApplicationError RPCErrorID = 3
 )
 
 type RPCError interface {
@@ -347,6 +346,46 @@ func (e *rpcError) Error() string {
 	return e.error
 }
 
+func (e *rpcError) RPCID() uint64 {
+	return privateTypeRPCError
+}
+
+func (e *rpcError) RPCEncode(m *message) error {
+	m.WritePBInt(1, int64(e.id))
+	m.WritePBString(2, e.error)
+	return nil
+}
+
+func (e *rpcError) RPCDecode(m *message) error {
+    var (
+        err error
+        tag uint64
+    )
+    for err == nil {
+        tag, err = m.ReadVarint()
+		switch tag {
+		case uint64(1 << 3) | uint64(wireTypeVarint):
+			var id int64
+			id, err = m.ReadInt()
+			e.id = RPCErrorID(id)
+		case uint64(2 << 3) | uint64(wireTypeLengthDelimited):
+			e.error, err = m.ReadString()
+        default:
+            if err != io.EOF {
+                err = m.ReadPBSkip(tag)
+            }
+        }
+    }
+    if err == io.EOF {
+        return nil
+    }
+    return err
+}
+
+func isRPCError(typeID uint64) bool {
+	return typeID == privateTypeRPCError
+}
+
 // ************************
 
 type DisconnectedHandler func(c *RPCConnection, err RPCError)
@@ -358,39 +397,42 @@ type RPCConnection struct {
 	onDisconnect DisconnectedHandler
 	handlers     map[uint64]rpcCallHandler
 	waitingCalls map[uint64]chan *message
+	nextID       uint32
+	timeout      time.Duration
 }
 
-var rpcPreamble = []byte{82, 80, 67, 75, 73, 84, 0, 0, 0, 1} //R,P,C,K,I,T .. version 1
 func NewRPCConnection(conn net.Conn) (*RPCConnection, RPCError) {
+	return NewRPCConnectionWithTimeout(conn, 30 * time.Second)
+}
+
+func NewRPCConnectionWithTimeout(conn net.Conn, timeout time.Duration) (*RPCConnection, RPCError) {
 	c := &RPCConnection{
 		connected:    true,
 		conn:         conn,
 		handlers:     make(map[uint64]rpcCallHandler),
 		waitingCalls: make(map[uint64]chan *message),
+		timeout:      timeout,
 	}
 
-	// send the preable
-	n, err := c.conn.Write(rpcPreamble)
-	if err != nil {
-		return nil, &rpcError{id: GenericError, error: fmt.Sprintf("Could not write preamble. Details: %v", err)}
-	}
-	if n != len(rpcPreamble) {
-		return nil, &rpcError{id: ProtocolError, error: "Could not send entire protocol preamble."}
+	if _, err := c.conn.Write(rpcPreamble); err != nil {
+		return nil, &rpcError{id: GenericError, error: fmt.Sprintf("could not write preamble: %v", err)}
 	}
 
 	go c.readLoop()
 	return c, nil
 }
 
+
 func (c *RPCConnection) RemoteAddr() net.Addr {
 	return c.conn.RemoteAddr()
 }
 
 func (c *RPCConnection) readLoop() {
-	receivedPreamble := false
-	buf := make([]byte, 0, 512)
-	off := 0
-	minRead := 256
+	var (
+		receivedPreamble bool
+		off, minRead int = 0, 256
+		buf = make([]byte, 0, 512)
+	)
 
 	// kill bad connections
 	defer func() {
@@ -404,10 +446,9 @@ func (c *RPCConnection) readLoop() {
 		if off >= len(buf) {
 			buf = buf[:0]
 			off = 0
-		} // }
+		}
 
 		if free := cap(buf) - len(buf); free < minRead {
-			//fmt.Println("grow")
 			// not enough space at end
 			newBuf := buf
 			if off+free < minRead {
@@ -419,13 +460,13 @@ func (c *RPCConnection) readLoop() {
 			buf = newBuf[:len(buf)-off]
 			off = 0
 		}
+
 		m, err := c.conn.Read(buf[len(buf):cap(buf)])
 		buf = buf[0 : len(buf)+m]
 		if err == io.EOF {
 			c.end(nil)
 			return
-		}
-		if err != nil {
+		} else if err != nil {
 			c.end(&rpcError{id: GenericError, error: fmt.Sprintf("error reading from connection in readLoop(): %v", err)})
 			return
 		}
@@ -438,11 +479,10 @@ func (c *RPCConnection) readLoop() {
 						off += len(rpcPreamble)
 						receivedPreamble = true
 					} else {
-						c.end(&rpcError{id: ProtocolError, error: "The first bytes received from the other end was not the expected rpckit preamble"})
+						c.end(&rpcError{id: ProtocolError, error: "did not receive expected rpckit2 preamble"})
 						return
 					}
-				} else { // }
-
+				} else {
 					break
 				}
 			}
@@ -460,52 +500,50 @@ func (c *RPCConnection) readLoop() {
 }
 
 func (c *RPCConnection) gotMessage(msg *message) {
-	t, err := msg.ReadVarint() // what kind of message is it
+	messageType, err := msg.ReadVarint()
 	if err != nil {
-		c.end(&rpcError{id: ProtocolError, error: "Could not read message type as the first varint in the incomming message."})
+		c.end(&rpcError{id: ProtocolError, error: "could not read message type of incoming message"})
 		return
 	}
 
-	switch t {
-	case 1: // method call
-		callID, err := msg.ReadVarint() // what is the id of this call?
+	switch messageType {
+	case methodCall:
+		callID, err := msg.ReadVarint()
 		if err != nil {
-			c.end(&rpcError{id: ProtocolError, error: "Could not read callId from message call."})
+			c.end(&rpcError{id: ProtocolError, error: "could not read callID from method call"})
 			return
 		}
-		protocolID, err := msg.ReadVarint() // what is the protocol being called?
+		protocolID, err := msg.ReadVarint()
 		if err != nil {
-			c.end(&rpcError{id: ProtocolError, error: "Could not read protocolId from message call. Closed connection."})
+			c.end(&rpcError{id: ProtocolError, error: "could not read protocolID from method call"})
 			return
 		}
-
 		handler, found := c.handlers[protocolID]
 		if !found {
-			c.end(&rpcError{id: ProtocolError, error: fmt.Sprintf("Unknown protocol: %v", protocolID)})
+			c.end(&rpcError{id: ProtocolError, error: fmt.Sprintf("unknown protocol: %d", protocolID)})
 			return
 		}
-
-		methodID, err := msg.ReadVarint() // what is the method being called?
+		methodID, err := msg.ReadVarint()
 		if err != nil {
-			c.end(&rpcError{id: ProtocolError, error: "Could not read methodID from message call. Closed connection."})
+			c.end(&rpcError{id: ProtocolError, error: "could not read methodID from method call"})
 			return
 		}
 
 		result := handler.RPCCall(methodID, msg)
 		if result != nil {
-			reply := newMessage(1024)
-			reply.WriteVarint(2)      // method return
-			reply.WriteVarint(callID) // callid
+			reply := newMessage(messageCapacity)
+			reply.WriteVarint(methodReturn)
+			reply.WriteVarint(callID)
 			reply.WriteVarint(result.RPCID())
 			result.RPCEncode(reply)
 			c.send(reply)
 		}
 
 		break
-	case 2: // method return
-		callID, err := msg.ReadVarint() // what is the id of this call?
+	case methodReturn:
+		callID, err := msg.ReadVarint()
 		if err != nil {
-			c.end(&rpcError{id: ProtocolError, error: "Could not read callId from message call. Closed connection."})
+			c.end(&rpcError{id: ProtocolError, error: "could not read callID from method return"})
 			return
 		}
 
@@ -513,7 +551,7 @@ func (c *RPCConnection) gotMessage(msg *message) {
 		ch, found := c.waitingCalls[callID]
 		c.RUnlock()
 		if !found {
-			c.end(&rpcError{id: ProtocolError, error: fmt.Sprintf("Could not find a waiting call for the call id: %v", callID)})
+			c.end(&rpcError{id: ProtocolError, error: fmt.Sprintf("method response received for unknown call: %v", callID)})
 			return
 		}
 
@@ -522,39 +560,99 @@ func (c *RPCConnection) gotMessage(msg *message) {
 	}
 }
 
-func (c *RPCConnection) logError(err RPCError) {
-	fmt.Println("ERROR", err.Error())
+func (c *RPCConnection) acquireCallSlot() (uint64, RPCError) {
+	c.Lock()
+	defer c.Unlock()
+
+	// Check if any slots exist
+	if len(c.waitingCalls) >= math.MaxUint32 {
+		return 0, &rpcError{id: GenericError, error: "no callID slots available"}
+	}
+
+	// Find a slot
+	var n uint32
+	taken := true
+	for taken {
+		n = atomic.AddUint32(&c.nextID, 1)
+		_, taken = c.waitingCalls[uint64(n)]
+	}
+
+	// Take the slot
+	c.waitingCalls[uint64(n)] = nil
+	return uint64(n), nil
+}
+
+func (c *RPCConnection) abandonCallSlot(callID uint64) {
+	c.Lock()
+	defer c.Unlock()
+
+	if callID > math.MaxUint32 {
+		panic("attempted to abandon invalid callID")
+	}
+
+	v, ok := c.waitingCalls[callID]
+	if !ok {
+		panic("attempted to abandon free call slot")
+	}
+	if v != nil {
+		panic("attempted to abandon used call slot")
+	}
+	delete(c.waitingCalls, callID)
+}
+
+func (c *RPCConnection) releaseCallSlot(callID uint64) {
+	c.Lock()
+	defer c.Unlock()
+
+	if callID > math.MaxUint32 {
+		panic("attempted to release invalid callID")
+	}
+
+	v, ok := c.waitingCalls[callID]
+	if !ok {
+		panic("attempted to release free call slot")
+	}
+	if v == nil {
+		panic("attempted to release unused call slot")
+	}
+	close(v)
+	delete(c.waitingCalls, callID)
 }
 
 func (c *RPCConnection) call(waitForReply bool, protocolID uint64, methodID uint64, callArgs rpcMessage) (uint64, *message, RPCError) {
-	// create the call message
-	callID := uint64(1234) // TODO:  proper call id.
-	m := newMessage(1024)
-	m.WriteVarint(1)          // it's a method call
-	m.WriteVarint(callID)     // method callid)
-	m.WriteVarint(protocolID) // protocol id
-	m.WriteVarint(methodID)   // method id
-	err := callArgs.RPCEncode(m)
+	callID, err := c.acquireCallSlot()
 	if err != nil {
-		return 0, nil, &rpcError{id: GenericError, error: fmt.Sprintf("Unable to encode call args: %v", err)}
-	} // }
+		return 0, nil, err
+	}
+
+	m := newMessage(messageCapacity)
+	m.WriteVarint(methodCall)
+	m.WriteVarint(callID)
+	m.WriteVarint(protocolID)
+	m.WriteVarint(methodID)
+
+	if err := callArgs.RPCEncode(m); err != nil {
+		c.abandonCallSlot(callID)
+		return 0, nil, &rpcError{id: GenericError, error: fmt.Sprintf("unable to encode method call arguments: %v", err)}
+	}
 
 	if !waitForReply {
+		c.abandonCallSlot(callID)
 		return 0, nil, c.send(m)
 	}
 
 	// setup the call and timer
 	ch := make(chan *message, 1)
-	timer := time.NewTimer(5 * time.Second)
 	c.Lock()
 	c.waitingCalls[callID] = ch
 	c.Unlock()
+
+
+	// Configure call timeout and cleanup
+	timer := time.NewTimer(c.timeout)
 	defer func() {
-		close(ch)
 		timer.Stop()
-		c.Lock()
-		delete(c.waitingCalls, callID)
-		c.Unlock()
+		c.releaseCallSlot(callID)
 	}()
 
 	// send the call over to the otherside
@@ -569,23 +667,19 @@ func (c *RPCConnection) call(waitForReply bool, protocolID uint64, methodID uint
 		resultTypeID, err := msg.ReadVarint()
 		if err != nil {
 			c.Close()
-			return 0, nil, &rpcError{id: GenericError, error: fmt.Sprintf("Invalid message format received. Closed connection. Details: %v", err)}
+			return 0, nil, &rpcError{id: GenericError, error: fmt.Sprintf("error while decoding message type: %v", err)}
 		}
 		return resultTypeID, msg, nil
 	case <-timer.C:
-		return 0, nil, &rpcError{id: TimeoutError, error: "Timed out waiting for reply"}
+		return 0, nil, &rpcError{id: TimeoutError, error: "method call timed out"}
 	}
 }
 
 func (c *RPCConnection) send(msg *message) RPCError {
 	bytes := msg.Bytes()
-	n, err := c.conn.Write(bytes)
-	if err != nil {
-		return &rpcError{id: GenericError, error: fmt.Sprintf("Could not write message on connection: %v", err)}
-	}
-	if n != len(bytes) {
+	if _, err := c.conn.Write(bytes); err != nil {
 		c.Close()
-		return &rpcError{id: ProtocolError, error: "Message was not fully sent. Closed connection."}
+		return &rpcError{id: GenericError, error: fmt.Sprintf("error while writing message: %v", err)}
 	}
 	return nil
 }
@@ -622,19 +716,30 @@ func makeSlice(n int) []byte {
 	return make([]byte, n)
 }
 
+func (c *RPCConnection) handlePrivateResponse(resultType uint64, msg *message) (RPCError, bool) {
+	if isRPCError(resultType) {
+		var r rpcError
+		if err := r.RPCDecode(msg); err != nil {
+			return &rpcError{id: GenericError, error: fmt.Sprintf("could not decode result: %v", err)}, true
+		}
+		return &r, true
+	}
+	return nil, false
+}
+
 
 const ServerMethodAuthenticate ServerMethod = 1
 
-type serverRequest_Authenticate struct { 
+type serverRequest_Authenticate struct {
     _username string
     _password string
 }
 
 func (s *serverRequest_Authenticate) RPCID() uint64 {
-    return 1
+    return uint64(ServerMethodAuthenticate)
 }
 
-func (s *serverRequest_Authenticate) RPCEncode(m *message) error { 
+func (s *serverRequest_Authenticate) RPCEncode(m *message) error {
     m.WritePBString(1, s._username)
     m.WritePBString(2, s._password)
     return nil
@@ -647,10 +752,10 @@ func (s *serverRequest_Authenticate) RPCDecode(m *message) error {
     )
     for err == nil {
         tag, err = m.ReadVarint()
-        switch tag { 
-        case uint64(1 << 3) | uint64(wireTypeForPropertyType(rpckit2.String)):
+        switch tag {
+        case uint64(1 << 3) | uint64(wireTypeLengthDelimited):
             s._username, err = m.ReadString()
-        case uint64(2 << 3) | uint64(wireTypeForPropertyType(rpckit2.String)):
+        case uint64(2 << 3) | uint64(wireTypeLengthDelimited):
             s._password, err = m.ReadString()
         default:
             if err != io.EOF {
@@ -664,15 +769,15 @@ func (s *serverRequest_Authenticate) RPCDecode(m *message) error {
     return err
 }
 
-type serverResponse_Authenticate struct { 
+type serverResponse_Authenticate struct {
     _success bool
 }
 
 func (s *serverResponse_Authenticate) RPCID() uint64 {
-    return 2
+    return uint64(ServerMethodAuthenticate)
 }
 
-func (s *serverResponse_Authenticate) RPCEncode(m *message) error { 
+func (s *serverResponse_Authenticate) RPCEncode(m *message) error {
     m.WritePBBool(1, s._success)
     return nil
 }
@@ -684,8 +789,8 @@ func (s *serverResponse_Authenticate) RPCDecode(m *message) error {
     )
     for err == nil {
         tag, err = m.ReadVarint()
-        switch tag { 
-        case uint64(1 << 3) | uint64(wireTypeForPropertyType(rpckit2.Bool)):
+        switch tag {
+        case uint64(1 << 3) | uint64(wireTypeVarint):
             s._success, err = m.ReadBool()
         default:
             if err != io.EOF {
@@ -699,31 +804,43 @@ func (s *serverResponse_Authenticate) RPCDecode(m *message) error {
     return err
 }
 
-func (c *ServerClient) Authenticate( 
-        username string,
-        password string,
-    ) ( 
-        success bool,
+func (c *ServerClient) Authenticate(
+        _username string,
+        _password string,
+    ) (
+        _success bool,
         err RPCError,
     ) {
 
-    resultTypeID, msg, err := c.c.call(true, 1, uint64(ServerMethodAuthenticate), &serverRequest_Authenticate{ 
-        _username: username,
-        _password: password,
+    resultTypeID, msg, err := c.c.call(true, 1, uint64(ServerMethodAuthenticate), &serverRequest_Authenticate{
+        _username: _username,
+        _password: _password,
     })
 
+    if err != nil {
+        if rpcErr, ok := err.(RPCError); ok {
+            err = rpcErr
+        } else {
+            err = &rpcError{id: GenericError, error: fmt.Sprintf("call failed: %+v\n", err.Error())}
+        }
+        return
+    }
+
     switch resultTypeID {
-    case 2:
+    case uint64(ServerMethodAuthenticate):
         var r serverResponse_Authenticate
-        decodeError := r.RPCDecode(msg)
-        if decodeError != nil {
-            err = &rpcError{id: GenericError, error: fmt.Sprintf("could not decode result: %v", decodeError)}
+        if decodeErr := r.RPCDecode(msg); decodeErr != nil {
+            err = &rpcError{id: GenericError, error: fmt.Sprintf("could not decode result: %v", decodeErr)}
             return
         }
-        
-        success = r._success
+
+        _success = r._success
     default:
-        err = &rpcError{id: ProtocolError, error: fmt.Sprintf("incorrect return type: expected %d, got %d", 2, resultTypeID)}
+        var isPrivate bool
+        err, isPrivate = c.c.handlePrivateResponse(resultTypeID, msg)
+        if !isPrivate {
+            err = &rpcError{id: ProtocolError, error: fmt.Sprintf("unexpected return type for call type %d: %d", uint64(ServerMethodAuthenticate), resultTypeID)}
+        }
     }
 
     return
@@ -732,15 +849,15 @@ func (c *ServerClient) Authenticate(
 
 const ServerMethodPingWithReply ServerMethod = 2
 
-type serverRequest_PingWithReply struct { 
+type serverRequest_PingWithReply struct {
     _name string
 }
 
 func (s *serverRequest_PingWithReply) RPCID() uint64 {
-    return 1
+    return uint64(ServerMethodPingWithReply)
 }
 
-func (s *serverRequest_PingWithReply) RPCEncode(m *message) error { 
+func (s *serverRequest_PingWithReply) RPCEncode(m *message) error {
     m.WritePBString(1, s._name)
     return nil
 }
@@ -752,8 +869,8 @@ func (s *serverRequest_PingWithReply) RPCDecode(m *message) error {
     )
     for err == nil {
         tag, err = m.ReadVarint()
-        switch tag { 
-        case uint64(1 << 3) | uint64(wireTypeForPropertyType(rpckit2.String)):
+        switch tag {
+        case uint64(1 << 3) | uint64(wireTypeLengthDelimited):
             s._name, err = m.ReadString()
         default:
             if err != io.EOF {
@@ -767,15 +884,15 @@ func (s *serverRequest_PingWithReply) RPCDecode(m *message) error {
     return err
 }
 
-type serverResponse_PingWithReply struct { 
+type serverResponse_PingWithReply struct {
     _greeting string
 }
 
 func (s *serverResponse_PingWithReply) RPCID() uint64 {
-    return 2
+    return uint64(ServerMethodPingWithReply)
 }
 
-func (s *serverResponse_PingWithReply) RPCEncode(m *message) error { 
+func (s *serverResponse_PingWithReply) RPCEncode(m *message) error {
     m.WritePBString(1, s._greeting)
     return nil
 }
@@ -787,8 +904,8 @@ func (s *serverResponse_PingWithReply) RPCDecode(m *message) error {
     )
     for err == nil {
         tag, err = m.ReadVarint()
-        switch tag { 
-        case uint64(1 << 3) | uint64(wireTypeForPropertyType(rpckit2.String)):
+        switch tag {
+        case uint64(1 << 3) | uint64(wireTypeLengthDelimited):
             s._greeting, err = m.ReadString()
         default:
             if err != io.EOF {
@@ -802,29 +919,41 @@ func (s *serverResponse_PingWithReply) RPCDecode(m *message) error {
     return err
 }
 
-func (c *ServerClient) PingWithReply( 
-        name string,
-    ) ( 
-        greeting string,
+func (c *ServerClient) PingWithReply(
+        _name string,
+    ) (
+        _greeting string,
         err RPCError,
     ) {
 
-    resultTypeID, msg, err := c.c.call(true, 1, uint64(ServerMethodPingWithReply), &serverRequest_PingWithReply{ 
-        _name: name,
+    resultTypeID, msg, err := c.c.call(true, 1, uint64(ServerMethodPingWithReply), &serverRequest_PingWithReply{
+        _name: _name,
     })
 
+    if err != nil {
+        if rpcErr, ok := err.(RPCError); ok {
+            err = rpcErr
+        } else {
+            err = &rpcError{id: GenericError, error: fmt.Sprintf("call failed: %+v\n", err.Error())}
+        }
+        return
+    }
+
     switch resultTypeID {
-    case 2:
+    case uint64(ServerMethodPingWithReply):
         var r serverResponse_PingWithReply
-        decodeError := r.RPCDecode(msg)
-        if decodeError != nil {
-            err = &rpcError{id: GenericError, error: fmt.Sprintf("could not decode result: %v", decodeError)}
+        if decodeErr := r.RPCDecode(msg); decodeErr != nil {
+            err = &rpcError{id: GenericError, error: fmt.Sprintf("could not decode result: %v", decodeErr)}
             return
         }
-        
-        greeting = r._greeting
+
+        _greeting = r._greeting
     default:
-        err = &rpcError{id: ProtocolError, error: fmt.Sprintf("incorrect return type: expected %d, got %d", 2, resultTypeID)}
+        var isPrivate bool
+        err, isPrivate = c.c.handlePrivateResponse(resultTypeID, msg)
+        if !isPrivate {
+            err = &rpcError{id: ProtocolError, error: fmt.Sprintf("unexpected return type for call type %d: %d", uint64(ServerMethodPingWithReply), resultTypeID)}
+        }
     }
 
     return
@@ -833,7 +962,7 @@ func (c *ServerClient) PingWithReply(
 
 const ServerMethodTestMethod ServerMethod = 3
 
-type serverRequest_TestMethod struct { 
+type serverRequest_TestMethod struct {
     _string string
     _bool bool
     _int64 int64
@@ -843,10 +972,10 @@ type serverRequest_TestMethod struct {
 }
 
 func (s *serverRequest_TestMethod) RPCID() uint64 {
-    return 1
+    return uint64(ServerMethodTestMethod)
 }
 
-func (s *serverRequest_TestMethod) RPCEncode(m *message) error { 
+func (s *serverRequest_TestMethod) RPCEncode(m *message) error {
     m.WritePBString(1, s._string)
     m.WritePBBool(2, s._bool)
     m.WritePBInt64(3, s._int64)
@@ -863,18 +992,18 @@ func (s *serverRequest_TestMethod) RPCDecode(m *message) error {
     )
     for err == nil {
         tag, err = m.ReadVarint()
-        switch tag { 
-        case uint64(1 << 3) | uint64(wireTypeForPropertyType(rpckit2.String)):
+        switch tag {
+        case uint64(1 << 3) | uint64(wireTypeLengthDelimited):
             s._string, err = m.ReadString()
-        case uint64(2 << 3) | uint64(wireTypeForPropertyType(rpckit2.Bool)):
+        case uint64(2 << 3) | uint64(wireTypeVarint):
             s._bool, err = m.ReadBool()
-        case uint64(3 << 3) | uint64(wireTypeForPropertyType(rpckit2.Int64)):
+        case uint64(3 << 3) | uint64(wireType64bit):
             s._int64, err = m.ReadInt64()
-        case uint64(4 << 3) | uint64(wireTypeForPropertyType(rpckit2.Int)):
+        case uint64(4 << 3) | uint64(wireTypeVarint):
             s._int, err = m.ReadInt()
-        case uint64(5 << 3) | uint64(wireTypeForPropertyType(rpckit2.Float)):
+        case uint64(5 << 3) | uint64(wireType32bit):
             s._float, err = m.ReadFloat()
-        case uint64(6 << 3) | uint64(wireTypeForPropertyType(rpckit2.Double)):
+        case uint64(6 << 3) | uint64(wireType64bit):
             s._double, err = m.ReadDouble()
         default:
             if err != io.EOF {
@@ -888,15 +1017,15 @@ func (s *serverRequest_TestMethod) RPCDecode(m *message) error {
     return err
 }
 
-type serverResponse_TestMethod struct { 
+type serverResponse_TestMethod struct {
     _success bool
 }
 
 func (s *serverResponse_TestMethod) RPCID() uint64 {
-    return 2
+    return uint64(ServerMethodTestMethod)
 }
 
-func (s *serverResponse_TestMethod) RPCEncode(m *message) error { 
+func (s *serverResponse_TestMethod) RPCEncode(m *message) error {
     m.WritePBBool(1, s._success)
     return nil
 }
@@ -908,8 +1037,8 @@ func (s *serverResponse_TestMethod) RPCDecode(m *message) error {
     )
     for err == nil {
         tag, err = m.ReadVarint()
-        switch tag { 
-        case uint64(1 << 3) | uint64(wireTypeForPropertyType(rpckit2.Bool)):
+        switch tag {
+        case uint64(1 << 3) | uint64(wireTypeVarint):
             s._success, err = m.ReadBool()
         default:
             if err != io.EOF {
@@ -923,67 +1052,79 @@ func (s *serverResponse_TestMethod) RPCDecode(m *message) error {
     return err
 }
 
-func (c *ServerClient) TestMethod( 
-        string string,
-        bool bool,
-        int64 int64,
-        int int64,
-        float float32,
-        double float64,
-    ) ( 
-        success bool,
+func (c *ServerClient) TestMethod(
+        _string string,
+        _bool bool,
+        _int64 int64,
+        _int int64,
+        _float float32,
+        _double float64,
+    ) (
+        _success bool,
         err RPCError,
     ) {
 
-    resultTypeID, msg, err := c.c.call(true, 1, uint64(ServerMethodTestMethod), &serverRequest_TestMethod{ 
-        _string: string,
-        _bool: bool,
-        _int64: int64,
-        _int: int,
-        _float: float,
-        _double: double,
+    resultTypeID, msg, err := c.c.call(true, 1, uint64(ServerMethodTestMethod), &serverRequest_TestMethod{
+        _string: _string,
+        _bool: _bool,
+        _int64: _int64,
+        _int: _int,
+        _float: _float,
+        _double: _double,
     })
 
+    if err != nil {
+        if rpcErr, ok := err.(RPCError); ok {
+            err = rpcErr
+        } else {
+            err = &rpcError{id: GenericError, error: fmt.Sprintf("call failed: %+v\n", err.Error())}
+        }
+        return
+    }
+
     switch resultTypeID {
-    case 2:
+    case uint64(ServerMethodTestMethod):
         var r serverResponse_TestMethod
-        decodeError := r.RPCDecode(msg)
-        if decodeError != nil {
-            err = &rpcError{id: GenericError, error: fmt.Sprintf("could not decode result: %v", decodeError)}
+        if decodeErr := r.RPCDecode(msg); decodeErr != nil {
+            err = &rpcError{id: GenericError, error: fmt.Sprintf("could not decode result: %v", decodeErr)}
             return
         }
-        
-        success = r._success
+
+        _success = r._success
     default:
-        err = &rpcError{id: ProtocolError, error: fmt.Sprintf("incorrect return type: expected %d, got %d", 2, resultTypeID)}
+        var isPrivate bool
+        err, isPrivate = c.c.handlePrivateResponse(resultTypeID, msg)
+        if !isPrivate {
+            err = &rpcError{id: ProtocolError, error: fmt.Sprintf("unexpected return type for call type %d: %d", uint64(ServerMethodTestMethod), resultTypeID)}
+        }
     }
 
     return
 }
 
 
-type ServerMethods interface { 
-    Authenticate( 
+type ServerMethods interface {
+    Authenticate(
         username string,
         password string,
-    ) ( 
+    ) (
         success bool,
         err error,
     )
-    PingWithReply( 
+    PingWithReply(
         name string,
-    ) ( 
+    ) (
         greeting string,
         err error,
     )
-    TestMethod( 
+    TestMethod(
         string string,
         bool bool,
         int64 int64,
         int int64,
         float float32,
         double float64,
-    ) ( 
+    ) (
         success bool,
         err error,
     )
@@ -997,15 +1138,20 @@ type serverMethodsCallHandler struct {
     methods ServerMethods
 }
 
-func (s *serverMethodsCallHandler) RPCCall(methodID uint64, m *message) rpcMessage {
-    switch methodID { 
-    case 1:
+func (s *serverMethodsCallHandler) RPCCall(methodID uint64, m *message) (resp rpcMessage) {
+    defer func() {
+        if r := recover(); r != nil {
+            resp = &rpcError{id: ApplicationError, error: "unknown error occurred"}
+        }
+    }()
+
+    switch methodID {
+    case uint64(ServerMethodAuthenticate):
         args := serverRequest_Authenticate{}
         if err := args.RPCDecode(m); err != nil {
-            // TODO: Wrap error
-            return nil
+            return &rpcError{id: ProtocolError, error: fmt.Sprintf("unable to decode method call: %v", err)}
         }
-        success, err := s.methods.Authenticate( 
+        success, err := s.methods.Authenticate(
             args._username,
             args._password,
         )
@@ -1013,38 +1159,34 @@ func (s *serverMethodsCallHandler) RPCCall(methodID uint64, m *message) rpcMessa
             if rpcMsg, ok := err.(rpcMessage); ok {
                 return rpcMsg
             }
-            // TODO: Wrap error
-            return nil
+            return &rpcError{id: ApplicationError, error: err.Error()}
         }
-        return &serverResponse_Authenticate{ 
+        return &serverResponse_Authenticate{
             _success: success,
         }
-    case 2:
+    case uint64(ServerMethodPingWithReply):
         args := serverRequest_PingWithReply{}
         if err := args.RPCDecode(m); err != nil {
-            // TODO: Wrap error
-            return nil
+            return &rpcError{id: ProtocolError, error: fmt.Sprintf("unable to decode method call: %v", err)}
         }
-        greeting, err := s.methods.PingWithReply( 
+        greeting, err := s.methods.PingWithReply(
             args._name,
         )
         if err != nil {
             if rpcMsg, ok := err.(rpcMessage); ok {
                 return rpcMsg
             }
-            // TODO: Wrap error
-            return nil
+            return &rpcError{id: ApplicationError, error: err.Error()}
         }
-        return &serverResponse_PingWithReply{ 
+        return &serverResponse_PingWithReply{
             _greeting: greeting,
         }
-    case 3:
+    case uint64(ServerMethodTestMethod):
         args := serverRequest_TestMethod{}
         if err := args.RPCDecode(m); err != nil {
-            // TODO: Wrap error
-            return nil
+            return &rpcError{id: ProtocolError, error: fmt.Sprintf("unable to decode method call: %v", err)}
         }
-        success, err := s.methods.TestMethod( 
+        success, err := s.methods.TestMethod(
             args._string,
             args._bool,
             args._int64,
@@ -1056,14 +1198,12 @@ func (s *serverMethodsCallHandler) RPCCall(methodID uint64, m *message) rpcMessa
             if rpcMsg, ok := err.(rpcMessage); ok {
                 return rpcMsg
             }
-            // TODO: Wrap error
-            return nil
+            return &rpcError{id: ApplicationError, error: err.Error()}
         }
-        return &serverResponse_TestMethod{ 
+        return &serverResponse_TestMethod{
             _success: success,
         }
     default:
-        // TODO: Return error
-        return nil
+        return &rpcError{id: GenericError, error: fmt.Sprintf("unknown method ID: %d", methodID)}
     }
 }
