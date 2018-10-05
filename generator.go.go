@@ -63,7 +63,7 @@ func (g GoGenerator) Generate(p string) error {
 
 	tmpl := template.New("").Funcs(funcs)
 	for _, name := range template_deps {
-		b, err := Asset(path.Join("templates/go", name))
+		b, err := Asset(path.Join("templates/go-pb", name))
 		if err != nil {
 			return fmt.Errorf("template reading failed: %+v\n", err)
 		}
