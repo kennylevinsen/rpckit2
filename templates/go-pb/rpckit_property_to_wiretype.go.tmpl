@@ -4,5 +4,8 @@
 {{- else if eq . "Int" -}}wireTypeVarint
 {{- else if eq . "Float" -}}wireType32bit
 {{- else if eq . "Double" -}}wireType64bit
+{{- else if eq . "Bytes" }}wireTypeLengthDelimited
+{{- else if eq . "Array" }}wireTypeLengthDelimited
+{{- else if eq . "Map" }}wireTypeLengthDelimited
 {{- else -}}{{ error "unknown property type" }}
 {{- end -}}

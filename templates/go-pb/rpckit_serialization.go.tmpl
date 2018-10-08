@@ -10,7 +10,26 @@ func (s *{{ .Prefix }}_{{ capitalize .ProtoName }}_{{ capitalize .Name }}) RPCID
 
 func (s *{{ .Prefix }}_{{ capitalize .ProtoName }}_{{ capitalize .Name }}) RPCEncode(m *message) error {
     {{- range .Fields }}
+    {{- if .T.IsArray }}
+    {
+        em := newEmbeddedMessage(messageCapacity)
+        for _, v := range s._{{ .Name }} {
+            em.Write{{ .T.InnerValue.String }}(v)
+        }
+        m.WritePBMessage({{ .ID }}, em)
+    }
+    {{- else if .T.IsMap }}
+    {
+        for k, v := range s._{{ .Name }} {
+            em := newEmbeddedMessage(messageCapacity)
+            em.WritePB{{ .T.InnerKey.String }}(1, k)
+            em.WritePB{{ .T.InnerValue.String }}(2, v)
+            m.WritePBMessage({{ .ID }}, em)
+        }
+    }
+    {{- else }}
     m.WritePB{{ .T.String }}({{ .ID }}, s._{{ .Name }})
+    {{- end }}
     {{- end }}
     return nil
 }
@@ -25,7 +44,63 @@ func (s *{{ .Prefix }}_{{ capitalize .ProtoName }}_{{ capitalize .Name }}) RPCDe
         switch tag {
         {{- range .Fields }}
         case uint64({{ .ID }} << 3) | uint64({{ template "rpckit_property_to_wiretype.go.tmpl" .T.String}}):
+            {{- if .T.IsArray }}
+            var em *message
+            var arr {{ .T.GoType }}
+            var v {{ .T.InnerValue.GoType }}
+            em, err = m.ReadEmbeddedMessage()
+            if err != nil {
+                break
+            }
+            for err == nil {
+                v, err = em.Read{{ .T.InnerValue.String }}()
+                arr = append(arr, v)
+            }
+            if err == io.EOF {
+                s._{{ .Name }} = arr
+                err = nil
+            }
+            {{- else if .T.IsMap }}
+            var em *message
+            if s._{{ .Name }} == nil {
+                s._{{ .Name }} = make({{ .T.GoType}})
+            }
+
+            var k {{ .T.InnerKey.GoType }}
+            var v {{ .T.InnerValue.GoType }}
+            em, err = m.ReadEmbeddedMessage()
+            if err != nil {
+                break
+            }
+
+            tag, err = em.ReadVarint()
+            switch tag {
+            case uint64(1 << 3) | uint64({{ template "rpckit_property_to_wiretype.go.tmpl" .T.InnerKey.String}}):
+                k, err = em.Read{{ .T.InnerKey.String }}()
+            default:
+                if err != io.EOF {
+                    err = m.ReadPBSkip(tag)
+                }
+            }
+
+            tag, err = em.ReadVarint()
+            switch tag {
+            case uint64(2 << 3) | uint64({{ template "rpckit_property_to_wiretype.go.tmpl" .T.InnerValue.String}}):
+                v, err = em.Read{{ .T.InnerValue.String }}()
+                s._{{ .Name }}[k] = v
+            default:
+                if err != io.EOF {
+                    err = m.ReadPBSkip(tag)
+                }
+            }
+            if err == io.EOF {
+                err = nil
+            } else if err != nil {
+                break
+            }
+            {{- else }}
             s._{{ .Name }}, err = m.Read{{ .T.String }}()
+            {{- end }}
         {{- end }}
         default:
             if err != io.EOF {
