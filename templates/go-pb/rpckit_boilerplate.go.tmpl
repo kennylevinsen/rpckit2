@@ -8,11 +8,9 @@ import (
 	"fmt"
 	"io"
 	"math"
-	"math/rand"
 	"net"
 	"sync"
 	"sync/atomic"
-	"time"
 )
 
 const (
@@ -461,121 +459,224 @@ func isRPCError(typeID uint64) bool {
 
 // ************************
 
-type RPCConnectionOption func(*RPCConnection)
+type connection struct {
+	ready     chan struct{}
+	connected bool
+	endReason error
+	conn      net.Conn
+	writeLock sync.Mutex
 
+	callIDLock   sync.RWMutex
+	waitingCalls map[uint64]chan *message
+	nextID       uint32
+}
+
+
+func (c *connection) acquireCallSlot() (uint64, RPCError) {
+	c.callIDLock.Lock()
+	defer c.callIDLock.Unlock()
+
+	// Check if any slots exist
+	if len(c.waitingCalls) >= math.MaxUint32 {
+		return 0, &rpcError{id: GenericError, error: "no callID slots available"}
+	}
+
+	// Find a slot
+	var n uint32
+	taken := true
+	for taken {
+		n = atomic.AddUint32(&c.nextID, 1)
+		_, taken = c.waitingCalls[uint64(n)]
+	}
+
+	// Take the slot
+	c.waitingCalls[uint64(n)] = nil
+	return uint64(n), nil
+}
+
+func (c *connection) abandonCallSlot(callID uint64) {
+	c.callIDLock.Lock()
+	defer c.callIDLock.Unlock()
+
+	if callID > math.MaxUint32 {
+		panic("attempted to abandon invalid callID")
+	}
+
+	v, ok := c.waitingCalls[callID]
+	if !ok {
+		panic("attempted to abandon free call slot")
+	}
+	if v != nil {
+		panic("attempted to abandon used call slot")
+	}
+	delete(c.waitingCalls, callID)
+}
+
+func (c *connection) releaseCallSlot(callID uint64) {
+	c.callIDLock.Lock()
+	defer c.callIDLock.Unlock()
+
+	if callID > math.MaxUint32 {
+		panic("attempted to release invalid callID")
+	}
+
+	v, ok := c.waitingCalls[callID]
+	if !ok {
+		panic("attempted to release free call slot")
+	}
+	if v == nil {
+		panic("attempted to release unused call slot")
+	}
+	close(v)
+	delete(c.waitingCalls, callID)
+}
+
+func newConnection() *connection {
+	return &connection{
+		ready:        make(chan struct{}, 0),
+		connected:    true,
+		waitingCalls: make(map[uint64]chan *message),
+	}
+}
+
+type rpcServer struct {
+	ProtocolID uint64
+	Handler rpcCallHandler
+}
+
+type Dialer              func() (net.Conn, error)
+type ConnectedHandler    func(c *RPCConnection) error
 type DisconnectedHandler func(c *RPCConnection, err RPCError)
 
 type RPCConnection struct {
-	timeout          time.Duration
-	conn             net.Conn
-	keepAlive        time.Duration
-	dynamicKeepAlive bool
-
-	callIDLock   sync.RWMutex
+	done         chan struct{}
 	handlers     map[uint64]rpcCallHandler
-	waitingCalls map[uint64]chan *message
-	nextID       uint32
+	dialer       Dialer
+	onDisconnect DisconnectedHandler
+	onConnect    ConnectedHandler
 
-	lastUseLock sync.RWMutex
-	lastUse     time.Time
-
-	connectionLock sync.RWMutex
-	onDisconnect   DisconnectedHandler
-	connected      bool
-	endReason      error
-
-	writeLock sync.Mutex
+	conn *connection
 }
 
-func RPCTimeout(timeout time.Duration) RPCConnectionOption {
-	return func(c *RPCConnection) {
-		c.timeout = timeout
-	}
+type RPCBuilder struct {
+	conn           net.Conn
+	dialer         Dialer
+	connectHook    ConnectedHandler
+	disconnectHook DisconnectedHandler
+	handlers       []*rpcServer
 }
 
-func RPCDisconnectedHandler(d DisconnectedHandler) RPCConnectionOption {
-	return func(c *RPCConnection) {
-		c.onDisconnect = d
-	}
+func NewRPCBuilder() *RPCBuilder {
+	return &RPCBuilder{}
 }
 
-func RPCKeepAlive(keepAlive time.Duration) RPCConnectionOption {
-	return func(c *RPCConnection) {
-		c.keepAlive = keepAlive
-	}
+func (r *RPCBuilder) Conn(c net.Conn) *RPCBuilder {
+	r.conn = c
+	return r
 }
 
-func RPCDynamicKeepAlive(dynamicKeepAlive bool) RPCConnectionOption {
-	return func(c *RPCConnection) {
-		c.dynamicKeepAlive = dynamicKeepAlive
-	}
+func (r *RPCBuilder) Dialer(d Dialer) *RPCBuilder {
+	r.dialer = d
+	return r
 }
 
-func NewRPCConnection(conn net.Conn, options ...RPCConnectionOption) (*RPCConnection, RPCError) {
+func (r *RPCBuilder) ConnectHook(h ConnectedHandler) *RPCBuilder {
+	r.connectHook = h
+	return r
+}
+
+func (r *RPCBuilder) DisconnectHook(h DisconnectedHandler) *RPCBuilder {
+	r.disconnectHook = h
+	return r
+}
+
+func (r *RPCBuilder) Server(s ...*rpcServer) *RPCBuilder {
+	r.handlers = s
+	return r
+}
+
+func (r *RPCBuilder) Build() *RPCConnection {
 	c := &RPCConnection{
-		connected:    true,
-		conn:         conn,
+		done:         make(chan struct{}),
+		dialer:       r.dialer,
 		handlers:     make(map[uint64]rpcCallHandler),
-		waitingCalls: make(map[uint64]chan *message),
+		onDisconnect: r.disconnectHook,
+		onConnect:    r.connectHook,
+		conn:         newConnection(),
 	}
 
-	for _, o := range options {
-		o(c)
+	for _, h := range r.handlers {
+		c.setHandler(h.ProtocolID, h.Handler)
 	}
 
-	if _, err := c.conn.Write(rpcPreamble); err != nil {
-		return nil, &rpcError{id: ConnectionError, error: fmt.Sprintf("could not write preamble: %v", err)}
+	c.newRConn()
+
+	if r.conn != nil {
+		c.connect(r.conn)
+	} else {
+		c.dial()
 	}
-	return c, nil
+	return c
 }
 
-func (c *RPCConnection) Start() {
+func (c *RPCConnection) newRConn() {
+	select {
+	case <-c.conn.ready:
+		c.conn = newConnection()
+	default:
+	}
+}
+
+func (c *RPCConnection) connect(conn net.Conn) bool {
+	c.newRConn()
+	c.conn.conn = conn
+
+	if err := c.sendPreamble(c.conn); err != nil {
+		c.end(c.conn, err)
+		close(c.conn.ready)
+		return false
+	}
+
+	// TODO(kl): Wait for onConnect to release ready!
+	// How, though? Magic context to bypass ready wait?
+	close(c.conn.ready)
 	go c.readLoop()
-	if c.keepAlive != 0 {
-		go c.keepAliveLoop()
+
+	if c.onConnect != nil {
+		if err := c.onConnect(c); err != nil {
+			c.end(c.conn, &rpcError{id: ApplicationError, error: err.Error()})
+			return false
+		}
 	}
-	if c.timeout != 0 {
-		go c.healthCheckLoop()
+
+	return true
+}
+
+func (c *RPCConnection) dial() {
+	select {
+	case <-c.done:
+		return
+	default:
+	}
+
+	conn, err := c.dialer()
+	if err != nil {
+		close(c.done)
+		c.end(c.conn, &rpcError{id: ApplicationError, error: err.Error()})
+		return
+	}
+	if c.connect(conn) {
+		return
 	}
 }
 
-func (c *RPCConnection) RemoteAddr() net.Addr {
-	return c.conn.RemoteAddr()
-}
-
-func (c *RPCConnection) keepAliveLoop() {
-	for {
-		ping := newMessage(messageCapacity)
-		ping.WriteVarint(messageTypePing)
-		if err := c.send(ping); err != nil {
-			c.end(err)
-			return
-		}
-
-		t := c.keepAlive
-		if c.dynamicKeepAlive {
-			i := rand.Int63n(100)
-			t = time.Duration(int64(t) * (50 + i) / 100)
-		}
-		time.Sleep(t)
+func (c *RPCConnection) sendPreamble(conn *connection) RPCError {
+	if _, err := c.conn.conn.Write(rpcPreamble); err != nil {
+		err := &rpcError{id: ConnectionError, error: fmt.Sprintf("could not write preamble: %v", err)}
+		c.end(conn, err)
+		return err
 	}
-}
-
-func (c *RPCConnection) healthCheckLoop() {
-	t := time.NewTimer(c.timeout)
-	defer t.Stop()
-
-	for range t.C {
-		lastAcceptedUse := time.Now().Add(-c.timeout)
-		c.connectionLock.RLock()
-		expired := c.lastUse.Before(lastAcceptedUse)
-		c.connectionLock.RUnlock()
-
-		if expired {
-			c.end(&rpcError{id: TimeoutError, error: "connection timed out"})
-			return
-		}
-	}
+	return nil
 }
 
 func (c *RPCConnection) readLoop() {
@@ -587,11 +688,17 @@ func (c *RPCConnection) readLoop() {
 
 	ctx, cancel := context.WithCancel(context.Background())
 
+	conn := c.conn
+
 	// kill bad connections
 	defer func() {
 		cancel()
 		if bad := recover(); bad != nil {
-			c.end(&rpcError{id: GenericError, error: fmt.Sprintf("unhandled error in readLoop(): %v", bad)})
+			c.end(conn, &rpcError{id: GenericError, error: fmt.Sprintf("unhandled error in readLoop(): %v", bad)})
+		}
+
+		if c.dialer != nil {
+			c.dial()
 		}
 	}()
 
@@ -615,13 +722,13 @@ func (c *RPCConnection) readLoop() {
 			off = 0
 		}
 
-		m, err := c.conn.Read(buf[len(buf):cap(buf)])
+		m, err := conn.conn.Read(buf[len(buf):cap(buf)])
 		buf = buf[0 : len(buf)+m]
 		if err == io.EOF {
-			c.end(nil)
+			c.end(conn, nil)
 			return
 		} else if err != nil {
-			c.end(&rpcError{id: GenericError, error: fmt.Sprintf("error reading from connection in readLoop(): %v", err)})
+			c.end(conn, &rpcError{id: GenericError, error: fmt.Sprintf("error reading from connection in readLoop(): %v", err)})
 			return
 		}
 
@@ -633,7 +740,7 @@ func (c *RPCConnection) readLoop() {
 						off += len(rpcPreamble)
 						receivedPreamble = true
 					} else {
-						c.end(&rpcError{id: ProtocolError, error: "did not receive expected rpckit2 preamble"})
+						c.end(conn, &rpcError{id: ProtocolError, error: "did not receive expected rpckit2 preamble"})
 						return
 					}
 				} else {
@@ -644,14 +751,9 @@ func (c *RPCConnection) readLoop() {
 			// parse messages
 			msg, length := messageFromBytes(buf[off:])
 			if msg != nil {
-				n := time.Now()
-				c.connectionLock.Lock()
-				c.lastUse = n
-				c.connectionLock.Unlock()
-
 				off += length
-				if err := c.gotMessage(ctx, msg); err != nil {
-					c.end(err)
+				if err := c.gotMessage(ctx, conn, msg); err != nil {
+					c.end(conn, err)
 					return
 				}
 			} else {
@@ -661,7 +763,7 @@ func (c *RPCConnection) readLoop() {
 	}
 }
 
-func (c *RPCConnection) gotMessage(ctx context.Context, msg *message) RPCError {
+func (c *RPCConnection) gotMessage(ctx context.Context, conn *connection, msg *message) RPCError {
 	messageType, err := msg.ReadVarint()
 	if err != nil {
 		return &rpcError{id: ProtocolError, error: "could not read message type of incoming message"}
@@ -686,7 +788,7 @@ func (c *RPCConnection) gotMessage(ctx context.Context, msg *message) RPCError {
 			reply.WriteVarint(callID)
 			reply.WriteVarint(err.RPCID())
 			err.RPCEncode(reply)
-			c.send(reply)
+			c.send(conn, reply)
 
 			return err
 		}
@@ -703,8 +805,8 @@ func (c *RPCConnection) gotMessage(ctx context.Context, msg *message) RPCError {
 				reply.WriteVarint(callID)
 				reply.WriteVarint(result.RPCID())
 				result.RPCEncode(reply)
-				if err := c.send(reply); err != nil {
-					c.end(err)
+				if err := c.send(conn, reply); err != nil {
+					c.end(conn, err)
 				}
 			}
 		}()
@@ -715,89 +817,49 @@ func (c *RPCConnection) gotMessage(ctx context.Context, msg *message) RPCError {
 			return &rpcError{id: ProtocolError, error: "could not read callID from method return"}
 		}
 
-		c.callIDLock.RLock()
-		ch, found := c.waitingCalls[callID]
-		c.callIDLock.RUnlock()
+		conn.callIDLock.RLock()
+		ch, found := conn.waitingCalls[callID]
+		conn.callIDLock.RUnlock()
 		if !found {
 			return &rpcError{id: ProtocolError, error: fmt.Sprintf("method response received for unknown call: %v", callID)}
 		}
 
 		ch <- msg
-	case messageTypePing:
-		go func() {
-			reply := newMessage(messageCapacity)
-			reply.WriteVarint(messageTypePong)
-			if err := c.send(reply); err != nil {
-				c.end(err)
-			}
-		}()
-	case messageTypePong:
 	}
 
 	return nil
 }
 
-func (c *RPCConnection) acquireCallSlot() (uint64, RPCError) {
-	c.callIDLock.Lock()
-	defer c.callIDLock.Unlock()
-
-	// Check if any slots exist
-	if len(c.waitingCalls) >= math.MaxUint32 {
-		return 0, &rpcError{id: GenericError, error: "no callID slots available"}
+func contextToError(e error) RPCError {
+	switch e {
+	case context.DeadlineExceeded:
+		return &rpcError{id: TimeoutError, error: "method call timed out"}
+	case context.Canceled:
+		return &rpcError{id: GenericError, error: "method call cancelled"}
+	default:
+		return &rpcError{id: GenericError, error: fmt.Sprintf("unknown cancellation reason: %+v", e)}
 	}
-
-	// Find a slot
-	var n uint32
-	taken := true
-	for taken {
-		n = atomic.AddUint32(&c.nextID, 1)
-		_, taken = c.waitingCalls[uint64(n)]
-	}
-
-	// Take the slot
-	c.waitingCalls[uint64(n)] = nil
-	return uint64(n), nil
-}
-
-func (c *RPCConnection) abandonCallSlot(callID uint64) {
-	c.callIDLock.Lock()
-	defer c.callIDLock.Unlock()
-
-	if callID > math.MaxUint32 {
-		panic("attempted to abandon invalid callID")
-	}
-
-	v, ok := c.waitingCalls[callID]
-	if !ok {
-		panic("attempted to abandon free call slot")
-	}
-	if v != nil {
-		panic("attempted to abandon used call slot")
-	}
-	delete(c.waitingCalls, callID)
-}
-
-func (c *RPCConnection) releaseCallSlot(callID uint64) {
-	c.callIDLock.Lock()
-	defer c.callIDLock.Unlock()
-
-	if callID > math.MaxUint32 {
-		panic("attempted to release invalid callID")
-	}
-
-	v, ok := c.waitingCalls[callID]
-	if !ok {
-		panic("attempted to release free call slot")
-	}
-	if v == nil {
-		panic("attempted to release unused call slot")
-	}
-	close(v)
-	delete(c.waitingCalls, callID)
 }
 
 func (c *RPCConnection) call(ctx context.Context, waitForReply bool, protocolID uint64, methodID uint64, callArgs rpcMessage) (uint64, *message, RPCError) {
-	callID, err := c.acquireCallSlot()
+	conn := c.conn
+	select {
+	case <-conn.ready:
+	case <-ctx.Done():
+		return 0, nil, contextToError(ctx.Err())
+	}
+	if !conn.connected {
+		if conn.endReason != nil {
+			if err, ok := conn.endReason.(RPCError); ok {
+				return 0, nil, err
+			}
+			return 0, nil, &rpcError{id: GenericError, error: conn.endReason.Error()}
+		} else {
+			return 0, nil, &rpcError{id: ConnectionError, error: "not connected"}
+		}
+	}
+
+	callID, err := conn.acquireCallSlot()
 	if err != nil {
 		return 0, nil, err
 	}
@@ -809,23 +871,23 @@ func (c *RPCConnection) call(ctx context.Context, waitForReply bool, protocolID 
 	m.WriteVarint(methodID)
 
 	if err := callArgs.RPCEncode(m); err != nil {
-		c.abandonCallSlot(callID)
+		conn.abandonCallSlot(callID)
 		return 0, nil, &rpcError{id: GenericError, error: fmt.Sprintf("unable to encode method call arguments: %v", err)}
 	}
 
 	if !waitForReply {
-		c.abandonCallSlot(callID)
-		return 0, nil, c.send(m)
+		conn.abandonCallSlot(callID)
+		return 0, nil, c.send(conn, m)
 	}
 
 	// setup the call and timer
 	ch := make(chan *message, 1)
-	c.callIDLock.Lock()
-	c.waitingCalls[callID] = ch
-	c.callIDLock.Unlock()
+	conn.callIDLock.Lock()
+	conn.waitingCalls[callID] = ch
+	conn.callIDLock.Unlock()
 
 	// send the call over to the otherside
-	sendErr := c.send(m)
+	sendErr := c.send(conn, m)
 	if sendErr != nil {
 		return 0, nil, sendErr
 	}
@@ -833,87 +895,64 @@ func (c *RPCConnection) call(ctx context.Context, waitForReply bool, protocolID 
 	// wait for the reply
 	select {
 	case msg := <-ch:
-		c.releaseCallSlot(callID)
+		conn.releaseCallSlot(callID)
 
 		resultTypeID, err := msg.ReadVarint()
 		if err != nil {
-			c.Close()
-			return 0, nil, &rpcError{id: GenericError, error: fmt.Sprintf("error while decoding message type: %v", err)}
+			err2 := &rpcError{id: GenericError, error: fmt.Sprintf("error while decoding message type: %v", err)}
+			c.end(conn, err2)
+			return 0, nil, err2
 		}
 		return resultTypeID, msg, nil
 	case <-ctx.Done():
 		// We're cancelled. Let a goroutine manage cleanup of the call-slot.
 		go func() {
 			<-ch
-			c.releaseCallSlot(callID)
+			conn.releaseCallSlot(callID)
 		}()
 
 		// TODO(kl): Should we send a hint to the server, to let it cancel
 		// operation on this request?
-		switch ctx.Err() {
-		case context.DeadlineExceeded:
-			return 0, nil, &rpcError{id: TimeoutError, error: "method call timed out"}
-		case context.Canceled:
-			return 0, nil, &rpcError{id: GenericError, error: "method call cancelled"}
-		default:
-			return 0, nil, &rpcError{id: GenericError, error: fmt.Sprintf("unknown cancellation reason: %+v", err)}
-		}
+		return 0, nil, contextToError(ctx.Err())
 	}
 }
 
-func (c *RPCConnection) healthCheck() RPCError {
-	c.connectionLock.RLock()
-	defer c.connectionLock.RUnlock()
-	if !c.connected {
-		if c.endReason != nil {
-			if err, ok := c.endReason.(RPCError); ok {
-				return err
-			}
-			return &rpcError{id: GenericError, error: c.endReason.Error()}
-		} else {
-			return &rpcError{id: ConnectionError, error: "not connected"}
-		}
-	}
-	return nil
-}
-
-func (c *RPCConnection) send(msg *message) RPCError {
-	if err := c.healthCheck(); err != nil {
-		return err
-	}
+func (c *RPCConnection) send(conn *connection, msg *message) RPCError {
 	bytes := msg.Bytes()
-
-	c.writeLock.Lock()
-	_, err := c.conn.Write(bytes)
-	c.writeLock.Unlock()
+	conn.writeLock.Lock()
+	_, err := conn.conn.Write(bytes)
+	conn.writeLock.Unlock()
 
 	if err != nil {
-		c.Close()
-		return &rpcError{id: ConnectionError, error: fmt.Sprintf("error while writing message: %v", err)}
+		err2 := &rpcError{id: ConnectionError, error: fmt.Sprintf("error while writing message: %v", err)}
+		c.end(conn, err2)
+		return err2
 	}
 	return nil
 }
 
 func (c *RPCConnection) Close() {
-	c.end(nil)
+	close(c.done)
+	c.end(c.conn, nil)
 }
 
-func (c *RPCConnection) end(err RPCError) {
-	c.connectionLock.Lock()
-	defer c.connectionLock.Unlock()
+func (c *RPCConnection) Wait() {
+	<-c.done
+}
 
-	if err != nil && c.endReason == nil {
-		c.endReason = err
+func (c *RPCConnection) Ready() {
+	<-c.conn.ready
+}
+
+func (c *RPCConnection) end(conn *connection, err RPCError) {
+	if err != nil && conn.endReason == nil {
+		conn.endReason = err
 	}
 
-	if c.connected {
-		c.connected = false
-		c.conn.Close()
-		d := c.onDisconnect
-		if d != nil {
-			c.onDisconnect = nil
-			d(c, err)
-		}
+	if conn.connected {
+		conn.connected = false
+		conn.conn.Close()
+		c.onDisconnect(c, err)
 	}
 }
 

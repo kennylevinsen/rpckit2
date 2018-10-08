@@ -14,8 +14,11 @@ type {{ capitalize .ProtoName }}Methods interface {
     {{- end }}
 }
 
-func Register{{ capitalize .ProtoName }}Handler(c *RPCConnection, s {{ capitalize .ProtoName }}Methods) {
-    c.setHandler({{ .ProtoID }}, &callHandlerFor{{ capitalize .ProtoName }}{methods: s})
+func {{ capitalize .ProtoName }}Handler(methods {{ capitalize .ProtoName }}Methods) *rpcServer {
+    return &rpcServer{
+        ProtocolID: {{ .ProtoID }},
+        Handler: &callHandlerFor{{ capitalize .ProtoName }}{methods: methods},
+    }
 }
 
 type callHandlerFor{{ capitalize .ProtoName}} struct {

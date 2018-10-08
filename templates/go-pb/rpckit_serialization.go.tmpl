@@ -12,11 +12,9 @@ func (s *{{ .Prefix }}_{{ capitalize .ProtoName }}_{{ capitalize .Name }}) RPCEn
     {{- range .Fields }}
     {{- if .T.IsArray }}
     {
-        em := newEmbeddedMessage(messageCapacity)
         for _, v := range s._{{ .Name }} {
-            em.Write{{ .T.InnerValue.String }}(v)
+            m.WritePB{{ .T.InnerValue.String }}({{ .ID }}, v)
         }
-        m.WritePBMessage({{ .ID }}, em)
     }
     {{- else if .T.IsMap }}
     {
@@ -45,21 +43,9 @@ func (s *{{ .Prefix }}_{{ capitalize .ProtoName }}_{{ capitalize .Name }}) RPCDe
         {{- range .Fields }}
         case uint64({{ .ID }} << 3) | uint64({{ template "rpckit_property_to_wiretype.go.tmpl" .T.String}}):
             {{- if .T.IsArray }}
-            var em *message
-            var arr {{ .T.GoType }}
             var v {{ .T.InnerValue.GoType }}
-            em, err = m.ReadEmbeddedMessage()
-            if err != nil {
-                break
-            }
-            for err == nil {
-                v, err = em.Read{{ .T.InnerValue.String }}()
-                arr = append(arr, v)
-            }
-            if err == io.EOF {
-                s._{{ .Name }} = arr
-                err = nil
-            }
+            v, err = m.Read{{ .T.InnerValue.String }}()
+            s._{{ .Name }} = append(s._{{ .Name }}, v)
             {{- else if .T.IsMap }}
             var em *message
             if s._{{ .Name }} == nil {
