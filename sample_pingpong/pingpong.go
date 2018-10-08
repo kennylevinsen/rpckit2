@@ -27,6 +27,8 @@ func main() {
 			}
 			RegisterPingpongHandler(connection, &server{})
 			RegisterEchoHandler(connection, &echoServer{})
+
+			connection.Start()
 		}
 	}()
 
@@ -45,6 +47,8 @@ func main() {
 	serverClient := NewPingpongClient(connection)
 	echoClient := NewEchoClient(connection)
 
+	connection.Start()
+
 	ctx := context.Background()
 
 	success, err := serverClient.Authenticate(ctx, "batman", "robin")
@@ -56,7 +60,11 @@ func main() {
 		panic(err)
 	}
 
-	greeting2, err := echoClient.Echo(ctx, "weee")
+	greeting2, err := echoClient.Echo(ctx, "weee", []string{"Hello", ", ", "World", "!"}, map[string]int64{
+		"five": 5,
+		"two": 2,
+		"thirtysix": 36,
+	})
 	if err != nil {
 		panic(err)
 	}
@@ -112,6 +120,7 @@ type echoServer struct {
 	authenticated bool
 }
 
-func (s *echoServer) Echo(ctx context.Context, input string) (string, error) {
+func (s *echoServer) Echo(ctx context.Context, input string, names []string, values map[string]int64) (string, error) {
+	fmt.Printf("ECHO: %#v, %#v\n", names, values)
 	return input, nil
 }

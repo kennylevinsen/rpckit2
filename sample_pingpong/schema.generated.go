@@ -54,6 +54,7 @@ type message struct {
 	len       int
 	pos       int // for reading
 	LastError error
+	embedded  bool
 }
 
 func newMessage(capacity int) *message {
@@ -61,6 +62,14 @@ func newMessage(capacity int) *message {
 		buf: make([]byte, 4+capacity),
 		len: 4, // make room for length prefix
 		pos: 4, // make room for length prefix
+	}
+	return m
+}
+
+func newEmbeddedMessage(capacity int) *message {
+	m := &message{
+		buf: make([]byte, 4+capacity),
+		embedded: true,
 	}
 	return m
 }
@@ -80,9 +89,20 @@ func messageFromBytes(msg []byte) (*message, int) {
 	return nil, 0
 }
 
+func embeddedMessageFromBytes(msg []byte) *message {
+	m := &message{
+		buf: msg,
+		len: len(msg),
+		embedded: true,
+	}
+	return m
+}
+
 func (m *message) Bytes() []byte {
 	b := m.buf[:m.len]
-	binary.BigEndian.PutUint32(b, uint32(m.len))
+	if !m.embedded {
+		binary.BigEndian.PutUint32(b, uint32(m.len))
+	}
 	return b
 }
 
@@ -95,6 +115,15 @@ func (m *message) WriteVarint(v uint64) {
 	}
 	m.buf[m.len] = byte(v)
 	m.len++
+}
+
+func (m *message) WriteBytes(v []byte) {
+	stringLength := len(v)
+	m.WriteVarint(uint64(stringLength))
+
+	m.grow(stringLength)
+	copy(m.buf[m.len:], v)
+	m.len += stringLength
 }
 
 func (m *message) WriteString(v string) {
@@ -127,23 +156,36 @@ func (m *message) grow(needed int) {
 	}
 }
 
-func (m *message) ReadString() (string, error) {
+func (m *message) ReadBytes() ([]byte, error) {
 	v, err := m.ReadVarint()
 	if err != nil {
 		m.LastError = err
-		return "", err
+		return nil, err
 	}
 	length := int(v)
 
 	if m.pos+length > m.len {
 		m.LastError = io.EOF
-		return "", io.EOF
+		return nil, io.EOF
 	}
 
 	str := m.buf[m.pos : m.pos+length]
 	m.pos += length
 
-	return string(str), nil
+	return str, nil
+}
+
+func (m *message) ReadString() (string, error) {
+	str, err := m.ReadBytes()
+	return string(str), err
+}
+
+func (m *message) ReadEmbeddedMessage() (*message, error) {
+	b, err := m.ReadBytes()
+	if err != nil {
+		return nil, err
+	}
+	return embeddedMessageFromBytes(b), nil
 }
 
 func (m *message) ReadVarint() (uint64, error) {
@@ -276,38 +318,75 @@ func (m *message) WritePBString(fieldNumber uint64, value string) {
 	}
 }
 
+func (m *message) WritePBBytes(fieldNumber uint64, value []byte) {
+	if value != nil {
+		m.WritePBTag(fieldNumber, wireTypeLengthDelimited)
+		m.WriteBytes(value)
+	}
+}
+
+func (m *message) WriteBool(value bool) {
+	if value {
+		m.WriteVarint(1)
+	} else {
+		m.WriteVarint(0)
+	}
+}
+
 func (m *message) WritePBBool(fieldNumber uint64, value bool) {
 	if value != false {
 		m.WritePBTag(fieldNumber, wireTypeVarint)
-		m.WriteVarint(1)
+		m.WriteBool(value)
 	}
+}
+
+func (m *message) WriteInt64(value int64) {
+	m.Write64Bit(uint64(value))
 }
 
 func (m *message) WritePBInt64(fieldNumber uint64, value int64) {
 	if value != 0 {
 		m.WritePBTag(fieldNumber, wireType64bit)
-		m.Write64Bit(uint64(value))
+		m.WriteInt64(value)
 	}
+}
+
+func (m *message) WriteInt(value int64) {
+	m.WriteVarint(uint64(value))
 }
 
 func (m *message) WritePBInt(fieldNumber uint64, value int64) {
 	if value != 0 {
 		m.WritePBTag(fieldNumber, wireTypeVarint)
-		m.WriteVarint(uint64(value))
+		m.WriteInt(value)
 	}
+}
+
+func (m *message) WriteFloat(value float32) {
+	m.Write32Bit(math.Float32bits(value))
 }
 
 func (m *message) WritePBFloat(fieldNumber uint64, value float32) {
 	if value != 0 {
 		m.WritePBTag(fieldNumber, wireType32bit)
-		m.Write32Bit(math.Float32bits(value))
+		m.WriteFloat(value)
 	}
+}
+
+func (m *message) WriteDouble(value float64) {
+	m.Write64Bit(math.Float64bits(value))
 }
 
 func (m *message) WritePBDouble(fieldNumber uint64, value float64) {
 	if value != 0 {
 		m.WritePBTag(fieldNumber, wireType64bit)
-		m.Write64Bit(math.Float64bits(value))
+		m.WriteDouble(value)
+	}
+}
+
+func (m *message) WritePBMessage(fieldNumber uint64, em *message) {
+	if em != nil {
+		m.WritePBBytes(fieldNumber, em.Bytes())
 	}
 }
 
@@ -319,6 +398,7 @@ const (
 	TimeoutError     RPCErrorID = 1
 	ProtocolError    RPCErrorID = 2
 	ApplicationError RPCErrorID = 3
+	ConnectionError  RPCErrorID = 4
 )
 
 type RPCError interface {
@@ -386,7 +466,7 @@ type RPCConnectionOption func(*RPCConnection)
 type DisconnectedHandler func(c *RPCConnection, err RPCError)
 
 type RPCConnection struct {
-	timeout         time.Duration
+	timeout          time.Duration
 	conn             net.Conn
 	keepAlive        time.Duration
 	dynamicKeepAlive bool
@@ -444,9 +524,12 @@ func NewRPCConnection(conn net.Conn, options ...RPCConnectionOption) (*RPCConnec
 	}
 
 	if _, err := c.conn.Write(rpcPreamble); err != nil {
-		return nil, &rpcError{id: GenericError, error: fmt.Sprintf("could not write preamble: %v", err)}
+		return nil, &rpcError{id: ConnectionError, error: fmt.Sprintf("could not write preamble: %v", err)}
 	}
+	return c, nil
+}
 
+func (c *RPCConnection) Start() {
 	go c.readLoop()
 	if c.keepAlive != 0 {
 		go c.keepAliveLoop()
@@ -454,7 +537,6 @@ func NewRPCConnection(conn net.Conn, options ...RPCConnectionOption) (*RPCConnec
 	if c.timeout != 0 {
 		go c.healthCheckLoop()
 	}
-	return c, nil
 }
 
 func (c *RPCConnection) RemoteAddr() net.Addr {
@@ -789,7 +871,7 @@ func (c *RPCConnection) healthCheck() RPCError {
 			}
 			return &rpcError{id: GenericError, error: c.endReason.Error()}
 		} else {
-			return &rpcError{id: GenericError, error: "not connected"}
+			return &rpcError{id: ConnectionError, error: "not connected"}
 		}
 	}
 	return nil
@@ -807,7 +889,7 @@ func (c *RPCConnection) send(msg *message) RPCError {
 
 	if err != nil {
 		c.Close()
-		return &rpcError{id: GenericError, error: fmt.Sprintf("error while writing message: %v", err)}
+		return &rpcError{id: ConnectionError, error: fmt.Sprintf("error while writing message: %v", err)}
 	}
 	return nil
 }
@@ -1372,6 +1454,8 @@ const EchoMethod_Echo EchoMethod = 1
 
 type request_Echo_Echo struct {
     _input string
+    _names []string
+    _values map[string]int64
 }
 
 func (s *request_Echo_Echo) RPCID() uint64 {
@@ -1380,6 +1464,21 @@ func (s *request_Echo_Echo) RPCID() uint64 {
 
 func (s *request_Echo_Echo) RPCEncode(m *message) error {
     m.WritePBString(1, s._input)
+    {
+        em := newEmbeddedMessage(messageCapacity)
+        for _, v := range s._names {
+            em.WriteString(v)
+        }
+        m.WritePBMessage(2, em)
+    }
+    {
+        for k, v := range s._values {
+            em := newEmbeddedMessage(messageCapacity)
+            em.WritePBString(1, k)
+            em.WritePBInt(2, v)
+            m.WritePBMessage(3, em)
+        }
+    }
     return nil
 }
 
@@ -1393,6 +1492,60 @@ func (s *request_Echo_Echo) RPCDecode(m *message) error {
         switch tag {
         case uint64(1 << 3) | uint64(wireTypeLengthDelimited):
             s._input, err = m.ReadString()
+        case uint64(2 << 3) | uint64(wireTypeLengthDelimited):
+            var em *message
+            var arr []string
+            var v string
+            em, err = m.ReadEmbeddedMessage()
+            if err != nil {
+                break
+            }
+            for err == nil {
+                v, err = em.ReadString()
+                arr = append(arr, v)
+            }
+            if err == io.EOF {
+                s._names = arr
+                err = nil
+            }
+        case uint64(3 << 3) | uint64(wireTypeLengthDelimited):
+            var em *message
+            if s._values == nil {
+                s._values = make(map[string]int64)
+            }
+
+            var k string
+            var v int64
+            em, err = m.ReadEmbeddedMessage()
+            if err != nil {
+                break
+            }
+
+            tag, err = em.ReadVarint()
+            switch tag {
+            case uint64(1 << 3) | uint64(wireTypeLengthDelimited):
+                k, err = em.ReadString()
+            default:
+                if err != io.EOF {
+                    err = m.ReadPBSkip(tag)
+                }
+            }
+
+            tag, err = em.ReadVarint()
+            switch tag {
+            case uint64(2 << 3) | uint64(wireTypeVarint):
+                v, err = em.ReadInt()
+                s._values[k] = v
+            default:
+                if err != io.EOF {
+                    err = m.ReadPBSkip(tag)
+                }
+            }
+            if err == io.EOF {
+                err = nil
+            } else if err != nil {
+                break
+            }
         default:
             if err != io.EOF {
                 err = m.ReadPBSkip(tag)
@@ -1443,6 +1596,8 @@ func (s *response_Echo_Echo) RPCDecode(m *message) error {
 func (c *EchoClient) Echo(
     ctx context.Context,
         _input string,
+        _names []string,
+        _values map[string]int64,
     ) (
         _output string,
         err RPCError,
@@ -1450,6 +1605,8 @@ func (c *EchoClient) Echo(
 
     resultTypeID, msg, err := c.c.call(ctx, true, 2, uint64(EchoMethod_Echo), &request_Echo_Echo{
         _input: _input,
+        _names: _names,
+        _values: _values,
     })
 
     if err != nil {
@@ -1485,6 +1642,8 @@ type EchoMethods interface {
     Echo(
     ctx context.Context,
         input string,
+        names []string,
+        values map[string]int64,
     ) (
         output string,
         err error,
@@ -1515,6 +1674,8 @@ func (s *callHandlerForEcho) RPCCall(ctx context.Context, methodID uint64, m *me
         output, err := s.methods.Echo(
             ctx,
             args._input,
+            args._names,
+            args._values,
         )
         if err != nil {
             if rpcMsg, ok := err.(rpcMessage); ok {

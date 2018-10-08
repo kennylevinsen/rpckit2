@@ -17,36 +17,36 @@ func main() {
 		ID: 1, Name: "Authenticate",
 		Description: "Connect",
 		Input: []rpckit2.Property{
-			rpckit2.Property{ID: 1, T: rpckit2.String, Name: "username"},
-			rpckit2.Property{ID: 2, T: rpckit2.String, Name: "password"},
+			rpckit2.Property{ID: 1, T: rpckit2.String(), Name: "username"},
+			rpckit2.Property{ID: 2, T: rpckit2.String(), Name: "password"},
 		},
 		Output: []rpckit2.Property{
-			rpckit2.Property{ID: 1, T: rpckit2.Bool, Name: "success"},
+			rpckit2.Property{ID: 1, T: rpckit2.Bool(), Name: "success"},
 		},
 	})
 	server1.AddMethod(rpckit2.Method{
 		ID: 2, Name: "PingWithReply",
 		Description: "Echo",
 		Input: []rpckit2.Property{
-			rpckit2.Property{ID: 1, T: rpckit2.String, Name: "name"},
+			rpckit2.Property{ID: 1, T: rpckit2.String(), Name: "name"},
 		},
 		Output: []rpckit2.Property{
-			rpckit2.Property{ID: 1, T: rpckit2.String, Name: "greeting"},
+			rpckit2.Property{ID: 1, T: rpckit2.String(), Name: "greeting"},
 		},
 	})
 	server1.AddMethod(rpckit2.Method{
 		ID: 3, Name: "TestMethod",
 		Description: "Echo",
 		Input: []rpckit2.Property{
-			rpckit2.Property{ID: 1, T: rpckit2.String, Name: "string"},
-			rpckit2.Property{ID: 2, T: rpckit2.Bool, Name: "bool"},
-			rpckit2.Property{ID: 3, T: rpckit2.Int64, Name: "int64"},
-			rpckit2.Property{ID: 4, T: rpckit2.Int, Name: "int"},
-			rpckit2.Property{ID: 5, T: rpckit2.Float, Name: "float"},
-			rpckit2.Property{ID: 6, T: rpckit2.Double, Name: "double"},
+			rpckit2.Property{ID: 1, T: rpckit2.String(), Name: "string"},
+			rpckit2.Property{ID: 2, T: rpckit2.Bool(), Name: "bool"},
+			rpckit2.Property{ID: 3, T: rpckit2.Int64(), Name: "int64"},
+			rpckit2.Property{ID: 4, T: rpckit2.Int(), Name: "int"},
+			rpckit2.Property{ID: 5, T: rpckit2.Float(), Name: "float"},
+			rpckit2.Property{ID: 6, T: rpckit2.Double(), Name: "double"},
 		},
 		Output: []rpckit2.Property{
-			rpckit2.Property{ID: 1, T: rpckit2.Bool, Name: "success"},
+			rpckit2.Property{ID: 1, T: rpckit2.Bool(), Name: "success"},
 		},
 	})
 
@@ -55,10 +55,12 @@ func main() {
 		ID: 1, Name: "Echo",
 		Description: "Echo",
 		Input: []rpckit2.Property{
-			rpckit2.Property{ID: 1, T: rpckit2.String, Name: "input"},
+			rpckit2.Property{ID: 1, T: rpckit2.String(), Name: "input"},
+			rpckit2.Property{ID: 2, T: rpckit2.Array(rpckit2.String()), Name: "names"},
+			rpckit2.Property{ID: 3, T: rpckit2.Map(rpckit2.String(), rpckit2.Int()), Name: "values"},
 		},
 		Output: []rpckit2.Property{
-			rpckit2.Property{ID: 1, T: rpckit2.String, Name: "output"},
+			rpckit2.Property{ID: 1, T: rpckit2.String(), Name: "output"},
 		},
 	})
 
