@@ -1,4 +1,4 @@
-func (c *{{ capitalize .ProtoName }}Client) {{ .Name }}(
+func (c *{{ capitalize .ProtoName }}Client) {{ capitalize .Name }}(
     ctx context.Context,
     {{- range .Input }}
         _{{ .Name }} {{ .T.GoType }},

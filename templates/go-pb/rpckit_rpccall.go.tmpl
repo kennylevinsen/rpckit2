@@ -13,7 +13,7 @@ func (s *callHandlerFor{{ capitalize .ProtoName }}) RPCCall(ctx context.Context,
         if err := args.RPCDecode(m); err != nil {
             return &rpcError{id: ProtocolError, error: fmt.Sprintf("unable to decode method call: %v", err)}
         }
-        {{ range .Output }}{{ .Name }}{{ end }}, err := s.methods.{{ .Name }}(
+        {{ range .Output }}{{ .Name }}, {{ end }}err := s.methods.{{ capitalize .Name }}(
             ctx,
             {{- range .Input }}
             args._{{ .Name }},

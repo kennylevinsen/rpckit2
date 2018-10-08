@@ -5,7 +5,7 @@
 {{- $protoID := .ID -}}
 {{ template "rpckit_client_definition.go.tmpl" dict "ProtoName" $protoName "ProtoID" $protoID}}
 {{ range .Methods }}
-const {{ capitalize $protoName }}Method_{{ .Name }} {{ capitalize $protoName }}Method = {{ .ID }}
+const {{ capitalize $protoName }}Method_{{ capitalize .Name }} {{ capitalize $protoName }}Method = {{ .ID }}
 
 {{ template "rpckit_serialization.go.tmpl" dict "Prefix" "request" "Name" .Name "Fields" .Input "ProtoName" $protoName "ProtoID" $protoID }}
 {{ template "rpckit_serialization.go.tmpl" dict "Prefix" "response" "Name" .Name "Fields" .Output "ProtoName" $protoName "ProtoID" $protoID }}

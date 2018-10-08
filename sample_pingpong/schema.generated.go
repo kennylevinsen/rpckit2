@@ -1331,29 +1331,29 @@ func (c *PingpongClient) TestMethod(
 type PingpongMethods interface {
     Authenticate(
     ctx context.Context,
-        username string,
-        password string,
+        _username string,
+        _password string,
     ) (
-        success bool,
+        _success bool,
         err error,
     )
     PingWithReply(
     ctx context.Context,
-        name string,
+        _name string,
     ) (
-        greeting string,
+        _greeting string,
         err error,
     )
     TestMethod(
     ctx context.Context,
-        string string,
-        bool bool,
-        int64 int64,
-        int int64,
-        float float32,
-        double float64,
+        _string string,
+        _bool bool,
+        _int64 int64,
+        _int int64,
+        _float float32,
+        _double float64,
     ) (
-        success bool,
+        _success bool,
         err error,
     )
 }
@@ -1641,11 +1641,11 @@ func (c *EchoClient) Echo(
 type EchoMethods interface {
     Echo(
     ctx context.Context,
-        input string,
-        names []string,
-        values map[string]int64,
+        _input string,
+        _names []string,
+        _values map[string]int64,
     ) (
-        output string,
+        _output string,
         err error,
     )
 }
