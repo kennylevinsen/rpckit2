@@ -15,7 +15,7 @@ func main() {
 	//server.AddError(101, "not allowed")
 	server1.AddMethod(rpckit2.Method{
 		ID: 1, Name: "Authenticate",
-		Description: "Connect",
+		Description: "Authenticate using username and password",
 		Input: []rpckit2.Property{
 			rpckit2.Property{ID: 1, T: rpckit2.String(), Name: "username"},
 			rpckit2.Property{ID: 2, T: rpckit2.String(), Name: "password"},
@@ -26,7 +26,7 @@ func main() {
 	})
 	server1.AddMethod(rpckit2.Method{
 		ID: 2, Name: "PingWithReply",
-		Description: "Echo",
+		Description: "PingWithReply replies with a greeting based on the provided name",
 		Input: []rpckit2.Property{
 			rpckit2.Property{ID: 1, T: rpckit2.String(), Name: "name"},
 		},
@@ -36,7 +36,7 @@ func main() {
 	})
 	server1.AddMethod(rpckit2.Method{
 		ID: 3, Name: "TestMethod",
-		Description: "Echo",
+		Description: "TestMethod is a simple type test",
 		Input: []rpckit2.Property{
 			rpckit2.Property{ID: 1, T: rpckit2.String(), Name: "string"},
 			rpckit2.Property{ID: 2, T: rpckit2.Bool(), Name: "bool"},
@@ -53,7 +53,7 @@ func main() {
 	server2 := rpckit2.NewProtocol("echo", 2)
 	server2.AddMethod(rpckit2.Method{
 		ID: 1, Name: "Echo",
-		Description: "Echo",
+		Description: "Echo is yet another type test",
 		Input: []rpckit2.Property{
 			rpckit2.Property{ID: 1, T: rpckit2.String(), Name: "input"},
 			rpckit2.Property{ID: 2, T: rpckit2.Array(rpckit2.String()), Name: "names"},
@@ -65,8 +65,8 @@ func main() {
 	})
 	server2.AddMethod(rpckit2.Method{
 		ID: 2, Name: "Ping",
-		Description: "Ping",
-		Input: []rpckit2.Property{},
+		Description: "Ping is a simple no-input test",
+		Input:       []rpckit2.Property{},
 		Output: []rpckit2.Property{
 			rpckit2.Property{ID: 1, T: rpckit2.String(), Name: "output"},
 		},

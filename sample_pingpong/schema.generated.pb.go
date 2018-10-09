@@ -12,27 +12,31 @@ import (
 	"sync"
 )
 
-const (
-	rpcRequest  = 1
-	rpcResponse = 2
-)
-
-const (
-	privateTypeRPCError uint64 = math.MaxUint64
-)
-
+// RPC method types.
 const (
 	messageTypeMethodCall   = 1
 	messageTypeMethodReturn = 2
 )
 
+// Internal result types.
+//
+// Negative result types are reserved for internal use. Note that Go does not
+// permit negative-to-unsigned casts in constants, hence the use of the
+// math.MaxUint64 for -1.
+const (
+	privateTypeRPCError uint64 = math.MaxUint64 // -1
+)
+
+// Default message capacity for messages.
 const messageCapacity = 1024
 
 var (
 	ErrRPCVarintOverflow = errors.New("overflow in varint")
 	ErrGiveUp            = errors.New("give up")
-	rpcPreamble          = []byte{82, 80, 67, 75, 73, 84, 0, 0, 0, 1} //R,P,C,K,I,T .. version 1
 )
+
+// The RPC preamble: "RPCKIT" + 1 as big-endian uint32.
+var rpcPreamble = []byte{82, 80, 67, 75, 73, 84, 0, 0, 0, 1}
 
 type rpcMessage interface {
 	RPCEncode(m *message) error
@@ -42,6 +46,55 @@ type rpcMessage interface {
 
 type rpcCallHandler interface {
 	rpcCall(ctx context.Context, methodID uint64, m *message) rpcMessage
+}
+
+func makeSlice(n int) []byte {
+	// If the make fails, give a known error.
+	defer func() {
+		if recover() != nil {
+			panic(bytes.ErrTooLarge)
+		}
+	}()
+	return make([]byte, n)
+}
+
+func contextToError(e error) RPCError {
+	switch e {
+	case context.DeadlineExceeded:
+		return &rpcError{id: TimeoutError, error: "method call timed out"}
+	case context.Canceled:
+		return &rpcError{id: GenericError, error: "method call cancelled"}
+	default:
+		return &rpcError{id: GenericError, error: fmt.Sprintf("unknown cancellation reason: %+v", e)}
+	}
+}
+
+// ************************
+
+// RPCServer represents a protocol handling server implementation.
+type RPCServer interface {
+	protocolID() uint64
+	handler() rpcCallHandler
+}
+
+type rpcServer struct {
+	ProtocolID uint64
+	Handler    rpcCallHandler
+}
+
+func (r *rpcServer) protocolID() uint64 {
+	return r.ProtocolID
+}
+
+func (r *rpcServer) handler() rpcCallHandler {
+	return r.Handler
+}
+
+func newRPCServer(protocolID uint64, handler rpcCallHandler) *rpcServer {
+	return &rpcServer{
+		ProtocolID: protocolID,
+		Handler:    handler,
+	}
 }
 
 // *************************
@@ -69,6 +122,8 @@ func (w wireType) String() string {
 		panic("unknown wiretype")
 	}
 }
+
+// ************************
 
 type message struct {
 	buf       []byte
@@ -388,6 +443,8 @@ func (m *message) WritePBMessage(fieldNumber uint64, em *message) {
 }
 
 // ************************
+
+// RPCErrorID specifies the error category.
 type RPCErrorID uint64
 
 const (
@@ -398,6 +455,7 @@ const (
 	ConnectionError  RPCErrorID = 4
 )
 
+// RPCError represent RPC errors.
 type RPCError interface {
 	error
 	ID() RPCErrorID
@@ -452,32 +510,24 @@ func (e *rpcError) RPCDecode(m *message) error {
 	return err
 }
 
-func isRPCError(typeID uint64) bool {
-	return typeID == privateTypeRPCError
-}
-
 // ************************
 
-// connection provides the network connection context for
-// RPCConnection.
+// connection provides the network connection context for RPCConnection.
 type connection struct {
-	// ready signals whether connection setup is completed. Users
-	// should always wait for this signal before accessing the struct.
+	// ready signals whether connection setup is completed. Users should
+	// always wait for this signal before accessing the struct.
 	ready chan struct{}
 
-	// conn is the active connection, if available. It becomes nil on
-	// close.
+	// conn is the active connection, if available. It becomes nil on close.
 	conn net.Conn
 
 	// connected signals whether the connection is considered open.
 	connected bool
 
-	// endReason is the first error that caused the connection to
-	// terminate.
+	// endReason is the first error that caused the connection to terminate.
 	endReason error
 
-	// writeLock is used to avoid output corruption by serializing
-	// writes.
+	// writeLock is used to avoid output corruption by serializing writes.
 	writeLock sync.Mutex
 
 	callIDLock   sync.RWMutex
@@ -485,18 +535,26 @@ type connection struct {
 	nextID       uint64
 }
 
-// acquireCallSlot allocates a waitingCalls call slot with associated
-// message channel for use with a method call.
+func newConnection() *connection {
+	return &connection{
+		ready:        make(chan struct{}, 0),
+		connected:    true,
+		waitingCalls: make(map[uint64]chan *message),
+	}
+}
+
+// acquireCallSlot allocates a waitingCalls call slot with associated message
+// channel for use with a method call.
 func (c *connection) acquireCallSlot() (uint64, chan *message) {
 	c.callIDLock.Lock()
 	defer c.callIDLock.Unlock()
 
 	// Find a slot
 	//
-	// Our callID space is 2**64 wide, and connection-local. It is
-	// large enough to allow us to assume that there are always slots
-	// available somewhere. The following becomes an infinite loop if
-	// that assumption fails.
+	// Our callID space is 2**64 wide, and connection-local. It is large
+	// enough to allow us to assume that there are always slots available
+	// somewhere. The following becomes an infinite loop if that assumption
+	// fails.
 	var n uint64
 	taken := true
 	for taken {
@@ -511,12 +569,12 @@ func (c *connection) acquireCallSlot() (uint64, chan *message) {
 	return uint64(n), ch
 }
 
-// releaseCallSlot deallocates a waitingCalls call slot, and closes
-// the associated channel.
+// releaseCallSlot deallocates a waitingCalls call slot, and closes the
+// associated channel.
 //
-// Note: The call slot must only be released once pending replies have
-// been received. It is a potentially fatal protocol violation to
-// release a call slot with pending responses.
+// Note: The call slot must only be released once pending replies have been
+// received. It is a potentially fatal protocol violation to release a call
+// slot with pending responses.
 func (c *connection) releaseCallSlot(callID uint64) {
 	c.callIDLock.Lock()
 	defer c.callIDLock.Unlock()
@@ -532,117 +590,81 @@ func (c *connection) releaseCallSlot(callID uint64) {
 	delete(c.waitingCalls, callID)
 }
 
-// findCallSlot finds a waitingCalls call slot, and returns the
-// associated channel. It returns nil if the slot does not exist.
+// findCallSlot finds a waitingCalls call slot, and returns the associated
+// channel. It returns nil if the slot does not exist.
 func (c *connection) findCallSlot(callID uint64) chan *message {
 	c.callIDLock.RLock()
 	defer c.callIDLock.RUnlock()
 	return c.waitingCalls[callID]
 }
 
-func newConnection() *connection {
-	return &connection{
-		ready:        make(chan struct{}, 0),
-		connected:    true,
-		waitingCalls: make(map[uint64]chan *message),
-	}
-}
-
-// RPCServer represents a protocol handling server implementation.
-type RPCServer interface {
-	protocolID() uint64
-	handler() rpcCallHandler
-}
-
-type rpcServer struct {
-	ProtocolID uint64
-	Handler    rpcCallHandler
-}
-
-func (r *rpcServer) protocolID() uint64 {
-	return r.ProtocolID
-}
-
-func (r *rpcServer) handler() rpcCallHandler {
-	return r.Handler
-}
-
-func newRPCServer(protocolID uint64, handler rpcCallHandler) *rpcServer {
-	return &rpcServer{
-		ProtocolID: protocolID,
-		Handler:    handler,
-	}
-}
+// ************************
 
 // RPCConnection is a low-level protobuf-based RPC session.
 type RPCConnection struct {
-	done         chan struct{}
-	handlers     map[uint64]rpcCallHandler
-	dialer       func() (net.Conn, error)
-	onConnect    func(c *RPCConnection) error
-	onDisconnect func(c *RPCConnection, err RPCError)
+	done           chan struct{}
+	serverHandlers map[uint64]rpcCallHandler
+	dialer         func() (net.Conn, error)
+	onConnect      func(c *RPCConnection) error
+	onDisconnect   func(c *RPCConnection, err RPCError)
 
 	conn *connection
 }
 
 // RPCOptions are options to use when creating a new RPCConnection.
 type RPCOptions struct {
-	// Conn is the initial connection to use for the RPCConnection,
-	// bypassing an initial call to Dialer.
+	// Conn is the initial connection to use for the RPCConnection, bypassing
+	// an initial call to Dialer.
 	//
 	// Note that ConnectHook, if specified, will be called even if the
 	// connection was manually specified through Conn.
 	Conn net.Conn
 
-	// Dialer establishes a new network connection. If Dialer is
-	// not nil, RPCConnection will call it on setup if no connection
-	// was provided, and whenever a connection is terminated.
+	// Dialer establishes a new network connection. If Dialer is not nil,
+	// RPCConnection will call it on setup if no connection was provided, and
+	// whenever a connection is terminated.
 	//
-	// Dialer is called repeatedly until either a connection is
-	// established, the RPCConnection is closed, or ErrGiveUp is
-	// returned as error.
+	// Dialer is called repeatedly until either a connection is established,
+	// the RPCConnection is closed, or ErrGiveUp is returned as error.
 	//
-	// If Dialer is nil, the connection will be RPCConnection will
-	// terminate on error.
+	// If Dialer is nil, the connection will be RPCConnection will terminate
+	// on error.
 	Dialer func() (net.Conn, error)
 
-	// ConnectHook, if not nil, is called every time a connection is
-	// deemed ready to use, after successfully sending an RPC
-	// preamble.
+	// ConnectHook, if not nil, is called every time a connection is deemed
+	// ready to use, after successfully sending an RPC preamble.
 	//
-	// It can be used to reestablish state after connection reset,
-	// such as by sending authentication messages.
+	// It can be used to reestablish state after connection reset, such as by
+	// sending authentication messages.
 	//
-	// Note that the connection is already marked as ready when this
-	// handler is called, and all other calls will be permitted to run
-	// in parallel.
+	// Note that the connection is already marked as ready when this handler
+	// is called, and all other calls will be permitted to run in parallel.
 	ConnectHook func(c *RPCConnection) error
 
-	// DisconnectHook, if not nil, is called every time a connection
-	// is terminated, with the error that caused it to terminate.
+	// DisconnectHook, if not nil, is called every time a connection  is
+	// terminated, with the error that caused it to terminate.
 	DisconnectHook func(c *RPCConnection, err RPCError)
 
-	// Handlers specify the server implementations that are available
-	// in case of method calls being received.
+	// Servers specify the server implementations that will be used to service
 	//
-	// If a method call is received for a protocol not on this list,
-	// an error reply will be sent.
-	Handlers []RPCServer
+	// If a method call is received for a protocol not on this list, an error
+	// reply will be sent.
+	Servers []RPCServer
 }
 
 // NewRPCConnection creates a new RPCConnection.
 func NewRPCConnection(options *RPCOptions) *RPCConnection {
 	c := &RPCConnection{
-		done:         make(chan struct{}),
-		dialer:       options.Dialer,
-		handlers:     make(map[uint64]rpcCallHandler),
-		onDisconnect: options.DisconnectHook,
-		onConnect:    options.ConnectHook,
-		conn:         newConnection(),
+		done:           make(chan struct{}),
+		dialer:         options.Dialer,
+		serverHandlers: make(map[uint64]rpcCallHandler),
+		onDisconnect:   options.DisconnectHook,
+		onConnect:      options.ConnectHook,
+		conn:           newConnection(),
 	}
 
-	for _, h := range options.Handlers {
-		c.setHandler(h.protocolID(), h.handler())
+	for _, h := range options.Servers {
+		c.serverHandlers[h.protocolID()] = h.handler()
 	}
 
 	c.refreshInnerConn()
@@ -659,17 +681,24 @@ func NewRPCConnection(options *RPCOptions) *RPCConnection {
 func (c *RPCConnection) refreshInnerConn() {
 	select {
 	case <-c.conn.ready:
-		// Ready has already been fired, so the connection has been
-		// used. Create a fresh one.
+		// Ready has already been fired, so the connection has been used.
+		// Create a fresh one.
 		c.conn = newConnection()
 	default:
-		// Ready has not been fired, so we will not replace the
-		// connection.
+		// Ready has not been fired, so we will not replace the connection.
 	}
 }
 
-// connect prepares a new connection based on a successfully dialed
-// net.Conn.
+func (c *RPCConnection) sendPreamble(conn *connection) RPCError {
+	if _, err := c.conn.conn.Write(rpcPreamble); err != nil {
+		err := &rpcError{id: ConnectionError, error: fmt.Sprintf("could not write preamble: %v", err)}
+		c.end(conn, err)
+		return err
+	}
+	return nil
+}
+
+// connect prepares a new connection based on a successfully dialed net.Conn.
 //
 // The return value indicates whether the read loop has been started.
 func (c *RPCConnection) connect(conn net.Conn) bool {
@@ -714,34 +743,24 @@ func (c *RPCConnection) dial() {
 			continue
 		}
 		if c.connect(conn) {
-			// The readloop has been started, which will call us again
-			// if necessary.
+			// The readloop has been started, which will call us again if
+			// necessary.
 			return
 		}
 	}
 }
 
-func (c *RPCConnection) sendPreamble(conn *connection) RPCError {
-	if _, err := c.conn.conn.Write(rpcPreamble); err != nil {
-		err := &rpcError{id: ConnectionError, error: fmt.Sprintf("could not write preamble: %v", err)}
-		c.end(conn, err)
-		return err
-	}
-	return nil
-}
-
-// readLoop services incoming traffic on a connection. It is also
-// responsible for restarting the dialer on error.
+// readLoop services incoming traffic on a connection. It is also responsible
+// for restarting the dialer on error.
 func (c *RPCConnection) readLoop() {
-	// We store the connection struct, and pass it around. This is
-	// to ensure that we only terminate the *current* connection on
-	// error, rather than a freshly established one.
+	// We store the connection struct, and pass it around. This is to ensure
+	// that we only terminate the *current* connection on error, rather than a
+	// freshly established one.
 	conn := c.conn
 
-	// Check if the RPCConnection has been closed. We can end up here
-	// if the RPCConnection was closed after the dial loop checked but
-	// before a new connection was inserted, leading to Close closing
-	// an old connection.
+	// Check if the RPCConnection has been closed. We can end up here if the
+	// RPCConnection was closed after the dial loop checked but before a new
+	// connection was inserted, leading to Close closing an old connection.
 	select {
 	case <-c.done:
 		c.end(conn, nil)
@@ -789,14 +808,13 @@ func (c *RPCConnection) readLoop() {
 			// We have less than minRead space available
 			newBuf := buf
 
-			// Check if we need a bigger buffer, or if cleanup is
-			// sufficient.
+			// Check if we need a bigger buffer, or if cleanup is sufficient.
 			if off+free < minRead {
 				newBuf = makeSlice(2*cap(buf) + minRead)
 			}
 
-			// This either copies to the beginning of our initial
-			// buffer, or relocates us to our new buffer.
+			// This either copies to the beginning of our initial buffer, or
+			// relocates us to our new buffer.
 			copy(newBuf, buf[off:])
 			buf = newBuf[:len(buf)-off]
 			off = 0
@@ -846,7 +864,7 @@ func (c *RPCConnection) gotMessage(ctx context.Context, conn *connection, msg *m
 		if err != nil {
 			return &rpcError{id: ProtocolError, error: "could not read protocolID from method call"}
 		}
-		handler, found := c.handlers[protocolID]
+		handler, found := c.serverHandlers[protocolID]
 		if !found {
 			err := &rpcError{id: ProtocolError, error: fmt.Sprintf("unknown protocol: %d", protocolID)}
 
@@ -895,19 +913,8 @@ func (c *RPCConnection) gotMessage(ctx context.Context, conn *connection, msg *m
 	return nil
 }
 
-func contextToError(e error) RPCError {
-	switch e {
-	case context.DeadlineExceeded:
-		return &rpcError{id: TimeoutError, error: "method call timed out"}
-	case context.Canceled:
-		return &rpcError{id: GenericError, error: "method call cancelled"}
-	default:
-		return &rpcError{id: GenericError, error: fmt.Sprintf("unknown cancellation reason: %+v", e)}
-	}
-}
-
-// call executes a method call, and if waitForReply is true, waits for
-// its completion.
+// call executes a method call, and if waitForReply is true, waits for its
+// completion.
 func (c *RPCConnection) call(ctx context.Context, waitForReply bool, protocolID, methodID uint64, callArgs rpcMessage) (uint64, *message, RPCError) {
 	conn := c.conn
 
@@ -975,6 +982,7 @@ func (c *RPCConnection) call(ctx context.Context, waitForReply bool, protocolID,
 	}
 }
 
+// send serializes a message and sends it down the pipe.
 func (c *RPCConnection) send(conn *connection, msg *message) RPCError {
 	bytes := msg.Bytes()
 	conn.writeLock.Lock()
@@ -1000,9 +1008,9 @@ func (c *RPCConnection) Wait() {
 	<-c.done
 }
 
-// Ready waits for the RPCConnection to either become ready for use,
-// or be terminated. Ready returns true if the cause for waking up
-// was that the connection became ready.
+// Ready waits for the RPCConnection to either become ready for use, or be
+// terminated. Ready returns true if the cause for waking up was that the
+// connection became ready.
 func (c *RPCConnection) Ready() bool {
 	select {
 	case <-c.conn.ready:
@@ -1012,12 +1020,15 @@ func (c *RPCConnection) Ready() bool {
 	}
 }
 
+// end signals that a connection should be terminated. It stores the error it
+// was called with, terminates the connection and calls onDisconnect if
+// available.
+//
+// Only the first call to end on a connection has any effect, so it is safe to
+// call multiple times.
 func (c *RPCConnection) end(conn *connection, err RPCError) {
-	if err != nil && conn.endReason == nil {
-		conn.endReason = err
-	}
-
 	if conn.connected {
+		conn.endReason = err
 		conn.connected = false
 		if conn.conn != nil {
 			conn.conn.Close()
@@ -1028,22 +1039,11 @@ func (c *RPCConnection) end(conn *connection, err RPCError) {
 	}
 }
 
-func (c *RPCConnection) setHandler(protocolID uint64, handler rpcCallHandler) {
-	c.handlers[protocolID] = handler
-}
-
-func makeSlice(n int) []byte {
-	// If the make fails, give a known error.
-	defer func() {
-		if recover() != nil {
-			panic(bytes.ErrTooLarge)
-		}
-	}()
-	return make([]byte, n)
-}
-
-func (c *RPCConnection) handlePrivateResponse(resultType uint64, msg *message) (RPCError, bool) {
-	if isRPCError(resultType) {
+// handlePrivateResponse is called from individual method response handlers
+// for unknown message types to handle private message types.
+func (c *RPCConnection) handlePrivateResponse(resultType uint64, msg *message) (err RPCError, isPrivate bool) {
+	switch resultType {
+	case privateTypeRPCError:
 		var r rpcError
 		if err := r.RPCDecode(msg); err != nil {
 			return &rpcError{id: GenericError, error: fmt.Sprintf("could not decode result: %v", err)}, true
@@ -1069,8 +1069,8 @@ func NewRPCPingpongClient(c *RPCConnection) *RPCPingpongClient {
 const protoPingpongMethodAuthenticate protoPingpongMethod = 1
 
 type rpcReqProtoPingpongMethodAuthenticate struct {
-	rpcReqUsername string
-	rpcReqPassword string
+	Username string
+	Password string
 }
 
 func (s *rpcReqProtoPingpongMethodAuthenticate) RPCID() uint64 {
@@ -1078,8 +1078,8 @@ func (s *rpcReqProtoPingpongMethodAuthenticate) RPCID() uint64 {
 }
 
 func (s *rpcReqProtoPingpongMethodAuthenticate) RPCEncode(m *message) error {
-	m.WritePBString(1, s.rpcReqUsername)
-	m.WritePBString(2, s.rpcReqPassword)
+	m.WritePBString(1, s.Username)
+	m.WritePBString(2, s.Password)
 	return nil
 }
 
@@ -1092,9 +1092,9 @@ func (s *rpcReqProtoPingpongMethodAuthenticate) RPCDecode(m *message) error {
 		tag, err = m.ReadVarint()
 		switch tag {
 		case uint64(1<<3) | uint64(wireTypeLengthDelimited):
-			s.rpcReqUsername, err = m.ReadString()
+			s.Username, err = m.ReadString()
 		case uint64(2<<3) | uint64(wireTypeLengthDelimited):
-			s.rpcReqPassword, err = m.ReadString()
+			s.Password, err = m.ReadString()
 		default:
 			if err != io.EOF {
 				err = m.ReadPBSkip(tag)
@@ -1108,7 +1108,7 @@ func (s *rpcReqProtoPingpongMethodAuthenticate) RPCDecode(m *message) error {
 }
 
 type rpcRespProtoPingpongMethodAuthenticate struct {
-	rpcRespSuccess bool
+	Success bool
 }
 
 func (s *rpcRespProtoPingpongMethodAuthenticate) RPCID() uint64 {
@@ -1116,7 +1116,7 @@ func (s *rpcRespProtoPingpongMethodAuthenticate) RPCID() uint64 {
 }
 
 func (s *rpcRespProtoPingpongMethodAuthenticate) RPCEncode(m *message) error {
-	m.WritePBBool(1, s.rpcRespSuccess)
+	m.WritePBBool(1, s.Success)
 	return nil
 }
 
@@ -1129,7 +1129,7 @@ func (s *rpcRespProtoPingpongMethodAuthenticate) RPCDecode(m *message) error {
 		tag, err = m.ReadVarint()
 		switch tag {
 		case uint64(1<<3) | uint64(wireTypeVarint):
-			s.rpcRespSuccess, err = m.ReadBool()
+			s.Success, err = m.ReadBool()
 		default:
 			if err != io.EOF {
 				err = m.ReadPBSkip(tag)
@@ -1142,19 +1142,11 @@ func (s *rpcRespProtoPingpongMethodAuthenticate) RPCDecode(m *message) error {
 	return err
 }
 
-// Connect
-func (c *RPCPingpongClient) Authenticate(
-	ctx context.Context,
-	reqUsername string,
-	reqPassword string,
-) (
-	respSuccess bool,
-	err RPCError,
-) {
-
+// Authenticate using username and password
+func (c *RPCPingpongClient) Authenticate(ctx context.Context, reqUsername string, reqPassword string) (respSuccess bool, err RPCError) {
 	resultTypeID, msg, err := c.c.call(ctx, true, 1, uint64(protoPingpongMethodAuthenticate), &rpcReqProtoPingpongMethodAuthenticate{
-		rpcReqUsername: reqUsername,
-		rpcReqPassword: reqPassword,
+		Username: reqUsername,
+		Password: reqPassword,
 	})
 
 	if err != nil {
@@ -1173,7 +1165,7 @@ func (c *RPCPingpongClient) Authenticate(
 			err = &rpcError{id: GenericError, error: fmt.Sprintf("could not decode result: %v", decodeErr)}
 			return
 		}
-		respSuccess = r.rpcRespSuccess
+		respSuccess = r.Success
 	default:
 		var isPrivate bool
 		err, isPrivate = c.c.handlePrivateResponse(resultTypeID, msg)
@@ -1188,7 +1180,7 @@ func (c *RPCPingpongClient) Authenticate(
 const protoPingpongMethodPingWithReply protoPingpongMethod = 2
 
 type rpcReqProtoPingpongMethodPingWithReply struct {
-	rpcReqName string
+	Name string
 }
 
 func (s *rpcReqProtoPingpongMethodPingWithReply) RPCID() uint64 {
@@ -1196,7 +1188,7 @@ func (s *rpcReqProtoPingpongMethodPingWithReply) RPCID() uint64 {
 }
 
 func (s *rpcReqProtoPingpongMethodPingWithReply) RPCEncode(m *message) error {
-	m.WritePBString(1, s.rpcReqName)
+	m.WritePBString(1, s.Name)
 	return nil
 }
 
@@ -1209,7 +1201,7 @@ func (s *rpcReqProtoPingpongMethodPingWithReply) RPCDecode(m *message) error {
 		tag, err = m.ReadVarint()
 		switch tag {
 		case uint64(1<<3) | uint64(wireTypeLengthDelimited):
-			s.rpcReqName, err = m.ReadString()
+			s.Name, err = m.ReadString()
 		default:
 			if err != io.EOF {
 				err = m.ReadPBSkip(tag)
@@ -1223,7 +1215,7 @@ func (s *rpcReqProtoPingpongMethodPingWithReply) RPCDecode(m *message) error {
 }
 
 type rpcRespProtoPingpongMethodPingWithReply struct {
-	rpcRespGreeting string
+	Greeting string
 }
 
 func (s *rpcRespProtoPingpongMethodPingWithReply) RPCID() uint64 {
@@ -1231,7 +1223,7 @@ func (s *rpcRespProtoPingpongMethodPingWithReply) RPCID() uint64 {
 }
 
 func (s *rpcRespProtoPingpongMethodPingWithReply) RPCEncode(m *message) error {
-	m.WritePBString(1, s.rpcRespGreeting)
+	m.WritePBString(1, s.Greeting)
 	return nil
 }
 
@@ -1244,7 +1236,7 @@ func (s *rpcRespProtoPingpongMethodPingWithReply) RPCDecode(m *message) error {
 		tag, err = m.ReadVarint()
 		switch tag {
 		case uint64(1<<3) | uint64(wireTypeLengthDelimited):
-			s.rpcRespGreeting, err = m.ReadString()
+			s.Greeting, err = m.ReadString()
 		default:
 			if err != io.EOF {
 				err = m.ReadPBSkip(tag)
@@ -1257,17 +1249,10 @@ func (s *rpcRespProtoPingpongMethodPingWithReply) RPCDecode(m *message) error {
 	return err
 }
 
-// Echo
-func (c *RPCPingpongClient) PingWithReply(
-	ctx context.Context,
-	reqName string,
-) (
-	respGreeting string,
-	err RPCError,
-) {
-
+// PingWithReply replies with a greeting based on the provided name
+func (c *RPCPingpongClient) PingWithReply(ctx context.Context, reqName string) (respGreeting string, err RPCError) {
 	resultTypeID, msg, err := c.c.call(ctx, true, 1, uint64(protoPingpongMethodPingWithReply), &rpcReqProtoPingpongMethodPingWithReply{
-		rpcReqName: reqName,
+		Name: reqName,
 	})
 
 	if err != nil {
@@ -1286,7 +1271,7 @@ func (c *RPCPingpongClient) PingWithReply(
 			err = &rpcError{id: GenericError, error: fmt.Sprintf("could not decode result: %v", decodeErr)}
 			return
 		}
-		respGreeting = r.rpcRespGreeting
+		respGreeting = r.Greeting
 	default:
 		var isPrivate bool
 		err, isPrivate = c.c.handlePrivateResponse(resultTypeID, msg)
@@ -1301,12 +1286,12 @@ func (c *RPCPingpongClient) PingWithReply(
 const protoPingpongMethodTestMethod protoPingpongMethod = 3
 
 type rpcReqProtoPingpongMethodTestMethod struct {
-	rpcReqString string
-	rpcReqBool   bool
-	rpcReqInt64  int64
-	rpcReqInt    int64
-	rpcReqFloat  float32
-	rpcReqDouble float64
+	String string
+	Bool   bool
+	Int64  int64
+	Int    int64
+	Float  float32
+	Double float64
 }
 
 func (s *rpcReqProtoPingpongMethodTestMethod) RPCID() uint64 {
@@ -1314,12 +1299,12 @@ func (s *rpcReqProtoPingpongMethodTestMethod) RPCID() uint64 {
 }
 
 func (s *rpcReqProtoPingpongMethodTestMethod) RPCEncode(m *message) error {
-	m.WritePBString(1, s.rpcReqString)
-	m.WritePBBool(2, s.rpcReqBool)
-	m.WritePBInt64(3, s.rpcReqInt64)
-	m.WritePBInt(4, s.rpcReqInt)
-	m.WritePBFloat(5, s.rpcReqFloat)
-	m.WritePBDouble(6, s.rpcReqDouble)
+	m.WritePBString(1, s.String)
+	m.WritePBBool(2, s.Bool)
+	m.WritePBInt64(3, s.Int64)
+	m.WritePBInt(4, s.Int)
+	m.WritePBFloat(5, s.Float)
+	m.WritePBDouble(6, s.Double)
 	return nil
 }
 
@@ -1332,17 +1317,17 @@ func (s *rpcReqProtoPingpongMethodTestMethod) RPCDecode(m *message) error {
 		tag, err = m.ReadVarint()
 		switch tag {
 		case uint64(1<<3) | uint64(wireTypeLengthDelimited):
-			s.rpcReqString, err = m.ReadString()
+			s.String, err = m.ReadString()
 		case uint64(2<<3) | uint64(wireTypeVarint):
-			s.rpcReqBool, err = m.ReadBool()
+			s.Bool, err = m.ReadBool()
 		case uint64(3<<3) | uint64(wireType64bit):
-			s.rpcReqInt64, err = m.ReadInt64()
+			s.Int64, err = m.ReadInt64()
 		case uint64(4<<3) | uint64(wireTypeVarint):
-			s.rpcReqInt, err = m.ReadInt()
+			s.Int, err = m.ReadInt()
 		case uint64(5<<3) | uint64(wireType32bit):
-			s.rpcReqFloat, err = m.ReadFloat()
+			s.Float, err = m.ReadFloat()
 		case uint64(6<<3) | uint64(wireType64bit):
-			s.rpcReqDouble, err = m.ReadDouble()
+			s.Double, err = m.ReadDouble()
 		default:
 			if err != io.EOF {
 				err = m.ReadPBSkip(tag)
@@ -1356,7 +1341,7 @@ func (s *rpcReqProtoPingpongMethodTestMethod) RPCDecode(m *message) error {
 }
 
 type rpcRespProtoPingpongMethodTestMethod struct {
-	rpcRespSuccess bool
+	Success bool
 }
 
 func (s *rpcRespProtoPingpongMethodTestMethod) RPCID() uint64 {
@@ -1364,7 +1349,7 @@ func (s *rpcRespProtoPingpongMethodTestMethod) RPCID() uint64 {
 }
 
 func (s *rpcRespProtoPingpongMethodTestMethod) RPCEncode(m *message) error {
-	m.WritePBBool(1, s.rpcRespSuccess)
+	m.WritePBBool(1, s.Success)
 	return nil
 }
 
@@ -1377,7 +1362,7 @@ func (s *rpcRespProtoPingpongMethodTestMethod) RPCDecode(m *message) error {
 		tag, err = m.ReadVarint()
 		switch tag {
 		case uint64(1<<3) | uint64(wireTypeVarint):
-			s.rpcRespSuccess, err = m.ReadBool()
+			s.Success, err = m.ReadBool()
 		default:
 			if err != io.EOF {
 				err = m.ReadPBSkip(tag)
@@ -1390,27 +1375,15 @@ func (s *rpcRespProtoPingpongMethodTestMethod) RPCDecode(m *message) error {
 	return err
 }
 
-// Echo
-func (c *RPCPingpongClient) TestMethod(
-	ctx context.Context,
-	reqString string,
-	reqBool bool,
-	reqInt64 int64,
-	reqInt int64,
-	reqFloat float32,
-	reqDouble float64,
-) (
-	respSuccess bool,
-	err RPCError,
-) {
-
+// TestMethod is a simple type test
+func (c *RPCPingpongClient) TestMethod(ctx context.Context, reqString string, reqBool bool, reqInt64 int64, reqInt int64, reqFloat float32, reqDouble float64) (respSuccess bool, err RPCError) {
 	resultTypeID, msg, err := c.c.call(ctx, true, 1, uint64(protoPingpongMethodTestMethod), &rpcReqProtoPingpongMethodTestMethod{
-		rpcReqString: reqString,
-		rpcReqBool:   reqBool,
-		rpcReqInt64:  reqInt64,
-		rpcReqInt:    reqInt,
-		rpcReqFloat:  reqFloat,
-		rpcReqDouble: reqDouble,
+		String: reqString,
+		Bool:   reqBool,
+		Int64:  reqInt64,
+		Int:    reqInt,
+		Float:  reqFloat,
+		Double: reqDouble,
 	})
 
 	if err != nil {
@@ -1429,7 +1402,7 @@ func (c *RPCPingpongClient) TestMethod(
 			err = &rpcError{id: GenericError, error: fmt.Sprintf("could not decode result: %v", decodeErr)}
 			return
 		}
-		respSuccess = r.rpcRespSuccess
+		respSuccess = r.Success
 	default:
 		var isPrivate bool
 		err, isPrivate = c.c.handlePrivateResponse(resultTypeID, msg)
@@ -1468,8 +1441,8 @@ func (s *rpcCallHandlerForPingpong) rpcCall(ctx context.Context, methodID uint64
 		}
 		success, err := s.methods.Authenticate(
 			ctx,
-			args.rpcReqUsername,
-			args.rpcReqPassword,
+			args.Username,
+			args.Password,
 		)
 		if err != nil {
 			if rpcMsg, ok := err.(rpcMessage); ok {
@@ -1478,7 +1451,7 @@ func (s *rpcCallHandlerForPingpong) rpcCall(ctx context.Context, methodID uint64
 			return &rpcError{id: ApplicationError, error: err.Error()}
 		}
 		return &rpcRespProtoPingpongMethodAuthenticate{
-			rpcRespSuccess: success,
+			Success: success,
 		}
 	case uint64(protoPingpongMethodPingWithReply):
 		args := rpcReqProtoPingpongMethodPingWithReply{}
@@ -1487,7 +1460,7 @@ func (s *rpcCallHandlerForPingpong) rpcCall(ctx context.Context, methodID uint64
 		}
 		greeting, err := s.methods.PingWithReply(
 			ctx,
-			args.rpcReqName,
+			args.Name,
 		)
 		if err != nil {
 			if rpcMsg, ok := err.(rpcMessage); ok {
@@ -1496,7 +1469,7 @@ func (s *rpcCallHandlerForPingpong) rpcCall(ctx context.Context, methodID uint64
 			return &rpcError{id: ApplicationError, error: err.Error()}
 		}
 		return &rpcRespProtoPingpongMethodPingWithReply{
-			rpcRespGreeting: greeting,
+			Greeting: greeting,
 		}
 	case uint64(protoPingpongMethodTestMethod):
 		args := rpcReqProtoPingpongMethodTestMethod{}
@@ -1505,12 +1478,12 @@ func (s *rpcCallHandlerForPingpong) rpcCall(ctx context.Context, methodID uint64
 		}
 		success, err := s.methods.TestMethod(
 			ctx,
-			args.rpcReqString,
-			args.rpcReqBool,
-			args.rpcReqInt64,
-			args.rpcReqInt,
-			args.rpcReqFloat,
-			args.rpcReqDouble,
+			args.String,
+			args.Bool,
+			args.Int64,
+			args.Int,
+			args.Float,
+			args.Double,
 		)
 		if err != nil {
 			if rpcMsg, ok := err.(rpcMessage); ok {
@@ -1519,7 +1492,7 @@ func (s *rpcCallHandlerForPingpong) rpcCall(ctx context.Context, methodID uint64
 			return &rpcError{id: ApplicationError, error: err.Error()}
 		}
 		return &rpcRespProtoPingpongMethodTestMethod{
-			rpcRespSuccess: success,
+			Success: success,
 		}
 	default:
 		return &rpcError{id: GenericError, error: fmt.Sprintf("unknown method ID: %d", methodID)}
@@ -1542,9 +1515,9 @@ func NewRPCEchoClient(c *RPCConnection) *RPCEchoClient {
 const protoEchoMethodEcho protoEchoMethod = 1
 
 type rpcReqProtoEchoMethodEcho struct {
-	rpcReqInput  string
-	rpcReqNames  []string
-	rpcReqValues map[string]int64
+	Input  string
+	Names  []string
+	Values map[string]int64
 }
 
 func (s *rpcReqProtoEchoMethodEcho) RPCID() uint64 {
@@ -1552,11 +1525,11 @@ func (s *rpcReqProtoEchoMethodEcho) RPCID() uint64 {
 }
 
 func (s *rpcReqProtoEchoMethodEcho) RPCEncode(m *message) error {
-	m.WritePBString(1, s.rpcReqInput)
-	for _, v := range s.rpcReqNames {
+	m.WritePBString(1, s.Input)
+	for _, v := range s.Names {
 		m.WritePBString(2, v)
 	}
-	for k, v := range s.rpcReqValues {
+	for k, v := range s.Values {
 		em := newEmbeddedMessage(messageCapacity)
 		em.WritePBString(1, k)
 		em.WritePBInt(2, v)
@@ -1574,15 +1547,15 @@ func (s *rpcReqProtoEchoMethodEcho) RPCDecode(m *message) error {
 		tag, err = m.ReadVarint()
 		switch tag {
 		case uint64(1<<3) | uint64(wireTypeLengthDelimited):
-			s.rpcReqInput, err = m.ReadString()
+			s.Input, err = m.ReadString()
 		case uint64(2<<3) | uint64(wireTypeLengthDelimited):
 			var v string
 			v, err = m.ReadString()
-			s.rpcReqNames = append(s.rpcReqNames, v)
+			s.Names = append(s.Names, v)
 		case uint64(3<<3) | uint64(wireTypeLengthDelimited):
 			var em *message
-			if s.rpcReqValues == nil {
-				s.rpcReqValues = make(map[string]int64)
+			if s.Values == nil {
+				s.Values = make(map[string]int64)
 			}
 
 			var k string
@@ -1606,7 +1579,7 @@ func (s *rpcReqProtoEchoMethodEcho) RPCDecode(m *message) error {
 			switch tag {
 			case uint64(2<<3) | uint64(wireTypeVarint):
 				v, err = em.ReadInt()
-				s.rpcReqValues[k] = v
+				s.Values[k] = v
 			default:
 				if err != io.EOF {
 					err = m.ReadPBSkip(tag)
@@ -1630,7 +1603,7 @@ func (s *rpcReqProtoEchoMethodEcho) RPCDecode(m *message) error {
 }
 
 type rpcRespProtoEchoMethodEcho struct {
-	rpcRespOutput string
+	Output string
 }
 
 func (s *rpcRespProtoEchoMethodEcho) RPCID() uint64 {
@@ -1638,7 +1611,7 @@ func (s *rpcRespProtoEchoMethodEcho) RPCID() uint64 {
 }
 
 func (s *rpcRespProtoEchoMethodEcho) RPCEncode(m *message) error {
-	m.WritePBString(1, s.rpcRespOutput)
+	m.WritePBString(1, s.Output)
 	return nil
 }
 
@@ -1651,7 +1624,7 @@ func (s *rpcRespProtoEchoMethodEcho) RPCDecode(m *message) error {
 		tag, err = m.ReadVarint()
 		switch tag {
 		case uint64(1<<3) | uint64(wireTypeLengthDelimited):
-			s.rpcRespOutput, err = m.ReadString()
+			s.Output, err = m.ReadString()
 		default:
 			if err != io.EOF {
 				err = m.ReadPBSkip(tag)
@@ -1664,21 +1637,12 @@ func (s *rpcRespProtoEchoMethodEcho) RPCDecode(m *message) error {
 	return err
 }
 
-// Echo
-func (c *RPCEchoClient) Echo(
-	ctx context.Context,
-	reqInput string,
-	reqNames []string,
-	reqValues map[string]int64,
-) (
-	respOutput string,
-	err RPCError,
-) {
-
+// Echo is yet another type test
+func (c *RPCEchoClient) Echo(ctx context.Context, reqInput string, reqNames []string, reqValues map[string]int64) (respOutput string, err RPCError) {
 	resultTypeID, msg, err := c.c.call(ctx, true, 2, uint64(protoEchoMethodEcho), &rpcReqProtoEchoMethodEcho{
-		rpcReqInput:  reqInput,
-		rpcReqNames:  reqNames,
-		rpcReqValues: reqValues,
+		Input:  reqInput,
+		Names:  reqNames,
+		Values: reqValues,
 	})
 
 	if err != nil {
@@ -1697,7 +1661,7 @@ func (c *RPCEchoClient) Echo(
 			err = &rpcError{id: GenericError, error: fmt.Sprintf("could not decode result: %v", decodeErr)}
 			return
 		}
-		respOutput = r.rpcRespOutput
+		respOutput = r.Output
 	default:
 		var isPrivate bool
 		err, isPrivate = c.c.handlePrivateResponse(resultTypeID, msg)
@@ -1723,27 +1687,11 @@ func (s *rpcReqProtoEchoMethodPing) RPCEncode(m *message) error {
 }
 
 func (s *rpcReqProtoEchoMethodPing) RPCDecode(m *message) error {
-	var (
-		err error
-		tag uint64
-	)
-	for err == nil {
-		tag, err = m.ReadVarint()
-		switch tag {
-		default:
-			if err != io.EOF {
-				err = m.ReadPBSkip(tag)
-			}
-		}
-	}
-	if err == io.EOF {
-		return nil
-	}
-	return err
+	return nil
 }
 
 type rpcRespProtoEchoMethodPing struct {
-	rpcRespOutput string
+	Output string
 }
 
 func (s *rpcRespProtoEchoMethodPing) RPCID() uint64 {
@@ -1751,7 +1699,7 @@ func (s *rpcRespProtoEchoMethodPing) RPCID() uint64 {
 }
 
 func (s *rpcRespProtoEchoMethodPing) RPCEncode(m *message) error {
-	m.WritePBString(1, s.rpcRespOutput)
+	m.WritePBString(1, s.Output)
 	return nil
 }
 
@@ -1764,7 +1712,7 @@ func (s *rpcRespProtoEchoMethodPing) RPCDecode(m *message) error {
 		tag, err = m.ReadVarint()
 		switch tag {
 		case uint64(1<<3) | uint64(wireTypeLengthDelimited):
-			s.rpcRespOutput, err = m.ReadString()
+			s.Output, err = m.ReadString()
 		default:
 			if err != io.EOF {
 				err = m.ReadPBSkip(tag)
@@ -1777,14 +1725,8 @@ func (s *rpcRespProtoEchoMethodPing) RPCDecode(m *message) error {
 	return err
 }
 
-// Ping
-func (c *RPCEchoClient) Ping(
-	ctx context.Context,
-) (
-	respOutput string,
-	err RPCError,
-) {
-
+// Ping is a simple no-input test
+func (c *RPCEchoClient) Ping(ctx context.Context) (respOutput string, err RPCError) {
 	resultTypeID, msg, err := c.c.call(ctx, true, 2, uint64(protoEchoMethodPing), &rpcReqProtoEchoMethodPing{})
 
 	if err != nil {
@@ -1803,7 +1745,7 @@ func (c *RPCEchoClient) Ping(
 			err = &rpcError{id: GenericError, error: fmt.Sprintf("could not decode result: %v", decodeErr)}
 			return
 		}
-		respOutput = r.rpcRespOutput
+		respOutput = r.Output
 	default:
 		var isPrivate bool
 		err, isPrivate = c.c.handlePrivateResponse(resultTypeID, msg)
@@ -1842,9 +1784,9 @@ func (s *rpcCallHandlerForEcho) rpcCall(ctx context.Context, methodID uint64, m 
 		}
 		output, err := s.methods.Echo(
 			ctx,
-			args.rpcReqInput,
-			args.rpcReqNames,
-			args.rpcReqValues,
+			args.Input,
+			args.Names,
+			args.Values,
 		)
 		if err != nil {
 			if rpcMsg, ok := err.(rpcMessage); ok {
@@ -1853,7 +1795,7 @@ func (s *rpcCallHandlerForEcho) rpcCall(ctx context.Context, methodID uint64, m 
 			return &rpcError{id: ApplicationError, error: err.Error()}
 		}
 		return &rpcRespProtoEchoMethodEcho{
-			rpcRespOutput: output,
+			Output: output,
 		}
 	case uint64(protoEchoMethodPing):
 		args := rpcReqProtoEchoMethodPing{}
@@ -1870,7 +1812,7 @@ func (s *rpcCallHandlerForEcho) rpcCall(ctx context.Context, methodID uint64, m 
 			return &rpcError{id: ApplicationError, error: err.Error()}
 		}
 		return &rpcRespProtoEchoMethodPing{
-			rpcRespOutput: output,
+			Output: output,
 		}
 	default:
 		return &rpcError{id: GenericError, error: fmt.Sprintf("unknown method ID: %d", methodID)}

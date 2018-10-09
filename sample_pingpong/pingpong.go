@@ -1,9 +1,9 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"net"
-	"context"
 	"net/http"
 )
 
@@ -22,7 +22,7 @@ func testRPC() {
 
 			NewRPCConnection(&RPCOptions{
 				Conn: conn,
-				Handlers: []RPCServer{
+				Servers: []RPCServer{
 					RPCPingpongHandler(&server{}),
 					RPCEchoHandler(&echoServer{}),
 				},
@@ -56,8 +56,8 @@ func testRPC() {
 				panic("incorrect greeting")
 			}
 			greeting2, err := echoClient.Echo(ctx, "weee", []string{"Hello", ", ", "World", "!"}, map[string]int64{
-				"five": 5,
-				"two": 2,
+				"five":      5,
+				"two":       2,
 				"thirtysix": 36,
 			})
 			if err != nil {
@@ -99,7 +99,6 @@ func testHTTP() {
 		http.Serve(l2, mux)
 	}()
 
-
 	hc, err := NewHTTPClient("http://localhost:9998")
 	if err != nil {
 		panic(err)
@@ -124,8 +123,8 @@ func testHTTP() {
 		panic("incorrect greeting")
 	}
 	greeting2, err := echoClient.Echo(ctx, "weee", []string{"Hello", ", ", "World", "!"}, map[string]int64{
-		"five": 5,
-		"two": 2,
+		"five":      5,
+		"two":       2,
 		"thirtysix": 36,
 	})
 	if err != nil {
@@ -182,7 +181,6 @@ func (s *echoServer) Echo(ctx context.Context, input string, names []string, val
 	}
 	return input, nil
 }
-
 
 func (s *echoServer) Ping(ctx context.Context) (string, error) {
 	return "", nil
