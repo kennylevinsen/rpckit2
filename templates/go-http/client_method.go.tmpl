@@ -14,7 +14,7 @@ func (c *{{ capitalize .ProtoName }}Client) {{ capitalize .Name }}(
         req *http.Request
         resp *http.Response
         {{ if gt (len .Input) 0 }}reqbody httprequest_{{ capitalize .ProtoName }}_{{ capitalize .Name }}{{ end }}
-        respbody httpresponse_{{ capitalize .ProtoName }}_{{ capitalize .Name }}
+        {{ if gt (len .Output) 0 }}respbody httpresponse_{{ capitalize .ProtoName }}_{{ capitalize .Name }}{{ end }}
     )
 
     {{- if gt (len .Input) 0 }}
