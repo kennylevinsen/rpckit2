@@ -1,0 +1,18 @@
+// The {{ capitalize .ProtoName }}Methods type defines a server that can
+// process requests from the {{ .ProtoName }} protocol.
+type {{ capitalize .ProtoName }}Methods interface {
+    {{- range .Methods }}
+    // {{ capitalize .Description }}
+    {{ capitalize .Name }}(
+    ctx context.Context,
+    {{- range .Input }}
+        req{{ capitalize .Name }} {{ .T.GoType }},
+    {{- end }}
+    ) (
+    {{- range .Output }}
+        resp{{ capitalize .Name }} {{ .T.GoType }},
+    {{- end }}
+        err error,
+    )
+    {{- end }}
+}

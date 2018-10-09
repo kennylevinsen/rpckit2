@@ -1,0 +1,7 @@
+package {{ .PackageName }}
+
+import "context"
+
+{{ range .Protocols }}
+{{ template "go/server_method.go.tmpl" dict "ProtoName" .Name "ProtoID" .ID "Methods" .Methods }}
+{{ end }}

@@ -30,6 +30,9 @@ var template_deps = []string{
 	"go-http/client_method.go.tmpl",
 	"go-http/server_method.go.tmpl",
 	"go-http/rpckit.go.tmpl",
+
+	"go/server_method.go.tmpl",
+	"go/rpckit.go.tmpl",
 }
 
 type GoGenerator struct {
@@ -98,7 +101,7 @@ func (g GoGenerator) Generate(p string) error {
 		})
 	}
 
-	var pbbuf, httpbuf bytes.Buffer
+	var pbbuf, httpbuf, generalbuf bytes.Buffer
 	if err := tmpl.ExecuteTemplate(&pbbuf, "go-pb/rpckit.go.tmpl", ctx); err != nil {
 		return fmt.Errorf("pb template execution failed: %+v\n", err)
 	}
@@ -107,14 +110,26 @@ func (g GoGenerator) Generate(p string) error {
 		return fmt.Errorf("http template execution failed: %+v\n", err)
 	}
 
-	pbfinal, err := imports.Process(p + ".pb.go", pbbuf.Bytes(), &imports.Options{FormatOnly: true})
-	if err != nil {
-		return fmt.Errorf("pb template prettification failed: %+v\n", err)
+	if err := tmpl.ExecuteTemplate(&generalbuf, "go/rpckit.go.tmpl", ctx); err != nil {
+		return fmt.Errorf("http template execution failed: %+v\n", err)
 	}
 
-	httpfinal, err := imports.Process(p + ".http.go", httpbuf.Bytes(), &imports.Options{FormatOnly: true})
+	pbfinal, err := imports.Process(p + ".pb.go", pbbuf.Bytes(), &imports.Options{Comments: true, FormatOnly: true})
 	if err != nil {
-		return fmt.Errorf("pb template prettification failed: %+v\n", err)
+		fmt.Printf("pb template prettification failed: %+v\n", err)
+		pbfinal = pbbuf.Bytes()
+	}
+
+	httpfinal, err := imports.Process(p + ".http.go", httpbuf.Bytes(), &imports.Options{Comments: true, FormatOnly: true})
+	if err != nil {
+		fmt.Printf("http template prettification failed: %+v\n", err)
+		httpfinal = httpbuf.Bytes()
+	}
+
+	generalfinal, err := imports.Process(p + ".go", generalbuf.Bytes(), &imports.Options{Comments: true, FormatOnly: true})
+	if err != nil {
+		fmt.Printf("general template prettification failed: %+v\n", err)
+		httpfinal = httpbuf.Bytes()
 	}
 
 	if err := ioutil.WriteFile(p+".pb.go", pbfinal, 0644); err != nil {
@@ -122,6 +137,10 @@ func (g GoGenerator) Generate(p string) error {
 	}
 
 	if err := ioutil.WriteFile(p+".http.go", httpfinal, 0644); err != nil {
+		return fmt.Errorf("file write failed: %+v\n", err)
+	}
+
+	if err := ioutil.WriteFile(p+".go", generalfinal, 0644); err != nil {
 		return fmt.Errorf("file write failed: %+v\n", err)
 	}
 

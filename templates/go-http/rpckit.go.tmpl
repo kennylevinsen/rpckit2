@@ -4,8 +4,9 @@
 {{- $protoID := .ID -}}
 {{ template "go-http/client_definition.go.tmpl" dict "ProtoName" $protoName "ProtoID" $protoID}}
 {{ range .Methods }}
-{{ template "go-http/serialization.go.tmpl" dict "Prefix" "httprequest" "Name" .Name "Fields" .Input "ProtoName" $protoName }}
-{{ template "go-http/serialization.go.tmpl" dict "Prefix" "httpresponse" "Name" .Name "Fields" .Output "ProtoName" $protoName }}
+{{ template "go-http/serialization.go.tmpl" dict "Prefix" "httpReq" "Name" .Name "Fields" .Input "ProtoName" $protoName }}
+{{ template "go-http/serialization.go.tmpl" dict "Prefix" "httpResp" "Name" .Name "Fields" .Output "ProtoName" $protoName }}
 {{ template "go-http/client_method.go.tmpl" dict "ProtoName" $protoName "Name" .Name "Input" .Input "Output" .Output }}
 {{ end }}
+{{ template "go-http/server_method.go.tmpl" dict "ProtoName" $protoName "Methods" .Methods }}
 {{ end }}

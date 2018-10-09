@@ -1,34 +1,15 @@
-type {{ capitalize .ProtoName }}Methods interface {
-    {{- range .Methods }}
-    {{ capitalize .Name }}(
-    ctx context.Context,
-    {{- range .Input }}
-        _{{ .Name }} {{ .T.GoType }},
-    {{- end }}
-    ) (
-    {{- range .Output }}
-        _{{ .Name }} {{ .T.GoType }},
-    {{- end }}
-        err error,
-    )
-    {{- end }}
+func HTTP{{ capitalize .ProtoName }}Handler(methods {{ capitalize .ProtoName }}Methods) HTTPHandler {
+    return &httpCallHandlerFor{{ capitalize .ProtoName }}{methods: methods}
 }
 
-func {{ capitalize .ProtoName }}Handler(methods {{ capitalize .ProtoName }}Methods) *httpServer {
-    return &httpServer{
-        ProtocolID: {{ .ProtoID }},
-        Handler: &callHandlerFor{{ capitalize .ProtoName }}{methods: methods},
-    }
-}
-
-type callHandlerFor{{ capitalize .ProtoName }} struct {
+type httpCallHandlerFor{{ capitalize .ProtoName }} struct {
     methods {{ capitalize .ProtoName }}Methods
 }
 
-func (c *callHandlerFor{{ capitalize .ProtoName }}) registerToMux(m *http.ServeMux) {
+func (c *httpCallHandlerFor{{ capitalize .ProtoName }}) RegisterToMux(m *http.ServeMux) {
     {{- $protoName := .ProtoName }}
     {{- range .Methods }}
-    m.HandleFunc("/{{ $protoName }}/{{ .Name }}", func(w http.ResponseWriter, r *http.Request) {
+    m.HandleFunc("/{{ $protoName }}/{{ lower .Name }}", func(w http.ResponseWriter, r *http.Request) {
         {{ if gt (len .Input) 0 }}
         if r.Method != "POST" {
             w.WriteHeader(http.StatusMethodNotAllowed)
@@ -37,14 +18,13 @@ func (c *callHandlerFor{{ capitalize .ProtoName }}) registerToMux(m *http.ServeM
         {{ end }}
 
         var (
+            err error
             b []byte
-            req *http.Request
-            resp *http.Response
-            {{ if gt (len .Input) 0 }}reqbody httprequest_{{ capitalize .ProtoName }}_{{ capitalize .Name }}{{ end }}
-            respbody httpresponse_{{ capitalize .ProtoName }}_{{ capitalize .Name }}
+            {{ if gt (len .Input) 0 }}reqbody httpReqProto{{ capitalize $protoName }}Method{{ capitalize .Name }}{{ end }}
+            {{ if gt (len .Output) 0 }}respbody httpRespProto{{ capitalize $protoName }}Method{{ capitalize .Name }}{{ end }}
         )
 
-        b, err = ioutil.ReadAll(resp.Body)
+        b, err = ioutil.ReadAll(r.Body)
         if err != nil {
             w.WriteHeader(http.StatusBadRequest)
             return
@@ -62,40 +42,32 @@ func (c *callHandlerFor{{ capitalize .ProtoName }}) registerToMux(m *http.ServeM
         }
         {{ end }}
 
-        {{ range .Output }}{{ .Name }}, {{ end }}err := c.methods.{{ capitalize .Name }}(
-            ctx,
+        {{- $methodName := .Name }}
+        {{ range .Output }}respbody.HttpResp{{ capitalize .Name }}, {{ end }}err = c.methods.{{ capitalize .Name }}(
+            r.Context(),
             {{- range .Input }}
-            args._{{ .Name }},
+            reqbody.HttpReq{{ capitalize .Name }},
             {{- end }}
         )
         if err != nil {
-            if rpcMsg
-        }
-
-        if req, err = c.NewRequest({{ if gt (len .Input) 0 }}"POST"{{ else }}"GET"{{ end }}, {{ lower .Name | doublequote }}, bytes.NewReader(b)); err != nil {
+            w.WriteHeader(http.StatusInternalServerError)
+            // TODO: Add error!
             return
         }
 
-        req = req.WithContext(ctx)
-        if resp, err = c.client.client.Do(req); err != nil {
+        {{- if gt (len .Output) 0 }}
+        if b, err = json.Marshal(&respbody); err != nil {
+            w.WriteHeader(http.StatusInternalServerError)
+            // TODO: Add error!
             return
         }
+        {{ else }}
+        b = nil
+        {{ end }}
 
-        b, err = ioutil.ReadAll(resp.Body)
-        resp.Body.Close()
-        if err != nil {
-            return
-        }
-
-        if err = json.Unmarshal(b, &respbody); err != nil {
-            return
-        }
-
-        {{- range .Output }}
-        out_{{ .Name }} = respbody._{{ .Name }}
-        {{- end }}
-        return
-
+        w.Header().Set("Content-Type", "application/json")
+        w.WriteHeader(http.StatusOK)
+        w.Write(b)
     })
     {{- end }}
 }

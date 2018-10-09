@@ -1,5 +1,6 @@
-type {{ .Prefix }}_{{ capitalize .ProtoName }}_{{ capitalize .Name }} struct {
+{{- $prefix := .Prefix }}
+type {{ .Prefix }}Proto{{ capitalize .ProtoName }}Method{{ capitalize .Name }} struct {
 {{- range .Fields }}
-    _{{ .Name }} {{ .T.GoType }} `json:{{ doublequote .Name }}`
+    {{ capitalize $prefix }}{{ capitalize .Name }} {{ .T.GoType }} `json:{{ doublequote .Name }}`
 {{- end }}
 }

@@ -1,38 +1,35 @@
-type {{ .Prefix }}_{{ capitalize .ProtoName }}_{{ capitalize .Name }} struct {
+{{- $prefix := .Prefix }}
+type {{ .Prefix }}Proto{{ capitalize .ProtoName }}Method{{ capitalize .Name }} struct {
 {{- range .Fields }}
-    _{{ .Name }} {{ .T.GoType }}
+    {{ $prefix }}{{ capitalize .Name }} {{ .T.GoType }}
 {{- end }}
 }
 
-func (s *{{ .Prefix }}_{{ capitalize .ProtoName }}_{{ capitalize .Name }}) RPCID() uint64 {
-    return uint64(_{{ capitalize .ProtoName }}Method_{{ capitalize .Name }})
+func (s *{{ .Prefix }}Proto{{ capitalize .ProtoName }}Method{{ capitalize .Name }}) RPCID() uint64 {
+    return uint64(proto{{ capitalize .ProtoName }}Method{{ capitalize .Name }})
 }
 
-func (s *{{ .Prefix }}_{{ capitalize .ProtoName }}_{{ capitalize .Name }}) RPCEncode(m *message) error {
+func (s *{{ .Prefix }}Proto{{ capitalize .ProtoName }}Method{{ capitalize .Name }}) RPCEncode(m *message) error {
     {{- range .Fields }}
     {{- if .T.IsArray }}
-    {
-        for _, v := range s._{{ .Name }} {
-            m.WritePB{{ .T.InnerValue.String }}({{ .ID }}, v)
-        }
+    for _, v := range s.{{ $prefix }}{{ capitalize .Name }} {
+        m.WritePB{{ .T.InnerValue.String }}({{ .ID }}, v)
     }
     {{- else if .T.IsMap }}
-    {
-        for k, v := range s._{{ .Name }} {
-            em := newEmbeddedMessage(messageCapacity)
-            em.WritePB{{ .T.InnerKey.String }}(1, k)
-            em.WritePB{{ .T.InnerValue.String }}(2, v)
-            m.WritePBMessage({{ .ID }}, em)
-        }
+    for k, v := range s.{{ $prefix }}{{ capitalize .Name }} {
+        em := newEmbeddedMessage(messageCapacity)
+        em.WritePB{{ .T.InnerKey.String }}(1, k)
+        em.WritePB{{ .T.InnerValue.String }}(2, v)
+        m.WritePBMessage({{ .ID }}, em)
     }
     {{- else }}
-    m.WritePB{{ .T.String }}({{ .ID }}, s._{{ .Name }})
+    m.WritePB{{ .T.String }}({{ .ID }}, s.{{ $prefix }}{{ capitalize .Name }})
     {{- end }}
     {{- end }}
     return nil
 }
 
-func (s *{{ .Prefix }}_{{ capitalize .ProtoName }}_{{ capitalize .Name }}) RPCDecode(m *message) error {
+func (s *{{ .Prefix }}Proto{{ capitalize .ProtoName }}Method{{ capitalize .Name }}) RPCDecode(m *message) error {
     var (
         err error
         tag uint64
@@ -48,11 +45,11 @@ func (s *{{ .Prefix }}_{{ capitalize .ProtoName }}_{{ capitalize .Name }}) RPCDe
             {{- end}}
             var v {{ .T.InnerValue.GoType }}
             v, err = m.Read{{ .T.InnerValue.String }}()
-            s._{{ .Name }} = append(s._{{ .Name }}, v)
+            s.{{ $prefix }}{{ capitalize .Name }} = append(s.{{ $prefix }}{{ capitalize .Name }}, v)
             {{- else if .T.IsMap }}
             var em *message
-            if s._{{ .Name }} == nil {
-                s._{{ .Name }} = make({{ .T.GoType}})
+            if s.{{ $prefix }}{{ capitalize .Name }} == nil {
+                s.{{ $prefix }}{{ capitalize .Name }} = make({{ .T.GoType}})
             }
 
             var k {{ .T.InnerKey.GoType }}
@@ -76,7 +73,7 @@ func (s *{{ .Prefix }}_{{ capitalize .ProtoName }}_{{ capitalize .Name }}) RPCDe
             switch tag {
             case uint64(2 << 3) | uint64({{ template "go-pb/property_to_wiretype.go.tmpl" .T.InnerValue.String}}):
                 v, err = em.Read{{ .T.InnerValue.String }}()
-                s._{{ .Name }}[k] = v
+                s.{{ $prefix }}{{ capitalize .Name }}[k] = v
             default:
                 if err != io.EOF {
                     err = m.ReadPBSkip(tag)
@@ -88,7 +85,7 @@ func (s *{{ .Prefix }}_{{ capitalize .ProtoName }}_{{ capitalize .Name }}) RPCDe
                 break
             }
             {{- else }}
-            s._{{ .Name }}, err = m.Read{{ .T.String }}()
+            s.{{ $prefix }}{{ capitalize .Name }}, err = m.Read{{ .T.String }}()
             {{- end }}
         {{- end }}
         default:

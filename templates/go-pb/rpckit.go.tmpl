@@ -4,11 +4,11 @@
 {{- $protoID := .ID -}}
 {{ template "go-pb/client_definition.go.tmpl" dict "ProtoName" $protoName "ProtoID" $protoID}}
 {{ range .Methods }}
-const _{{ capitalize $protoName }}Method_{{ capitalize .Name }} {{ capitalize $protoName }}Method = {{ .ID }}
+const proto{{ capitalize $protoName }}Method{{ capitalize .Name }} proto{{ capitalize $protoName }}Method = {{ .ID }}
 
-{{ template "go-pb/serialization.go.tmpl" dict "Prefix" "rpcrequest" "Name" .Name "Fields" .Input "ProtoName" $protoName "ProtoID" $protoID }}
-{{ template "go-pb/serialization.go.tmpl" dict "Prefix" "rpcresponse" "Name" .Name "Fields" .Output "ProtoName" $protoName "ProtoID" $protoID }}
-{{ template "go-pb/client_method.go.tmpl" dict "ProtoName" $protoName "ProtoID" $protoID "Name" .Name "Input" .Input "Output" .Output }}
+{{ template "go-pb/serialization.go.tmpl" dict "Prefix" "rpcReq" "Name" .Name "Fields" .Input "ProtoName" $protoName "ProtoID" $protoID }}
+{{ template "go-pb/serialization.go.tmpl" dict "Prefix" "rpcResp" "Name" .Name "Fields" .Output "ProtoName" $protoName "ProtoID" $protoID }}
+{{ template "go-pb/client_method.go.tmpl" dict "ProtoName" $protoName "ProtoID" $protoID "Name" .Name "Input" .Input "Output" .Output "Description" .Description }}
 {{ end }}
 {{ template "go-pb/server_method.go.tmpl" dict "ProtoName" $protoName "ProtoID" $protoID "Methods" .Methods }}
 {{ end }}

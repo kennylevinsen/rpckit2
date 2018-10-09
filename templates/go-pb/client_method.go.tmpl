@@ -1,18 +1,19 @@
+// {{ capitalize .Description }}
 func (c *RPC{{ capitalize .ProtoName }}Client) {{ capitalize .Name }}(
     ctx context.Context,
     {{- range .Input }}
-        in_{{ .Name }} {{ .T.GoType }},
+        req{{ capitalize .Name }} {{ .T.GoType }},
     {{- end }}
     ) (
     {{- range .Output }}
-        out_{{ .Name }} {{ .T.GoType }},
+        resp{{ capitalize .Name }} {{ .T.GoType }},
     {{- end }}
         err RPCError,
     ) {
 
-    resultTypeID, msg, err := c.c.call(ctx, true, {{ .ProtoID }}, uint64(_{{ capitalize .ProtoName }}Method_{{ capitalize .Name }}), &rpcrequest_{{ capitalize .ProtoName }}_{{ capitalize .Name }}{
+    resultTypeID, msg, err := c.c.call(ctx, true, {{ .ProtoID }}, uint64(proto{{ capitalize .ProtoName }}Method{{ capitalize .Name }}), &rpcReqProto{{ capitalize .ProtoName }}Method{{ capitalize .Name }}{
         {{- range .Input }}
-        _{{ .Name }}: in_{{ .Name }},
+        rpcReq{{ capitalize .Name }}: req{{ capitalize .Name }},
         {{- end }}
     })
 
@@ -26,20 +27,20 @@ func (c *RPC{{ capitalize .ProtoName }}Client) {{ capitalize .Name }}(
     }
 
     switch resultTypeID {
-    case uint64(_{{ capitalize .ProtoName }}Method_{{ capitalize .Name }}):
-        var r rpcresponse_{{ capitalize .ProtoName }}_{{ capitalize .Name }}
+    case uint64(proto{{ capitalize .ProtoName }}Method{{ capitalize .Name }}):
+        var r rpcRespProto{{ capitalize .ProtoName }}Method{{ capitalize .Name }}
         if decodeErr := r.RPCDecode(msg); decodeErr != nil {
             err = &rpcError{id: GenericError, error: fmt.Sprintf("could not decode result: %v", decodeErr)}
             return
         }
         {{- range .Output }}
-        out_{{ .Name }} = r._{{ .Name }}
+        resp{{ capitalize .Name }} = r.rpcResp{{ capitalize .Name }}
         {{- end}}
     default:
         var isPrivate bool
         err, isPrivate = c.c.handlePrivateResponse(resultTypeID, msg)
         if !isPrivate {
-            err = &rpcError{id: ProtocolError, error: fmt.Sprintf("unexpected return type for call type %d: %d", uint64(_{{ capitalize .ProtoName }}Method_{{ capitalize .Name }}), resultTypeID)}
+            err = &rpcError{id: ProtocolError, error: fmt.Sprintf("unexpected return type for call type %d: %d", uint64(proto{{ capitalize .ProtoName }}Method{{ capitalize .Name }}), resultTypeID)}
         }
     }
 

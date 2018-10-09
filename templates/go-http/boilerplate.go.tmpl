@@ -38,3 +38,7 @@ func (c *HTTPClient) NewRequest(method, url string, body io.Reader) (*http.Reque
 func (c *HTTPClient) Do(req *http.Request) (*http.Response, error) {
     return c.client.Do(req)
 }
+
+type HTTPHandler interface {
+    RegisterToMux(*http.ServeMux)
+}
