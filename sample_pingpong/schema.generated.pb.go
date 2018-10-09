@@ -935,7 +935,9 @@ func (c *RPCConnection) end(conn *connection, err RPCError) {
 		if conn.conn != nil {
 			conn.conn.Close()
 		}
-		c.onDisconnect(c, err)
+		if c.onDisconnect != nil {
+			c.onDisconnect(c, err)
+		}
 	}
 }
 
