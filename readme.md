@@ -16,7 +16,8 @@ TODO:
 	[x] Generating code
 	[x] Errors handling (both in return values, and in unexpected cases)
 
-	[ ] ability to stay connected even in face of disconnects.
+	[x] ability to stay connected even in face of disconnects.
+
 	[ ] Meta code generation (for inspecting properties and summary and such) (if not, just make the schema avaliable)
 	[ ] http interface with support for json read/write
 	[ ] swift client generation
