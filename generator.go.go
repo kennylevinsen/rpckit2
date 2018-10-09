@@ -101,6 +101,8 @@ func (g GoGenerator) Generate(p string) error {
 		})
 	}
 
+    // TODO: Clean up the copy-pasted code below.
+
 	var pbbuf, httpbuf, generalbuf bytes.Buffer
 	if err := tmpl.ExecuteTemplate(&pbbuf, "go-pb/rpckit.go.tmpl", ctx); err != nil {
 		return fmt.Errorf("pb template execution failed: %+v\n", err)
