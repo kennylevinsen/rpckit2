@@ -39,6 +39,6 @@ func (c *HTTPClient) Do(req *http.Request) (*http.Response, error) {
     return c.client.Do(req)
 }
 
-type HTTPHandler interface {
+type HTTPServer interface {
     RegisterToMux(*http.ServeMux)
 }

@@ -1,16 +1,16 @@
-// RPC{{ capitalize .ProtoName }}Handler creates a new RPCServer for the {{ .ProtoName }} protocol.
-func RPC{{ capitalize .ProtoName }}Handler(methods {{ capitalize .ProtoName }}Methods) RPCServer {
+// RPC{{ capitalize .ProtoName }}Server creates a new RPCServer for the {{ .ProtoName }} protocol.
+func RPC{{ capitalize .ProtoName }}Server(methods {{ capitalize .ProtoName }}Methods) RPCServer {
     return &rpcServer{
         ProtocolID: {{ .ProtoID }},
-        Handler: &rpcCallHandlerFor{{ capitalize .ProtoName }}{methods: methods},
+        Server: &rpcCallServerFor{{ capitalize .ProtoName }}{methods: methods},
     }
 }
 
-type rpcCallHandlerFor{{ capitalize .ProtoName }} struct {
+type rpcCallServerFor{{ capitalize .ProtoName }} struct {
     methods {{ capitalize .ProtoName }}Methods
 }
 
-func (s *rpcCallHandlerFor{{ capitalize .ProtoName }}) rpcCall(ctx context.Context, methodID uint64, m *message) (resp rpcMessage) {
+func (s *rpcCallServerFor{{ capitalize .ProtoName }}) rpcCall(ctx context.Context, methodID uint64, m *message) (resp rpcMessage) {
     defer func() {
         if r := recover(); r != nil {
             resp = &rpcError{id: ApplicationError, error: "unknown error occurred"}

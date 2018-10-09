@@ -44,7 +44,7 @@ type rpcMessage interface {
 	RPCID() uint64
 }
 
-type rpcCallHandler interface {
+type rpcCallServer interface {
 	rpcCall(ctx context.Context, methodID uint64, m *message) rpcMessage
 }
 
@@ -71,29 +71,97 @@ func contextToError(e error) RPCError {
 
 // ************************
 
+// RPCErrorID specifies the error category.
+type RPCErrorID uint64
+
+const (
+	GenericError     RPCErrorID = 0
+	TimeoutError     RPCErrorID = 1
+	ProtocolError    RPCErrorID = 2
+	ApplicationError RPCErrorID = 3
+	ConnectionError  RPCErrorID = 4
+)
+
+// RPCError represent RPC errors.
+type RPCError interface {
+	error
+	ID() RPCErrorID
+}
+
+type rpcError struct {
+	id    RPCErrorID
+	error string
+}
+
+func (e *rpcError) ID() RPCErrorID {
+	return e.id
+}
+
+func (e *rpcError) Error() string {
+	return e.error
+}
+
+func (e *rpcError) RPCID() uint64 {
+	return privateTypeRPCError
+}
+
+func (e *rpcError) RPCEncode(m *message) error {
+	m.WritePBInt(1, int64(e.id))
+	m.WritePBString(2, e.error)
+	return nil
+}
+
+func (e *rpcError) RPCDecode(m *message) error {
+	var (
+		err error
+		tag uint64
+	)
+	for err == nil {
+		tag, err = m.ReadVarint()
+		switch tag {
+		case uint64(1<<3) | uint64(wireTypeVarint):
+			var id int64
+			id, err = m.ReadInt()
+			e.id = RPCErrorID(id)
+		case uint64(2<<3) | uint64(wireTypeLengthDelimited):
+			e.error, err = m.ReadString()
+		default:
+			if err != io.EOF {
+				err = m.ReadPBSkip(tag)
+			}
+		}
+	}
+	if err == io.EOF {
+		return nil
+	}
+	return err
+}
+
+// ************************
+
 // RPCServer represents a protocol handling server implementation.
 type RPCServer interface {
 	protocolID() uint64
-	handler() rpcCallHandler
+	handler() rpcCallServer
 }
 
 type rpcServer struct {
 	ProtocolID uint64
-	Handler    rpcCallHandler
+	Server     rpcCallServer
 }
 
 func (r *rpcServer) protocolID() uint64 {
 	return r.ProtocolID
 }
 
-func (r *rpcServer) handler() rpcCallHandler {
-	return r.Handler
+func (r *rpcServer) handler() rpcCallServer {
+	return r.Server
 }
 
-func newRPCServer(protocolID uint64, handler rpcCallHandler) *rpcServer {
+func newRPCServer(protocolID uint64, handler rpcCallServer) *rpcServer {
 	return &rpcServer{
 		ProtocolID: protocolID,
-		Handler:    handler,
+		Server:     handler,
 	}
 }
 
@@ -444,74 +512,6 @@ func (m *message) WritePBMessage(fieldNumber uint64, em *message) {
 
 // ************************
 
-// RPCErrorID specifies the error category.
-type RPCErrorID uint64
-
-const (
-	GenericError     RPCErrorID = 0
-	TimeoutError     RPCErrorID = 1
-	ProtocolError    RPCErrorID = 2
-	ApplicationError RPCErrorID = 3
-	ConnectionError  RPCErrorID = 4
-)
-
-// RPCError represent RPC errors.
-type RPCError interface {
-	error
-	ID() RPCErrorID
-}
-
-type rpcError struct {
-	id    RPCErrorID
-	error string
-}
-
-func (e *rpcError) ID() RPCErrorID {
-	return e.id
-}
-
-func (e *rpcError) Error() string {
-	return e.error
-}
-
-func (e *rpcError) RPCID() uint64 {
-	return privateTypeRPCError
-}
-
-func (e *rpcError) RPCEncode(m *message) error {
-	m.WritePBInt(1, int64(e.id))
-	m.WritePBString(2, e.error)
-	return nil
-}
-
-func (e *rpcError) RPCDecode(m *message) error {
-	var (
-		err error
-		tag uint64
-	)
-	for err == nil {
-		tag, err = m.ReadVarint()
-		switch tag {
-		case uint64(1<<3) | uint64(wireTypeVarint):
-			var id int64
-			id, err = m.ReadInt()
-			e.id = RPCErrorID(id)
-		case uint64(2<<3) | uint64(wireTypeLengthDelimited):
-			e.error, err = m.ReadString()
-		default:
-			if err != io.EOF {
-				err = m.ReadPBSkip(tag)
-			}
-		}
-	}
-	if err == io.EOF {
-		return nil
-	}
-	return err
-}
-
-// ************************
-
 // connection provides the network connection context for RPCConnection.
 type connection struct {
 	// ready signals whether connection setup is completed. Users should
@@ -602,11 +602,11 @@ func (c *connection) findCallSlot(callID uint64) chan *message {
 
 // RPCConnection is a low-level protobuf-based RPC session.
 type RPCConnection struct {
-	done           chan struct{}
-	serverHandlers map[uint64]rpcCallHandler
-	dialer         func() (net.Conn, error)
-	onConnect      func(c *RPCConnection) error
-	onDisconnect   func(c *RPCConnection, err RPCError)
+	done         chan struct{}
+	servers      map[uint64]rpcCallServer
+	dialer       func() (net.Conn, error)
+	onConnect    func(c *RPCConnection) error
+	onDisconnect func(c *RPCConnection, err RPCError)
 
 	conn *connection
 }
@@ -655,16 +655,16 @@ type RPCOptions struct {
 // NewRPCConnection creates a new RPCConnection.
 func NewRPCConnection(options *RPCOptions) *RPCConnection {
 	c := &RPCConnection{
-		done:           make(chan struct{}),
-		dialer:         options.Dialer,
-		serverHandlers: make(map[uint64]rpcCallHandler),
-		onDisconnect:   options.DisconnectHook,
-		onConnect:      options.ConnectHook,
-		conn:           newConnection(),
+		done:         make(chan struct{}),
+		dialer:       options.Dialer,
+		servers:      make(map[uint64]rpcCallServer),
+		onDisconnect: options.DisconnectHook,
+		onConnect:    options.ConnectHook,
+		conn:         newConnection(),
 	}
 
 	for _, h := range options.Servers {
-		c.serverHandlers[h.protocolID()] = h.handler()
+		c.servers[h.protocolID()] = h.handler()
 	}
 
 	c.refreshInnerConn()
@@ -864,7 +864,7 @@ func (c *RPCConnection) gotMessage(ctx context.Context, conn *connection, msg *m
 		if err != nil {
 			return &rpcError{id: ProtocolError, error: "could not read protocolID from method call"}
 		}
-		handler, found := c.serverHandlers[protocolID]
+		handler, found := c.servers[protocolID]
 		if !found {
 			err := &rpcError{id: ProtocolError, error: fmt.Sprintf("unknown protocol: %d", protocolID)}
 
@@ -1414,19 +1414,19 @@ func (c *RPCPingpongClient) TestMethod(ctx context.Context, reqString string, re
 	return
 }
 
-// RPCPingpongHandler creates a new RPCServer for the pingpong protocol.
-func RPCPingpongHandler(methods PingpongMethods) RPCServer {
+// RPCPingpongServer creates a new RPCServer for the pingpong protocol.
+func RPCPingpongServer(methods PingpongMethods) RPCServer {
 	return &rpcServer{
 		ProtocolID: 1,
-		Handler:    &rpcCallHandlerForPingpong{methods: methods},
+		Server:     &rpcCallServerForPingpong{methods: methods},
 	}
 }
 
-type rpcCallHandlerForPingpong struct {
+type rpcCallServerForPingpong struct {
 	methods PingpongMethods
 }
 
-func (s *rpcCallHandlerForPingpong) rpcCall(ctx context.Context, methodID uint64, m *message) (resp rpcMessage) {
+func (s *rpcCallServerForPingpong) rpcCall(ctx context.Context, methodID uint64, m *message) (resp rpcMessage) {
 	defer func() {
 		if r := recover(); r != nil {
 			resp = &rpcError{id: ApplicationError, error: "unknown error occurred"}
@@ -1757,19 +1757,19 @@ func (c *RPCEchoClient) Ping(ctx context.Context) (respOutput string, err RPCErr
 	return
 }
 
-// RPCEchoHandler creates a new RPCServer for the echo protocol.
-func RPCEchoHandler(methods EchoMethods) RPCServer {
+// RPCEchoServer creates a new RPCServer for the echo protocol.
+func RPCEchoServer(methods EchoMethods) RPCServer {
 	return &rpcServer{
 		ProtocolID: 2,
-		Handler:    &rpcCallHandlerForEcho{methods: methods},
+		Server:     &rpcCallServerForEcho{methods: methods},
 	}
 }
 
-type rpcCallHandlerForEcho struct {
+type rpcCallServerForEcho struct {
 	methods EchoMethods
 }
 
-func (s *rpcCallHandlerForEcho) rpcCall(ctx context.Context, methodID uint64, m *message) (resp rpcMessage) {
+func (s *rpcCallServerForEcho) rpcCall(ctx context.Context, methodID uint64, m *message) (resp rpcMessage) {
 	defer func() {
 		if r := recover(); r != nil {
 			resp = &rpcError{id: ApplicationError, error: "unknown error occurred"}

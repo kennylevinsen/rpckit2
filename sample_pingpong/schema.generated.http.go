@@ -39,7 +39,7 @@ func (c *HTTPClient) Do(req *http.Request) (*http.Response, error) {
 	return c.client.Do(req)
 }
 
-type HTTPHandler interface {
+type HTTPServer interface {
 	RegisterToMux(*http.ServeMux)
 }
 
@@ -209,15 +209,15 @@ func (c *HTTPPingpongClient) TestMethod(ctx context.Context, reqString string, r
 	return
 }
 
-func HTTPPingpongHandler(methods PingpongMethods) HTTPHandler {
-	return &httpCallHandlerForPingpong{methods: methods}
+func HTTPPingpongServer(methods PingpongMethods) HTTPServer {
+	return &httpCallServerForPingpong{methods: methods}
 }
 
-type httpCallHandlerForPingpong struct {
+type httpCallServerForPingpong struct {
 	methods PingpongMethods
 }
 
-func (c *httpCallHandlerForPingpong) RegisterToMux(m *http.ServeMux) {
+func (c *httpCallServerForPingpong) RegisterToMux(m *http.ServeMux) {
 	m.HandleFunc("/pingpong/authenticate", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
 			w.WriteHeader(http.StatusMethodNotAllowed)
@@ -452,15 +452,15 @@ func (c *HTTPEchoClient) Ping(ctx context.Context) (respOutput string, err error
 	return
 }
 
-func HTTPEchoHandler(methods EchoMethods) HTTPHandler {
-	return &httpCallHandlerForEcho{methods: methods}
+func HTTPEchoServer(methods EchoMethods) HTTPServer {
+	return &httpCallServerForEcho{methods: methods}
 }
 
-type httpCallHandlerForEcho struct {
+type httpCallServerForEcho struct {
 	methods EchoMethods
 }
 
-func (c *httpCallHandlerForEcho) RegisterToMux(m *http.ServeMux) {
+func (c *httpCallServerForEcho) RegisterToMux(m *http.ServeMux) {
 	m.HandleFunc("/echo/echo", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
 			w.WriteHeader(http.StatusMethodNotAllowed)

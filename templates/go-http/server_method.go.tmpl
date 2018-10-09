@@ -1,12 +1,12 @@
-func HTTP{{ capitalize .ProtoName }}Handler(methods {{ capitalize .ProtoName }}Methods) HTTPHandler {
-    return &httpCallHandlerFor{{ capitalize .ProtoName }}{methods: methods}
+func HTTP{{ capitalize .ProtoName }}Server(methods {{ capitalize .ProtoName }}Methods) HTTPServer {
+    return &httpCallServerFor{{ capitalize .ProtoName }}{methods: methods}
 }
 
-type httpCallHandlerFor{{ capitalize .ProtoName }} struct {
+type httpCallServerFor{{ capitalize .ProtoName }} struct {
     methods {{ capitalize .ProtoName }}Methods
 }
 
-func (c *httpCallHandlerFor{{ capitalize .ProtoName }}) RegisterToMux(m *http.ServeMux) {
+func (c *httpCallServerFor{{ capitalize .ProtoName }}) RegisterToMux(m *http.ServeMux) {
     {{- $protoName := .ProtoName }}
     {{- range .Methods }}
     m.HandleFunc("/{{ $protoName }}/{{ lower .Name }}", func(w http.ResponseWriter, r *http.Request) {

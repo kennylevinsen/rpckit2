@@ -23,8 +23,8 @@ func testRPC() {
 			NewRPCConnection(&RPCOptions{
 				Conn: conn,
 				Servers: []RPCServer{
-					RPCPingpongHandler(&server{}),
-					RPCEchoHandler(&echoServer{}),
+					RPCPingpongServer(&server{}),
+					RPCEchoServer(&echoServer{}),
 				},
 			})
 		}
@@ -90,11 +90,8 @@ func testHTTP() {
 	go func() {
 		mux := http.NewServeMux()
 
-		h1 := HTTPEchoHandler(&echoServer{})
-		h2 := HTTPPingpongHandler(&server{})
-
-		h1.RegisterToMux(mux)
-		h2.RegisterToMux(mux)
+		HTTPEchoServer(&echoServer{}).RegisterToMux(mux)
+		HTTPPingpongServer(&server{}).RegisterToMux(mux)
 
 		http.Serve(l2, mux)
 	}()
