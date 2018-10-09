@@ -7,13 +7,9 @@ import (
 	"net/http"
 )
 
-func main() {
+func testRPC() {
 	// listen for network connections
 	l1, err := net.Listen("tcp", ":9999")
-	if err != nil {
-		panic(err)
-	}
-	l2, err := net.Listen("tcp", ":9998")
 	if err != nil {
 		panic(err)
 	}
@@ -30,27 +26,8 @@ func main() {
 					RPCPingpongHandler(&server{}),
 					RPCEchoHandler(&echoServer{}),
 				},
-				ConnectHook: func(c *RPCConnection) error {
-					fmt.Printf("Server: user connected\n")
-					return nil
-				},
-				DisconnectHook: func(c *RPCConnection, err RPCError) {
-					fmt.Printf("Server: user disconnected\n")
-				},
 			})
 		}
-	}()
-
-	go func() {
-		mux := http.NewServeMux()
-
-		h1 := HTTPEchoHandler(&echoServer{})
-		h2 := HTTPPingpongHandler(&server{})
-
-		h1.RegisterToMux(mux)
-		h2.RegisterToMux(mux)
-
-		http.Serve(l2, mux)
 	}()
 
 	ctx := context.Background()
@@ -60,15 +37,12 @@ func main() {
 			return net.Dial("tcp", "127.0.0.1:9999")
 		},
 		ConnectHook: func(c *RPCConnection) error {
-			fmt.Printf("Client: connected to server\n")
-
 			serverClient := NewRPCPingpongClient(c)
 			echoClient := NewRPCEchoClient(c)
 
 			success, err := serverClient.Authenticate(ctx, "batman", "robin")
 			if err != nil {
 				panic(fmt.Sprintf("bad return values: %v, %v", success, err))
-				return err
 			}
 			if success == false {
 				panic(fmt.Sprintf("bad return values: %v, %v", success, err))
@@ -98,12 +72,80 @@ func main() {
 				panic(err)
 			}
 
+			c.Close()
+
+			fmt.Printf("RPC test complete\n")
 			return nil
 		},
-		DisconnectHook: func(c *RPCConnection, err RPCError) {
-			fmt.Printf("Client: disconnected from server\n")
-		},
-	}).Wait()
+	})
+
+}
+
+func testHTTP() {
+	l2, err := net.Listen("tcp", ":9998")
+	if err != nil {
+		panic(err)
+	}
+	ctx := context.Background()
+	go func() {
+		mux := http.NewServeMux()
+
+		h1 := HTTPEchoHandler(&echoServer{})
+		h2 := HTTPPingpongHandler(&server{})
+
+		h1.RegisterToMux(mux)
+		h2.RegisterToMux(mux)
+
+		http.Serve(l2, mux)
+	}()
+
+
+	hc, err := NewHTTPClient("http://localhost:9998")
+	if err != nil {
+		panic(err)
+	}
+
+	serverClient := NewHTTPPingpongClient(hc)
+	echoClient := NewHTTPEchoClient(hc)
+
+	success, err := serverClient.Authenticate(ctx, "batman", "robin")
+	if err != nil {
+		panic(fmt.Sprintf("bad return values: %v, %v", success, err))
+	}
+	if success == false {
+		panic(fmt.Sprintf("bad return values: %v, %v", success, err))
+	}
+
+	greeting, err := serverClient.PingWithReply(ctx, "Oliver")
+	if err != nil {
+		panic(err)
+	}
+	if greeting != "hello Oliver" {
+		panic("incorrect greeting")
+	}
+	greeting2, err := echoClient.Echo(ctx, "weee", []string{"Hello", ", ", "World", "!"}, map[string]int64{
+		"five": 5,
+		"two": 2,
+		"thirtysix": 36,
+	})
+	if err != nil {
+		panic(err)
+	}
+	if greeting2 != "weee" {
+		panic("incorrect greeting 2")
+	}
+
+	_, err = serverClient.TestMethod(ctx, "hello", true, 1234, 654, 3.454, 3.14)
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Printf("HTTP test complete\n")
+}
+
+func main() {
+	testHTTP()
+	testRPC()
 }
 
 type server struct {
@@ -112,7 +154,6 @@ type server struct {
 }
 
 func (s *server) Authenticate(ctx context.Context, username string, password string) (success bool, err error) {
-	fmt.Printf("WEEEE\n")
 	if username == "batman" && password == "robin" {
 		s.authenticated = true
 		return true, nil
