@@ -6,21 +6,30 @@ import (
 	"fmt"
 	"io/ioutil"
 	"path"
+	"strconv"
 	"strings"
 	"text/template"
+
+	"golang.org/x/tools/imports"
 )
 
 //go:generate go-bindata --pkg rpckit2 -o templates.go templates/...
 
 var template_deps = []string{
-	"rpckit_boilerplate.go.tmpl",
-	"rpckit_property_to_wiretype.go.tmpl",
-	"rpckit_serialization.go.tmpl",
-	"rpckit_client_definition.go.tmpl",
-	"rpckit_client_method.go.tmpl",
-	"rpckit_server_method.go.tmpl",
-	"rpckit_rpccall.go.tmpl",
-	"rpckit.go.tmpl",
+	"go-pb/boilerplate.go.tmpl",
+	"go-pb/property_to_wiretype.go.tmpl",
+	"go-pb/serialization.go.tmpl",
+	"go-pb/client_definition.go.tmpl",
+	"go-pb/client_method.go.tmpl",
+	"go-pb/server_method.go.tmpl",
+	"go-pb/rpckit.go.tmpl",
+
+	"go-http/boilerplate.go.tmpl",
+	"go-http/serialization.go.tmpl",
+	"go-http/client_definition.go.tmpl",
+	"go-http/client_method.go.tmpl",
+	"go-http/server_method.go.tmpl",
+	"go-http/rpckit.go.tmpl",
 }
 
 type GoGenerator struct {
@@ -44,7 +53,10 @@ func (g GoGenerator) Generate(p string) error {
 		"error": func(s string) error {
 			return errors.New(s)
 		},
-		"capitalize": strings.Title,
+		"capitalize":  strings.Title,
+		"upper": strings.ToTitle,
+		"lower": strings.ToLower,
+		"doublequote": strconv.Quote,
 		"dict": func(values ...interface{}) (map[string]interface{}, error) {
 			if len(values)%2 != 0 {
 				return nil, errors.New("invalid dict call")
@@ -63,7 +75,7 @@ func (g GoGenerator) Generate(p string) error {
 
 	tmpl := template.New("").Funcs(funcs)
 	for _, name := range template_deps {
-		b, err := Asset(path.Join("templates/go-pb", name))
+		b, err := Asset(path.Join("templates", name))
 		if err != nil {
 			return fmt.Errorf("template reading failed: %+v\n", err)
 		}
@@ -86,10 +98,32 @@ func (g GoGenerator) Generate(p string) error {
 		})
 	}
 
-	var buf bytes.Buffer
-	if err := tmpl.ExecuteTemplate(&buf, "rpckit", ctx); err != nil {
-		return fmt.Errorf("template execution failed: %+v\n", err)
+	var pbbuf, httpbuf bytes.Buffer
+	if err := tmpl.ExecuteTemplate(&pbbuf, "go-pb/rpckit.go.tmpl", ctx); err != nil {
+		return fmt.Errorf("pb template execution failed: %+v\n", err)
 	}
 
-	return ioutil.WriteFile(p, buf.Bytes(), 0644)
+	if err := tmpl.ExecuteTemplate(&httpbuf, "go-http/rpckit.go.tmpl", ctx); err != nil {
+		return fmt.Errorf("http template execution failed: %+v\n", err)
+	}
+
+	pbfinal, err := imports.Process(p + ".pb.go", pbbuf.Bytes(), &imports.Options{FormatOnly: true})
+	if err != nil {
+		return fmt.Errorf("pb template prettification failed: %+v\n", err)
+	}
+
+	httpfinal, err := imports.Process(p + ".http.go", httpbuf.Bytes(), &imports.Options{FormatOnly: true})
+	if err != nil {
+		return fmt.Errorf("pb template prettification failed: %+v\n", err)
+	}
+
+	if err := ioutil.WriteFile(p+".pb.go", pbfinal, 0644); err != nil {
+		return fmt.Errorf("file write failed: %+v\n", err)
+	}
+
+	if err := ioutil.WriteFile(p+".http.go", httpfinal, 0644); err != nil {
+		return fmt.Errorf("file write failed: %+v\n", err)
+	}
+
+	return nil
 }

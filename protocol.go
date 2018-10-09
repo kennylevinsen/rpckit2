@@ -2,6 +2,7 @@ package rpckit2
 
 import (
 	"fmt"
+	"strings"
 )
 
 func NewProtocol(name string, id uint64) *Protocol {
@@ -154,7 +155,7 @@ func verifMethod(p *Protocol, method Method) {
 		if m.ID == method.ID {
 			panicf("method %v is being registered for id %v which is already in use", method.Name, method.ID)
 		}
-		if m.Name == method.Name {
+		if strings.ToLower(m.Name) == strings.ToLower(method.Name) {
 			panicf("method name %v is already in use", method.Name)
 		}
 	}

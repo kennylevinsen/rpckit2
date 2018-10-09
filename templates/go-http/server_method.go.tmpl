@@ -1,0 +1,101 @@
+type {{ capitalize .ProtoName }}Methods interface {
+    {{- range .Methods }}
+    {{ capitalize .Name }}(
+    ctx context.Context,
+    {{- range .Input }}
+        _{{ .Name }} {{ .T.GoType }},
+    {{- end }}
+    ) (
+    {{- range .Output }}
+        _{{ .Name }} {{ .T.GoType }},
+    {{- end }}
+        err error,
+    )
+    {{- end }}
+}
+
+func {{ capitalize .ProtoName }}Handler(methods {{ capitalize .ProtoName }}Methods) *httpServer {
+    return &httpServer{
+        ProtocolID: {{ .ProtoID }},
+        Handler: &callHandlerFor{{ capitalize .ProtoName }}{methods: methods},
+    }
+}
+
+type callHandlerFor{{ capitalize .ProtoName }} struct {
+    methods {{ capitalize .ProtoName }}Methods
+}
+
+func (c *callHandlerFor{{ capitalize .ProtoName }}) registerToMux(m *http.ServeMux) {
+    {{- $protoName := .ProtoName }}
+    {{- range .Methods }}
+    m.HandleFunc("/{{ $protoName }}/{{ .Name }}", func(w http.ResponseWriter, r *http.Request) {
+        {{ if gt (len .Input) 0 }}
+        if r.Method != "POST" {
+            w.WriteHeader(http.StatusMethodNotAllowed)
+            return
+        }
+        {{ end }}
+
+        var (
+            b []byte
+            req *http.Request
+            resp *http.Response
+            {{ if gt (len .Input) 0 }}reqbody httprequest_{{ capitalize .ProtoName }}_{{ capitalize .Name }}{{ end }}
+            respbody httpresponse_{{ capitalize .ProtoName }}_{{ capitalize .Name }}
+        )
+
+        b, err = ioutil.ReadAll(resp.Body)
+        if err != nil {
+            w.WriteHeader(http.StatusBadRequest)
+            return
+        }
+
+        {{- if gt (len .Input) 0 }}
+        if err = json.Unmarshal(b, &reqbody); err != nil {
+            w.WriteHeader(http.StatusBadRequest)
+            return
+        }
+        {{ else }}
+        if len(b) > 0 {
+            w.WriteHeader(http.StatusBadRequest)
+            return
+        }
+        {{ end }}
+
+        {{ range .Output }}{{ .Name }}, {{ end }}err := c.methods.{{ capitalize .Name }}(
+            ctx,
+            {{- range .Input }}
+            args._{{ .Name }},
+            {{- end }}
+        )
+        if err != nil {
+            if rpcMsg
+        }
+
+        if req, err = c.NewRequest({{ if gt (len .Input) 0 }}"POST"{{ else }}"GET"{{ end }}, {{ lower .Name | doublequote }}, bytes.NewReader(b)); err != nil {
+            return
+        }
+
+        req = req.WithContext(ctx)
+        if resp, err = c.client.client.Do(req); err != nil {
+            return
+        }
+
+        b, err = ioutil.ReadAll(resp.Body)
+        resp.Body.Close()
+        if err != nil {
+            return
+        }
+
+        if err = json.Unmarshal(b, &respbody); err != nil {
+            return
+        }
+
+        {{- range .Output }}
+        out_{{ .Name }} = respbody._{{ .Name }}
+        {{- end }}
+        return
+
+    })
+    {{- end }}
+}

@@ -5,7 +5,7 @@ type {{ .Prefix }}_{{ capitalize .ProtoName }}_{{ capitalize .Name }} struct {
 }
 
 func (s *{{ .Prefix }}_{{ capitalize .ProtoName }}_{{ capitalize .Name }}) RPCID() uint64 {
-    return uint64({{ capitalize .ProtoName }}Method_{{ capitalize .Name }})
+    return uint64(_{{ capitalize .ProtoName }}Method_{{ capitalize .Name }})
 }
 
 func (s *{{ .Prefix }}_{{ capitalize .ProtoName }}_{{ capitalize .Name }}) RPCEncode(m *message) error {
@@ -41,8 +41,11 @@ func (s *{{ .Prefix }}_{{ capitalize .ProtoName }}_{{ capitalize .Name }}) RPCDe
         tag, err = m.ReadVarint()
         switch tag {
         {{- range .Fields }}
-        case uint64({{ .ID }} << 3) | uint64({{ template "rpckit_property_to_wiretype.go.tmpl" .T.String}}):
+        case uint64({{ .ID }} << 3) | uint64({{ template "go-pb/property_to_wiretype.go.tmpl" .T.String}}):
             {{- if .T.IsArray }}
+            {{- if or .T.InnerValue.IsArray .T.InnerValue.IsMap }}
+            {{ error "Inner value of array cannot be array or map for RPC" }}
+            {{- end}}
             var v {{ .T.InnerValue.GoType }}
             v, err = m.Read{{ .T.InnerValue.String }}()
             s._{{ .Name }} = append(s._{{ .Name }}, v)
@@ -61,7 +64,7 @@ func (s *{{ .Prefix }}_{{ capitalize .ProtoName }}_{{ capitalize .Name }}) RPCDe
 
             tag, err = em.ReadVarint()
             switch tag {
-            case uint64(1 << 3) | uint64({{ template "rpckit_property_to_wiretype.go.tmpl" .T.InnerKey.String}}):
+            case uint64(1 << 3) | uint64({{ template "go-pb/property_to_wiretype.go.tmpl" .T.InnerKey.String}}):
                 k, err = em.Read{{ .T.InnerKey.String }}()
             default:
                 if err != io.EOF {
@@ -71,7 +74,7 @@ func (s *{{ .Prefix }}_{{ capitalize .ProtoName }}_{{ capitalize .Name }}) RPCDe
 
             tag, err = em.ReadVarint()
             switch tag {
-            case uint64(2 << 3) | uint64({{ template "rpckit_property_to_wiretype.go.tmpl" .T.InnerValue.String}}):
+            case uint64(2 << 3) | uint64({{ template "go-pb/property_to_wiretype.go.tmpl" .T.InnerValue.String}}):
                 v, err = em.Read{{ .T.InnerValue.String }}()
                 s._{{ .Name }}[k] = v
             default:

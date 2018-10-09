@@ -1,0 +1,57 @@
+func (c *{{ capitalize .ProtoName }}Client) {{ capitalize .Name }}(
+    ctx context.Context,
+{{- range .Input }}
+    in_{{ .Name }} {{ .T.GoType }},
+{{- end }}
+) (
+{{- range .Output }}
+    out_{{ .Name }} {{ .T.GoType }},
+{{- end }}
+    err error,
+) {
+    var (
+        b []byte
+        req *http.Request
+        resp *http.Response
+        {{ if gt (len .Input) 0 }}reqbody httprequest_{{ capitalize .ProtoName }}_{{ capitalize .Name }}{{ end }}
+        respbody httpresponse_{{ capitalize .ProtoName }}_{{ capitalize .Name }}
+    )
+
+    {{- if gt (len .Input) 0 }}
+    reqbody = httprequest_{{ capitalize .ProtoName }}_{{ capitalize .Name }}{
+        {{- range .Input }}
+        _{{ .Name }}: in_{{ .Name }},
+        {{- end }}
+    }
+
+    if b, err = json.Marshal(&reqbody); err != nil {
+        return
+    }
+    {{ end }}
+
+    if req, err = c.NewRequest({{ if gt (len .Input) 0 }}"POST"{{ else }}"GET"{{ end }}, {{ lower .Name | doublequote }}, bytes.NewReader(b)); err != nil {
+        return
+    }
+
+    req = req.WithContext(ctx)
+    if resp, err = c.client.client.Do(req); err != nil {
+        return
+    }
+
+    b, err = ioutil.ReadAll(resp.Body)
+    resp.Body.Close()
+    if err != nil {
+        return
+    }
+
+    {{- if gt (len .Input) 0 }}
+    if err = json.Unmarshal(b, &respbody); err != nil {
+        return
+    }
+    {{ end }}
+
+    {{- range .Output }}
+    out_{{ .Name }} = respbody._{{ .Name }}
+    {{- end }}
+    return
+}

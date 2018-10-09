@@ -1,0 +1,15 @@
+type {{ capitalize .ProtoName }}Client struct {
+    client *HTTPClient
+    baseURL string
+}
+
+func New{{ capitalize .ProtoName }}Client(c *HTTPClient) *{{ capitalize .ProtoName }}Client {
+    return & {{- capitalize .ProtoName }}Client{
+        client: c,
+        baseURL: {{ doublequote .ProtoName }},
+    }
+}
+
+func (c *{{ capitalize .ProtoName }}Client) NewRequest(method, url string, body io.Reader) (*http.Request, error) {
+    return c.client.NewRequest(method, c.baseURL + "/" + url, body)
+}

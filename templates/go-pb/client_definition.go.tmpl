@@ -1,0 +1,9 @@
+type {{ capitalize .ProtoName }}Method uint64
+
+type RPC{{ capitalize .ProtoName }}Client struct {
+	c *RPCConnection
+}
+
+func NewRPC{{ capitalize .ProtoName }}Client(c *RPCConnection) *RPC{{ capitalize .ProtoName }}Client {
+	return &RPC{{- capitalize .ProtoName }}Client{c: c}
+}

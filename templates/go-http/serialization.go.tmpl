@@ -1,0 +1,5 @@
+type {{ .Prefix }}_{{ capitalize .ProtoName }}_{{ capitalize .Name }} struct {
+{{- range .Fields }}
+    _{{ .Name }} {{ .T.GoType }} `json:{{ doublequote .Name }}`
+{{- end }}
+}
