@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 	"net"
 	"time"
@@ -50,7 +49,7 @@ func main() {
 		}).
 		ConnectHook(func(c *RPCConnection) error {
 			fmt.Printf("Client: connected to server\n")
-			success, err := NewPingpongClient(c).Authenticate(ctx, "batman", "robin")
+			success, err := NewRPCPingpongClient(c).Authenticate(ctx, "batman", "robin")
 			if err != nil {
 				panic(fmt.Sprintf("bad return values: %v, %v", success, err))
 				return err
@@ -73,8 +72,8 @@ func main() {
 
 	<-ready
 
-	serverClient := NewPingpongClient(c)
-	echoClient := NewEchoClient(c)
+	serverClient := NewRPCPingpongClient(c)
+	echoClient := NewRPCEchoClient(c)
 
 	greeting, err := serverClient.PingWithReply(ctx, "Oliver")
 	if err != nil {
@@ -107,18 +106,8 @@ func main() {
 }
 
 type server struct {
-	client        *PingpongClient
+	client        *RPCPingpongClient
 	authenticated bool
-}
-
-func (s *server) AllowCall(m PingpongMethod) (err error) {
-	if s.authenticated {
-		return nil
-	}
-	if m == PingpongMethod_PingWithReply {
-		return nil
-	}
-	return errors.New("not authenticated")
 }
 
 func (s *server) Authenticate(ctx context.Context, username string, password string) (success bool, err error) {
@@ -143,11 +132,16 @@ func (s *server) TestMethod(ctx context.Context, a string, b bool, c int64, d in
 }
 
 type echoServer struct {
-	client        *EchoClient
+	client        *RPCEchoClient
 	authenticated bool
 }
 
 func (s *echoServer) Echo(ctx context.Context, input string, names []string, values map[string]int64) (string, error) {
 	fmt.Printf("ECHO: %#v, %#v\n", names, values)
 	return input, nil
+}
+
+
+func (s *echoServer) Ping(ctx context.Context) (string, error) {
+	return "", nil
 }

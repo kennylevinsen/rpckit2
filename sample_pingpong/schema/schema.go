@@ -63,6 +63,14 @@ func main() {
 			rpckit2.Property{ID: 1, T: rpckit2.String(), Name: "output"},
 		},
 	})
+	server2.AddMethod(rpckit2.Method{
+		ID: 2, Name: "Ping",
+		Description: "Ping",
+		Input: []rpckit2.Property{},
+		Output: []rpckit2.Property{
+			rpckit2.Property{ID: 1, T: rpckit2.String(), Name: "output"},
+		},
+	})
 
 	if err := (rpckit2.GoGenerator{
 		Protocols: []*rpckit2.Protocol{
@@ -70,7 +78,7 @@ func main() {
 			server2,
 		},
 		PackageName: "main",
-	}.Generate("../schema.generated.go")); err != nil {
+	}.Generate("../schema.generated")); err != nil {
 		fmt.Fprintf(os.Stderr, "err: %+v\n", err)
 	}
 }
