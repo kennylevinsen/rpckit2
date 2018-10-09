@@ -39,49 +39,53 @@ func (c *HTTPClient) Do(req *http.Request) (*http.Response, error) {
 	return c.client.Do(req)
 }
 
-type PingpongClient struct {
+type HTTPHandler interface {
+	RegisterToMux(*http.ServeMux)
+}
+
+type HTTPPingpongClient struct {
 	client  *HTTPClient
 	baseURL string
 }
 
-func NewPingpongClient(c *HTTPClient) *PingpongClient {
-	return &PingpongClient{
+func NewHTTPPingpongClient(c *HTTPClient) *HTTPPingpongClient {
+	return &HTTPPingpongClient{
 		client:  c,
 		baseURL: "pingpong",
 	}
 }
 
-func (c *PingpongClient) NewRequest(method, url string, body io.Reader) (*http.Request, error) {
+func (c *HTTPPingpongClient) NewRequest(method, url string, body io.Reader) (*http.Request, error) {
 	return c.client.NewRequest(method, c.baseURL+"/"+url, body)
 }
 
-type httprequest_Pingpong_Authenticate struct {
-	_username string `json:"username"`
-	_password string `json:"password"`
+type httpReqProtoPingpongMethodAuthenticate struct {
+	HttpReqUsername string `json:"username"`
+	HttpReqPassword string `json:"password"`
 }
 
-type httpresponse_Pingpong_Authenticate struct {
-	_success bool `json:"success"`
+type httpRespProtoPingpongMethodAuthenticate struct {
+	HttpRespSuccess bool `json:"success"`
 }
 
-func (c *PingpongClient) Authenticate(
+func (c *HTTPPingpongClient) Authenticate(
 	ctx context.Context,
-	in_username string,
-	in_password string,
+	reqUsername string,
+	reqPassword string,
 ) (
-	out_success bool,
+	respSuccess bool,
 	err error,
 ) {
 	var (
 		b        []byte
 		req      *http.Request
 		resp     *http.Response
-		reqbody  httprequest_Pingpong_Authenticate
-		respbody httpresponse_Pingpong_Authenticate
+		reqbody  httpReqProtoPingpongMethodAuthenticate
+		respbody httpRespProtoPingpongMethodAuthenticate
 	)
-	reqbody = httprequest_Pingpong_Authenticate{
-		_username: in_username,
-		_password: in_password,
+	reqbody = httpReqProtoPingpongMethodAuthenticate{
+		HttpReqUsername: reqUsername,
+		HttpReqPassword: reqPassword,
 	}
 
 	if b, err = json.Marshal(&reqbody); err != nil {
@@ -106,34 +110,34 @@ func (c *PingpongClient) Authenticate(
 		return
 	}
 
-	out_success = respbody._success
+	respSuccess = respbody.HttpRespSuccess
 	return
 }
 
-type httprequest_Pingpong_PingWithReply struct {
-	_name string `json:"name"`
+type httpReqProtoPingpongMethodPingWithReply struct {
+	HttpReqName string `json:"name"`
 }
 
-type httpresponse_Pingpong_PingWithReply struct {
-	_greeting string `json:"greeting"`
+type httpRespProtoPingpongMethodPingWithReply struct {
+	HttpRespGreeting string `json:"greeting"`
 }
 
-func (c *PingpongClient) PingWithReply(
+func (c *HTTPPingpongClient) PingWithReply(
 	ctx context.Context,
-	in_name string,
+	reqName string,
 ) (
-	out_greeting string,
+	respGreeting string,
 	err error,
 ) {
 	var (
 		b        []byte
 		req      *http.Request
 		resp     *http.Response
-		reqbody  httprequest_Pingpong_PingWithReply
-		respbody httpresponse_Pingpong_PingWithReply
+		reqbody  httpReqProtoPingpongMethodPingWithReply
+		respbody httpRespProtoPingpongMethodPingWithReply
 	)
-	reqbody = httprequest_Pingpong_PingWithReply{
-		_name: in_name,
+	reqbody = httpReqProtoPingpongMethodPingWithReply{
+		HttpReqName: reqName,
 	}
 
 	if b, err = json.Marshal(&reqbody); err != nil {
@@ -158,49 +162,49 @@ func (c *PingpongClient) PingWithReply(
 		return
 	}
 
-	out_greeting = respbody._greeting
+	respGreeting = respbody.HttpRespGreeting
 	return
 }
 
-type httprequest_Pingpong_TestMethod struct {
-	_string string  `json:"string"`
-	_bool   bool    `json:"bool"`
-	_int64  int64   `json:"int64"`
-	_int    int64   `json:"int"`
-	_float  float32 `json:"float"`
-	_double float64 `json:"double"`
+type httpReqProtoPingpongMethodTestMethod struct {
+	HttpReqString string  `json:"string"`
+	HttpReqBool   bool    `json:"bool"`
+	HttpReqInt64  int64   `json:"int64"`
+	HttpReqInt    int64   `json:"int"`
+	HttpReqFloat  float32 `json:"float"`
+	HttpReqDouble float64 `json:"double"`
 }
 
-type httpresponse_Pingpong_TestMethod struct {
-	_success bool `json:"success"`
+type httpRespProtoPingpongMethodTestMethod struct {
+	HttpRespSuccess bool `json:"success"`
 }
 
-func (c *PingpongClient) TestMethod(
+func (c *HTTPPingpongClient) TestMethod(
 	ctx context.Context,
-	in_string string,
-	in_bool bool,
-	in_int64 int64,
-	in_int int64,
-	in_float float32,
-	in_double float64,
+	reqString string,
+	reqBool bool,
+	reqInt64 int64,
+	reqInt int64,
+	reqFloat float32,
+	reqDouble float64,
 ) (
-	out_success bool,
+	respSuccess bool,
 	err error,
 ) {
 	var (
 		b        []byte
 		req      *http.Request
 		resp     *http.Response
-		reqbody  httprequest_Pingpong_TestMethod
-		respbody httpresponse_Pingpong_TestMethod
+		reqbody  httpReqProtoPingpongMethodTestMethod
+		respbody httpRespProtoPingpongMethodTestMethod
 	)
-	reqbody = httprequest_Pingpong_TestMethod{
-		_string: in_string,
-		_bool:   in_bool,
-		_int64:  in_int64,
-		_int:    in_int,
-		_float:  in_float,
-		_double: in_double,
+	reqbody = httpReqProtoPingpongMethodTestMethod{
+		HttpReqString: reqString,
+		HttpReqBool:   reqBool,
+		HttpReqInt64:  reqInt64,
+		HttpReqInt:    reqInt,
+		HttpReqFloat:  reqFloat,
+		HttpReqDouble: reqDouble,
 	}
 
 	if b, err = json.Marshal(&reqbody); err != nil {
@@ -225,56 +229,202 @@ func (c *PingpongClient) TestMethod(
 		return
 	}
 
-	out_success = respbody._success
+	respSuccess = respbody.HttpRespSuccess
 	return
 }
 
-type EchoClient struct {
+func HTTPPingpongHandler(methods PingpongMethods) HTTPHandler {
+	return &httpCallHandlerForPingpong{methods: methods}
+}
+
+type httpCallHandlerForPingpong struct {
+	methods PingpongMethods
+}
+
+func (c *httpCallHandlerForPingpong) RegisterToMux(m *http.ServeMux) {
+	m.HandleFunc("/pingpong/authenticate", func(w http.ResponseWriter, r *http.Request) {
+
+		if r.Method != "POST" {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+
+		var (
+			err      error
+			b        []byte
+			reqbody  httpReqProtoPingpongMethodAuthenticate
+			respbody httpRespProtoPingpongMethodAuthenticate
+		)
+
+		b, err = ioutil.ReadAll(r.Body)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		if err = json.Unmarshal(b, &reqbody); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		respbody.HttpRespSuccess, err = c.methods.Authenticate(
+			r.Context(),
+			reqbody.HttpReqUsername,
+			reqbody.HttpReqPassword,
+		)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			// TODO: Add error!
+			return
+		}
+		if b, err = json.Marshal(&respbody); err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			// TODO: Add error!
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write(b)
+	})
+	m.HandleFunc("/pingpong/pingwithreply", func(w http.ResponseWriter, r *http.Request) {
+
+		if r.Method != "POST" {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+
+		var (
+			err      error
+			b        []byte
+			reqbody  httpReqProtoPingpongMethodPingWithReply
+			respbody httpRespProtoPingpongMethodPingWithReply
+		)
+
+		b, err = ioutil.ReadAll(r.Body)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		if err = json.Unmarshal(b, &reqbody); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		respbody.HttpRespGreeting, err = c.methods.PingWithReply(
+			r.Context(),
+			reqbody.HttpReqName,
+		)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			// TODO: Add error!
+			return
+		}
+		if b, err = json.Marshal(&respbody); err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			// TODO: Add error!
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write(b)
+	})
+	m.HandleFunc("/pingpong/testmethod", func(w http.ResponseWriter, r *http.Request) {
+
+		if r.Method != "POST" {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+
+		var (
+			err      error
+			b        []byte
+			reqbody  httpReqProtoPingpongMethodTestMethod
+			respbody httpRespProtoPingpongMethodTestMethod
+		)
+
+		b, err = ioutil.ReadAll(r.Body)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		if err = json.Unmarshal(b, &reqbody); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		respbody.HttpRespSuccess, err = c.methods.TestMethod(
+			r.Context(),
+			reqbody.HttpReqString,
+			reqbody.HttpReqBool,
+			reqbody.HttpReqInt64,
+			reqbody.HttpReqInt,
+			reqbody.HttpReqFloat,
+			reqbody.HttpReqDouble,
+		)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			// TODO: Add error!
+			return
+		}
+		if b, err = json.Marshal(&respbody); err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			// TODO: Add error!
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write(b)
+	})
+}
+
+type HTTPEchoClient struct {
 	client  *HTTPClient
 	baseURL string
 }
 
-func NewEchoClient(c *HTTPClient) *EchoClient {
-	return &EchoClient{
+func NewHTTPEchoClient(c *HTTPClient) *HTTPEchoClient {
+	return &HTTPEchoClient{
 		client:  c,
 		baseURL: "echo",
 	}
 }
 
-func (c *EchoClient) NewRequest(method, url string, body io.Reader) (*http.Request, error) {
+func (c *HTTPEchoClient) NewRequest(method, url string, body io.Reader) (*http.Request, error) {
 	return c.client.NewRequest(method, c.baseURL+"/"+url, body)
 }
 
-type httprequest_Echo_Echo struct {
-	_input  string           `json:"input"`
-	_names  []string         `json:"names"`
-	_values map[string]int64 `json:"values"`
+type httpReqProtoEchoMethodEcho struct {
+	HttpReqInput  string           `json:"input"`
+	HttpReqNames  []string         `json:"names"`
+	HttpReqValues map[string]int64 `json:"values"`
 }
 
-type httpresponse_Echo_Echo struct {
-	_output string `json:"output"`
+type httpRespProtoEchoMethodEcho struct {
+	HttpRespOutput string `json:"output"`
 }
 
-func (c *EchoClient) Echo(
+func (c *HTTPEchoClient) Echo(
 	ctx context.Context,
-	in_input string,
-	in_names []string,
-	in_values map[string]int64,
+	reqInput string,
+	reqNames []string,
+	reqValues map[string]int64,
 ) (
-	out_output string,
+	respOutput string,
 	err error,
 ) {
 	var (
 		b        []byte
 		req      *http.Request
 		resp     *http.Response
-		reqbody  httprequest_Echo_Echo
-		respbody httpresponse_Echo_Echo
+		reqbody  httpReqProtoEchoMethodEcho
+		respbody httpRespProtoEchoMethodEcho
 	)
-	reqbody = httprequest_Echo_Echo{
-		_input:  in_input,
-		_names:  in_names,
-		_values: in_values,
+	reqbody = httpReqProtoEchoMethodEcho{
+		HttpReqInput:  reqInput,
+		HttpReqNames:  reqNames,
+		HttpReqValues: reqValues,
 	}
 
 	if b, err = json.Marshal(&reqbody); err != nil {
@@ -299,21 +449,21 @@ func (c *EchoClient) Echo(
 		return
 	}
 
-	out_output = respbody._output
+	respOutput = respbody.HttpRespOutput
 	return
 }
 
-type httprequest_Echo_Ping struct {
+type httpReqProtoEchoMethodPing struct {
 }
 
-type httpresponse_Echo_Ping struct {
-	_output string `json:"output"`
+type httpRespProtoEchoMethodPing struct {
+	HttpRespOutput string `json:"output"`
 }
 
-func (c *EchoClient) Ping(
+func (c *HTTPEchoClient) Ping(
 	ctx context.Context,
 ) (
-	out_output string,
+	respOutput string,
 	err error,
 ) {
 	var (
@@ -321,7 +471,7 @@ func (c *EchoClient) Ping(
 		req  *http.Request
 		resp *http.Response
 
-		respbody httpresponse_Echo_Ping
+		respbody httpRespProtoEchoMethodPing
 	)
 
 	if req, err = c.NewRequest("GET", "ping", bytes.NewReader(b)); err != nil {
@@ -338,6 +488,99 @@ func (c *EchoClient) Ping(
 	if err != nil {
 		return
 	}
-	out_output = respbody._output
+	respOutput = respbody.HttpRespOutput
 	return
+}
+
+func HTTPEchoHandler(methods EchoMethods) HTTPHandler {
+	return &httpCallHandlerForEcho{methods: methods}
+}
+
+type httpCallHandlerForEcho struct {
+	methods EchoMethods
+}
+
+func (c *httpCallHandlerForEcho) RegisterToMux(m *http.ServeMux) {
+	m.HandleFunc("/echo/echo", func(w http.ResponseWriter, r *http.Request) {
+
+		if r.Method != "POST" {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+
+		var (
+			err      error
+			b        []byte
+			reqbody  httpReqProtoEchoMethodEcho
+			respbody httpRespProtoEchoMethodEcho
+		)
+
+		b, err = ioutil.ReadAll(r.Body)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		if err = json.Unmarshal(b, &reqbody); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		respbody.HttpRespOutput, err = c.methods.Echo(
+			r.Context(),
+			reqbody.HttpReqInput,
+			reqbody.HttpReqNames,
+			reqbody.HttpReqValues,
+		)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			// TODO: Add error!
+			return
+		}
+		if b, err = json.Marshal(&respbody); err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			// TODO: Add error!
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write(b)
+	})
+	m.HandleFunc("/echo/ping", func(w http.ResponseWriter, r *http.Request) {
+
+		var (
+			err error
+			b   []byte
+
+			respbody httpRespProtoEchoMethodPing
+		)
+
+		b, err = ioutil.ReadAll(r.Body)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		if len(b) > 0 {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		respbody.HttpRespOutput, err = c.methods.Ping(
+			r.Context(),
+		)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			// TODO: Add error!
+			return
+		}
+		if b, err = json.Marshal(&respbody); err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			// TODO: Add error!
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write(b)
+	})
 }
