@@ -29,6 +29,9 @@ func (s *{{ .Prefix }}Proto{{ capitalize .ProtoName }}Method{{ capitalize .Name 
 }
 
 func (s *{{ .Prefix }}Proto{{ capitalize .ProtoName }}Method{{ capitalize .Name }}) RPCDecode(m *message) error {
+    {{- if eq (len .Fields) 0 }}
+    return nil
+    {{- else }}
     var (
         err error
         tag uint64
@@ -97,4 +100,5 @@ func (s *{{ .Prefix }}Proto{{ capitalize .ProtoName }}Method{{ capitalize .Name 
         return nil
     }
     return err
+    {{- end }}
 }
