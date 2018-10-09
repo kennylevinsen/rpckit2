@@ -28,7 +28,7 @@ func (s *rpcCallHandlerFor{{ capitalize .ProtoName }}) rpcCall(ctx context.Conte
         {{ range .Output }}{{ .Name }}, {{ end }}err := s.methods.{{ capitalize .Name }}(
             ctx,
             {{- range .Input }}
-            args.rpcReq{{ capitalize .Name }},
+            args.{{ capitalize .Name }},
             {{- end }}
         )
         if err != nil {
@@ -39,7 +39,7 @@ func (s *rpcCallHandlerFor{{ capitalize .ProtoName }}) rpcCall(ctx context.Conte
         }
         return &rpcRespProto{{ capitalize $protoName }}Method{{ capitalize .Name }}{
             {{- range .Output }}
-            rpcResp{{ capitalize .Name }}: {{ .Name }},
+            {{ capitalize .Name }}: {{ .Name }},
             {{- end }}
         }
     {{- end }}

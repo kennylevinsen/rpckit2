@@ -10,12 +10,13 @@ func (c *httpCallHandlerFor{{ capitalize .ProtoName }}) RegisterToMux(m *http.Se
     {{- $protoName := .ProtoName }}
     {{- range .Methods }}
     m.HandleFunc("/{{ $protoName }}/{{ lower .Name }}", func(w http.ResponseWriter, r *http.Request) {
-        {{ if gt (len .Input) 0 }}
+        {{- if gt (len .Input) 0 }}
         if r.Method != "POST" {
             w.WriteHeader(http.StatusMethodNotAllowed)
             return
         }
-        {{ end }}
+
+        {{ end -}}
 
         var (
             err error
@@ -43,10 +44,10 @@ func (c *httpCallHandlerFor{{ capitalize .ProtoName }}) RegisterToMux(m *http.Se
         {{ end }}
 
         {{- $methodName := .Name }}
-        {{ range .Output }}respbody.HttpResp{{ capitalize .Name }}, {{ end }}err = c.methods.{{ capitalize .Name }}(
+        {{ range .Output }}respbody.{{ capitalize .Name }}, {{ end }}err = c.methods.{{ capitalize .Name }}(
             r.Context(),
             {{- range .Input }}
-            reqbody.HttpReq{{ capitalize .Name }},
+            reqbody.{{ capitalize .Name }},
             {{- end }}
         )
         if err != nil {

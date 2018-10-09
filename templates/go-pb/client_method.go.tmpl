@@ -1,19 +1,11 @@
 // {{ capitalize .Description }}
-func (c *RPC{{ capitalize .ProtoName }}Client) {{ capitalize .Name }}(
-    ctx context.Context,
-    {{- range .Input }}
-        req{{ capitalize .Name }} {{ .T.GoType }},
-    {{- end }}
-    ) (
-    {{- range .Output }}
-        resp{{ capitalize .Name }} {{ .T.GoType }},
-    {{- end }}
-        err RPCError,
-    ) {
-
+func (c *RPC{{ capitalize .ProtoName }}Client) {{ capitalize .Name }}(ctx context.Context,
+    {{- $input := .Input }}
+    {{- range $idx, $v := .Input }} req{{ capitalize $v.Name }} {{ $v.T.GoType }}{{- if ne (len $input) $idx }},{{ end }}{{ end }}) (
+    {{- range .Output }}resp{{ capitalize .Name }} {{ .T.GoType }}, {{ end }}err RPCError) {
     resultTypeID, msg, err := c.c.call(ctx, true, {{ .ProtoID }}, uint64(proto{{ capitalize .ProtoName }}Method{{ capitalize .Name }}), &rpcReqProto{{ capitalize .ProtoName }}Method{{ capitalize .Name }}{
         {{- range .Input }}
-        rpcReq{{ capitalize .Name }}: req{{ capitalize .Name }},
+        {{ capitalize .Name }}: req{{ capitalize .Name }},
         {{- end }}
     })
 
@@ -34,7 +26,7 @@ func (c *RPC{{ capitalize .ProtoName }}Client) {{ capitalize .Name }}(
             return
         }
         {{- range .Output }}
-        resp{{ capitalize .Name }} = r.rpcResp{{ capitalize .Name }}
+        resp{{ capitalize .Name }} = r.{{ capitalize .Name }}
         {{- end}}
     default:
         var isPrivate bool

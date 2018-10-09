@@ -3,16 +3,9 @@
 type {{ capitalize .ProtoName }}Methods interface {
     {{- range .Methods }}
     // {{ capitalize .Description }}
-    {{ capitalize .Name }}(
-    ctx context.Context,
-    {{- range .Input }}
-        req{{ capitalize .Name }} {{ .T.GoType }},
-    {{- end }}
-    ) (
-    {{- range .Output }}
-        resp{{ capitalize .Name }} {{ .T.GoType }},
-    {{- end }}
-        err error,
-    )
+    {{ capitalize .Name }}(ctx context.Context,
+    {{- $input := .Input }}
+    {{- range $idx, $v := .Input }} req{{ capitalize $v.Name }} {{ $v.T.GoType }}{{- if ne (len $input) $idx }},{{ end }}{{ end }}) (
+    {{- range .Output }}resp{{ capitalize .Name }} {{ .T.GoType }}, {{ end }}err error)
     {{- end }}
 }

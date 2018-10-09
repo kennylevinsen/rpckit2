@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"text/template"
+	"unicode"
 
 	"golang.org/x/tools/imports"
 )
@@ -56,9 +57,20 @@ func (g GoGenerator) Generate(p string) error {
 		"error": func(s string) error {
 			return errors.New(s)
 		},
-		"capitalize":  strings.Title,
-		"upper": strings.ToTitle,
-		"lower": strings.ToLower,
+		"capitalize": func(s string) string {
+			var b strings.Builder
+			b.Grow(len(s))
+			for idx, r := range s {
+				if idx == 0 {
+					b.WriteRune(unicode.ToTitle(r))
+					continue
+				}
+				b.WriteRune(r)
+			}
+			return b.String()
+		},
+		"upper":       strings.ToTitle,
+		"lower":       strings.ToLower,
 		"doublequote": strconv.Quote,
 		"dict": func(values ...interface{}) (map[string]interface{}, error) {
 			if len(values)%2 != 0 {
@@ -101,49 +113,32 @@ func (g GoGenerator) Generate(p string) error {
 		})
 	}
 
-    // TODO: Clean up the copy-pasted code below.
+	// TODO: Clean up the copy-pasted code below.
 
-	var pbbuf, httpbuf, generalbuf bytes.Buffer
-	if err := tmpl.ExecuteTemplate(&pbbuf, "go-pb/rpckit.go.tmpl", ctx); err != nil {
-		return fmt.Errorf("pb template execution failed: %+v\n", err)
-	}
+	for _, v := range []string{"pb", "http", ""} {
+		filepath := p
+		templatepath := "/rpckit.go.tmpl"
+		if v == "" {
+			filepath += ".go"
+			templatepath = "go" + templatepath
+		} else {
+			filepath += "." + v + ".go"
+			templatepath = "go-" + v + templatepath
+		}
 
-	if err := tmpl.ExecuteTemplate(&httpbuf, "go-http/rpckit.go.tmpl", ctx); err != nil {
-		return fmt.Errorf("http template execution failed: %+v\n", err)
-	}
+		var buf bytes.Buffer
+		if err := tmpl.ExecuteTemplate(&buf, templatepath, ctx); err != nil {
+			return fmt.Errorf("%s template execution failed: %+v\n", v, err)
+		}
 
-	if err := tmpl.ExecuteTemplate(&generalbuf, "go/rpckit.go.tmpl", ctx); err != nil {
-		return fmt.Errorf("http template execution failed: %+v\n", err)
-	}
+		final, err := imports.Process(filepath, buf.Bytes(), &imports.Options{Comments: true, FormatOnly: true})
+		if err != nil {
+			return fmt.Errorf("%s template prettification failed: %+v\n", v, err)
+		}
 
-	pbfinal, err := imports.Process(p + ".pb.go", pbbuf.Bytes(), &imports.Options{Comments: true, FormatOnly: true})
-	if err != nil {
-		fmt.Printf("pb template prettification failed: %+v\n", err)
-		pbfinal = pbbuf.Bytes()
-	}
-
-	httpfinal, err := imports.Process(p + ".http.go", httpbuf.Bytes(), &imports.Options{Comments: true, FormatOnly: true})
-	if err != nil {
-		fmt.Printf("http template prettification failed: %+v\n", err)
-		httpfinal = httpbuf.Bytes()
-	}
-
-	generalfinal, err := imports.Process(p + ".go", generalbuf.Bytes(), &imports.Options{Comments: true, FormatOnly: true})
-	if err != nil {
-		fmt.Printf("general template prettification failed: %+v\n", err)
-		httpfinal = httpbuf.Bytes()
-	}
-
-	if err := ioutil.WriteFile(p+".pb.go", pbfinal, 0644); err != nil {
-		return fmt.Errorf("file write failed: %+v\n", err)
-	}
-
-	if err := ioutil.WriteFile(p+".http.go", httpfinal, 0644); err != nil {
-		return fmt.Errorf("file write failed: %+v\n", err)
-	}
-
-	if err := ioutil.WriteFile(p+".go", generalfinal, 0644); err != nil {
-		return fmt.Errorf("file write failed: %+v\n", err)
+		if err := ioutil.WriteFile(filepath, final, 0644); err != nil {
+			return fmt.Errorf("file write failed: %+v\n", err)
+		}
 	}
 
 	return nil

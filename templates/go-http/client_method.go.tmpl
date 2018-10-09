@@ -1,14 +1,7 @@
-func (c *HTTP{{ capitalize .ProtoName }}Client) {{ capitalize .Name }}(
-    ctx context.Context,
-{{- range .Input }}
-    req{{ capitalize .Name }} {{ .T.GoType }},
-{{- end }}
-) (
-{{- range .Output }}
-    resp{{ capitalize .Name }} {{ .T.GoType }},
-{{- end }}
-    err error,
-) {
+func (c *HTTP{{ capitalize .ProtoName }}Client) {{ capitalize .Name }}(ctx context.Context,
+    {{- $input := .Input }}
+    {{- range $idx, $v := .Input }} req{{ capitalize $v.Name }} {{ $v.T.GoType }}{{- if ne (len $input) $idx }},{{ end }}{{ end }}) (
+    {{- range .Output }}resp{{ capitalize .Name }} {{ .T.GoType }}, {{ end }}err error) {
     var (
         b []byte
         req *http.Request
@@ -20,7 +13,7 @@ func (c *HTTP{{ capitalize .ProtoName }}Client) {{ capitalize .Name }}(
     {{- if gt (len .Input) 0 }}
     reqbody = httpReqProto{{ capitalize .ProtoName }}Method{{ capitalize .Name }}{
         {{- range .Input }}
-        HttpReq{{ capitalize .Name }}: req{{ capitalize .Name }},
+        {{ capitalize .Name }}: req{{ capitalize .Name }},
         {{- end }}
     }
 
@@ -51,7 +44,7 @@ func (c *HTTP{{ capitalize .ProtoName }}Client) {{ capitalize .Name }}(
     {{ end }}
 
     {{- range .Output }}
-    resp{{ capitalize .Name }} = respbody.HttpResp{{ capitalize .Name }}
+    resp{{ capitalize .Name }} = respbody.{{ capitalize .Name }}
     {{- end }}
     return
 }

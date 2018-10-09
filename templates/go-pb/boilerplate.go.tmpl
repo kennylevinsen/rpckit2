@@ -12,27 +12,32 @@ import (
 	"sync"
 )
 
-const (
-	rpcRequest = 1
-	rpcResponse = 2
-)
 
-const (
-	privateTypeRPCError uint64 = math.MaxUint64
-)
-
+// RPC method types.
 const (
 	messageTypeMethodCall = 1
 	messageTypeMethodReturn = 2
 )
 
+// Internal result types.
+//
+// Negative result types are reserved for internal use. Note that Go does not
+// permit negative-to-unsigned casts in constants, hence the use of the
+// math.MaxUint64 for -1.
+const (
+	privateTypeRPCError uint64 = math.MaxUint64 // -1
+)
+
+// Default message capacity for messages.
 const messageCapacity = 1024
 
 var (
 	ErrRPCVarintOverflow = errors.New("overflow in varint")
 	ErrGiveUp            = errors.New("give up")
-	rpcPreamble          = []byte{82, 80, 67, 75, 73, 84, 0, 0, 0, 1} //R,P,C,K,I,T .. version 1
 )
+
+// The RPC preamble: "RPCKIT" + 1 as big-endian uint32.
+var rpcPreamble = []byte{82, 80, 67, 75, 73, 84, 0, 0, 0, 1}
 
 type rpcMessage interface {
 	RPCEncode(m *message) error
@@ -42,6 +47,56 @@ type rpcMessage interface {
 
 type rpcCallHandler interface {
 	rpcCall(ctx context.Context, methodID uint64, m *message) rpcMessage
+}
+
+func makeSlice(n int) []byte {
+	// If the make fails, give a known error.
+	defer func() {
+		if recover() != nil {
+			panic(bytes.ErrTooLarge)
+		}
+	}()
+	return make([]byte, n)
+}
+
+
+func contextToError(e error) RPCError {
+	switch e {
+	case context.DeadlineExceeded:
+		return &rpcError{id: TimeoutError, error: "method call timed out"}
+	case context.Canceled:
+		return &rpcError{id: GenericError, error: "method call cancelled"}
+	default:
+		return &rpcError{id: GenericError, error: fmt.Sprintf("unknown cancellation reason: %+v", e)}
+	}
+}
+
+// ************************
+
+// RPCServer represents a protocol handling server implementation.
+type RPCServer interface {
+	protocolID() uint64
+	handler() rpcCallHandler
+}
+
+type rpcServer struct {
+	ProtocolID uint64
+	Handler rpcCallHandler
+}
+
+func (r *rpcServer) protocolID() uint64 {
+	return r.ProtocolID
+}
+
+func (r *rpcServer) handler() rpcCallHandler {
+	return r.Handler
+}
+
+func newRPCServer(protocolID uint64, handler rpcCallHandler) *rpcServer {
+	return &rpcServer{
+		ProtocolID: protocolID,
+		Handler: handler,
+	}
 }
 
 // *************************
@@ -69,6 +124,8 @@ func (w wireType) String() string {
 		panic("unknown wiretype")
 	}
 }
+
+// ************************
 
 type message struct {
 	buf       []byte
@@ -388,6 +445,8 @@ func (m *message) WritePBMessage(fieldNumber uint64, em *message) {
 }
 
 // ************************
+
+// RPCErrorID specifies the error category.
 type RPCErrorID uint64
 
 const (
@@ -398,6 +457,7 @@ const (
 	ConnectionError  RPCErrorID = 4
 )
 
+// RPCError represent RPC errors.
 type RPCError interface {
 	error
 	ID() RPCErrorID
@@ -452,32 +512,24 @@ func (e *rpcError) RPCDecode(m *message) error {
     return err
 }
 
-func isRPCError(typeID uint64) bool {
-	return typeID == privateTypeRPCError
-}
-
 // ************************
 
-// connection provides the network connection context for
-// RPCConnection.
+// connection provides the network connection context for RPCConnection.
 type connection struct {
-	// ready signals whether connection setup is completed. Users
-	// should always wait for this signal before accessing the struct.
+	// ready signals whether connection setup is completed. Users should
+	// always wait for this signal before accessing the struct.
 	ready chan struct{}
 
-	// conn is the active connection, if available. It becomes nil on
-	// close.
+	// conn is the active connection, if available. It becomes nil on close.
 	conn net.Conn
 
 	// connected signals whether the connection is considered open.
 	connected bool
 
-	// endReason is the first error that caused the connection to
-	// terminate.
+	// endReason is the first error that caused the connection to terminate.
 	endReason error
 
-	// writeLock is used to avoid output corruption by serializing
-	// writes.
+	// writeLock is used to avoid output corruption by serializing writes.
 	writeLock sync.Mutex
 
 	callIDLock   sync.RWMutex
@@ -485,18 +537,26 @@ type connection struct {
 	nextID       uint64
 }
 
-// acquireCallSlot allocates a waitingCalls call slot with associated
-// message channel for use with a method call.
+func newConnection() *connection {
+	return &connection{
+		ready:        make(chan struct{}, 0),
+		connected:    true,
+		waitingCalls: make(map[uint64]chan *message),
+	}
+}
+
+// acquireCallSlot allocates a waitingCalls call slot with associated message
+// channel for use with a method call.
 func (c *connection) acquireCallSlot() (uint64, chan *message) {
 	c.callIDLock.Lock()
 	defer c.callIDLock.Unlock()
 
 	// Find a slot
 	//
-	// Our callID space is 2**64 wide, and connection-local. It is
-	// large enough to allow us to assume that there are always slots
-	// available somewhere. The following becomes an infinite loop if
-	// that assumption fails.
+	// Our callID space is 2**64 wide, and connection-local. It is large
+	// enough to allow us to assume that there are always slots available
+	// somewhere. The following becomes an infinite loop if that assumption
+	// fails.
 	var n uint64
 	taken := true
 	for taken {
@@ -511,12 +571,12 @@ func (c *connection) acquireCallSlot() (uint64, chan *message) {
 	return uint64(n), ch
 }
 
-// releaseCallSlot deallocates a waitingCalls call slot, and closes
-// the associated channel.
+// releaseCallSlot deallocates a waitingCalls call slot, and closes the
+// associated channel.
 //
-// Note: The call slot must only be released once pending replies have
-// been received. It is a potentially fatal protocol violation to
-// release a call slot with pending responses.
+// Note: The call slot must only be released once pending replies have been
+// received. It is a potentially fatal protocol violation to release a call
+// slot with pending responses.
 func (c *connection) releaseCallSlot(callID uint64) {
 	c.callIDLock.Lock()
 	defer c.callIDLock.Unlock()
@@ -532,117 +592,81 @@ func (c *connection) releaseCallSlot(callID uint64) {
 	delete(c.waitingCalls, callID)
 }
 
-// findCallSlot finds a waitingCalls call slot, and returns the
-// associated channel. It returns nil if the slot does not exist.
+// findCallSlot finds a waitingCalls call slot, and returns the associated
+// channel. It returns nil if the slot does not exist.
 func (c *connection) findCallSlot(callID uint64) chan *message {
 	c.callIDLock.RLock()
 	defer c.callIDLock.RUnlock()
 	return c.waitingCalls[callID]
 }
 
-func newConnection() *connection {
-	return &connection{
-		ready:        make(chan struct{}, 0),
-		connected:    true,
-		waitingCalls: make(map[uint64]chan *message),
-	}
-}
-
-// RPCServer represents a protocol handling server implementation.
-type RPCServer interface {
-	protocolID() uint64
-	handler() rpcCallHandler
-}
-
-type rpcServer struct {
-	ProtocolID uint64
-	Handler rpcCallHandler
-}
-
-func (r *rpcServer) protocolID() uint64 {
-	return r.ProtocolID
-}
-
-func (r *rpcServer) handler() rpcCallHandler {
-	return r.Handler
-}
-
-func newRPCServer(protocolID uint64, handler rpcCallHandler) *rpcServer {
-	return &rpcServer{
-		ProtocolID: protocolID,
-		Handler: handler,
-	}
-}
+// ************************
 
 // RPCConnection is a low-level protobuf-based RPC session.
 type RPCConnection struct {
-	done         chan struct{}
-	handlers     map[uint64]rpcCallHandler
-	dialer       func() (net.Conn, error)
-	onConnect    func(c *RPCConnection) error
-	onDisconnect func(c *RPCConnection, err RPCError)
+	done           chan struct{}
+	serverHandlers map[uint64]rpcCallHandler
+	dialer         func() (net.Conn, error)
+	onConnect      func(c *RPCConnection) error
+	onDisconnect   func(c *RPCConnection, err RPCError)
 
 	conn *connection
 }
 
 // RPCOptions are options to use when creating a new RPCConnection.
 type RPCOptions struct {
-	// Conn is the initial connection to use for the RPCConnection,
-	// bypassing an initial call to Dialer.
+	// Conn is the initial connection to use for the RPCConnection, bypassing
+	// an initial call to Dialer.
 	//
 	// Note that ConnectHook, if specified, will be called even if the
 	// connection was manually specified through Conn.
 	Conn net.Conn
 
-	// Dialer establishes a new network connection. If Dialer is
-	// not nil, RPCConnection will call it on setup if no connection
-	// was provided, and whenever a connection is terminated.
+	// Dialer establishes a new network connection. If Dialer is not nil,
+	// RPCConnection will call it on setup if no connection was provided, and
+	// whenever a connection is terminated.
 	//
-	// Dialer is called repeatedly until either a connection is
-	// established, the RPCConnection is closed, or ErrGiveUp is
-	// returned as error.
+	// Dialer is called repeatedly until either a connection is established,
+	// the RPCConnection is closed, or ErrGiveUp is returned as error.
 	//
-	// If Dialer is nil, the connection will be RPCConnection will
-	// terminate on error.
+	// If Dialer is nil, the connection will be RPCConnection will terminate
+	// on error.
 	Dialer func() (net.Conn, error)
 
-	// ConnectHook, if not nil, is called every time a connection is
-	// deemed ready to use, after successfully sending an RPC
-	// preamble.
+	// ConnectHook, if not nil, is called every time a connection is deemed
+	// ready to use, after successfully sending an RPC preamble.
 	//
-	// It can be used to reestablish state after connection reset,
-	// such as by sending authentication messages.
+	// It can be used to reestablish state after connection reset, such as by
+	// sending authentication messages.
 	//
-	// Note that the connection is already marked as ready when this
-	// handler is called, and all other calls will be permitted to run
-	// in parallel.
+	// Note that the connection is already marked as ready when this handler
+	// is called, and all other calls will be permitted to run in parallel.
 	ConnectHook func(c *RPCConnection) error
 
-	// DisconnectHook, if not nil, is called every time a connection
-	// is terminated, with the error that caused it to terminate.
+	// DisconnectHook, if not nil, is called every time a connection  is
+	// terminated, with the error that caused it to terminate.
 	DisconnectHook func(c *RPCConnection, err RPCError)
 
-	// Handlers specify the server implementations that are available
-	// in case of method calls being received.
+	// Servers specify the server implementations that will be used to service
 	//
-	// If a method call is received for a protocol not on this list,
-	// an error reply will be sent.
-	Handlers []RPCServer
+	// If a method call is received for a protocol not on this list, an error
+	// reply will be sent.
+	Servers []RPCServer
 }
 
 // NewRPCConnection creates a new RPCConnection.
 func NewRPCConnection(options *RPCOptions) *RPCConnection {
 	c := &RPCConnection{
-		done:         make(chan struct{}),
-		dialer:       options.Dialer,
-		handlers:     make(map[uint64]rpcCallHandler),
-		onDisconnect: options.DisconnectHook,
-		onConnect:    options.ConnectHook,
-		conn:         newConnection(),
+		done:           make(chan struct{}),
+		dialer:         options.Dialer,
+		serverHandlers: make(map[uint64]rpcCallHandler),
+		onDisconnect:   options.DisconnectHook,
+		onConnect:      options.ConnectHook,
+		conn:           newConnection(),
 	}
 
-	for _, h := range options.Handlers {
-		c.setHandler(h.protocolID(), h.handler())
+	for _, h := range options.Servers {
+		c.serverHandlers[h.protocolID()] = h.handler()
 	}
 
 	c.refreshInnerConn()
@@ -659,17 +683,24 @@ func NewRPCConnection(options *RPCOptions) *RPCConnection {
 func (c *RPCConnection) refreshInnerConn() {
 	select {
 	case <-c.conn.ready:
-		// Ready has already been fired, so the connection has been
-		// used. Create a fresh one.
+		// Ready has already been fired, so the connection has been used.
+		// Create a fresh one.
 		c.conn = newConnection()
 	default:
-		// Ready has not been fired, so we will not replace the
-		// connection.
+		// Ready has not been fired, so we will not replace the connection.
 	}
 }
 
-// connect prepares a new connection based on a successfully dialed
-// net.Conn.
+func (c *RPCConnection) sendPreamble(conn *connection) RPCError {
+	if _, err := c.conn.conn.Write(rpcPreamble); err != nil {
+		err := &rpcError{id: ConnectionError, error: fmt.Sprintf("could not write preamble: %v", err)}
+		c.end(conn, err)
+		return err
+	}
+	return nil
+}
+
+// connect prepares a new connection based on a successfully dialed net.Conn.
 //
 // The return value indicates whether the read loop has been started.
 func (c *RPCConnection) connect(conn net.Conn) bool {
@@ -714,34 +745,24 @@ func (c *RPCConnection) dial() {
 			continue
 		}
 		if c.connect(conn) {
-			// The readloop has been started, which will call us again
-			// if necessary.
+			// The readloop has been started, which will call us again if
+			// necessary.
 			return
 		}
 	}
 }
 
-func (c *RPCConnection) sendPreamble(conn *connection) RPCError {
-	if _, err := c.conn.conn.Write(rpcPreamble); err != nil {
-		err := &rpcError{id: ConnectionError, error: fmt.Sprintf("could not write preamble: %v", err)}
-		c.end(conn, err)
-		return err
-	}
-	return nil
-}
-
-// readLoop services incoming traffic on a connection. It is also
-// responsible for restarting the dialer on error.
+// readLoop services incoming traffic on a connection. It is also responsible
+// for restarting the dialer on error.
 func (c *RPCConnection) readLoop() {
-	// We store the connection struct, and pass it around. This is
-	// to ensure that we only terminate the *current* connection on
-	// error, rather than a freshly established one.
+	// We store the connection struct, and pass it around. This is to ensure
+	// that we only terminate the *current* connection on error, rather than a
+	// freshly established one.
 	conn := c.conn
 
-	// Check if the RPCConnection has been closed. We can end up here
-	// if the RPCConnection was closed after the dial loop checked but
-	// before a new connection was inserted, leading to Close closing
-	// an old connection.
+	// Check if the RPCConnection has been closed. We can end up here if the
+	// RPCConnection was closed after the dial loop checked but before a new
+	// connection was inserted, leading to Close closing an old connection.
 	select {
 	case <-c.done:
 		c.end(conn, nil)
@@ -790,14 +811,13 @@ func (c *RPCConnection) readLoop() {
 			// We have less than minRead space available
 			newBuf := buf
 
-			// Check if we need a bigger buffer, or if cleanup is
-			// sufficient.
+			// Check if we need a bigger buffer, or if cleanup is sufficient.
 			if off+free < minRead {
 				newBuf = makeSlice(2*cap(buf) + minRead)
 			}
 
-			// This either copies to the beginning of our initial
-			// buffer, or relocates us to our new buffer.
+			// This either copies to the beginning of our initial buffer, or
+			// relocates us to our new buffer.
 			copy(newBuf, buf[off:])
 			buf = newBuf[:len(buf)-off]
 			off = 0
@@ -847,7 +867,7 @@ func (c *RPCConnection) gotMessage(ctx context.Context, conn *connection, msg *m
 		if err != nil {
 			return &rpcError{id: ProtocolError, error: "could not read protocolID from method call"}
 		}
-		handler, found := c.handlers[protocolID]
+		handler, found := c.serverHandlers[protocolID]
 		if !found {
 			err := &rpcError{id: ProtocolError, error: fmt.Sprintf("unknown protocol: %d", protocolID)}
 
@@ -896,19 +916,8 @@ func (c *RPCConnection) gotMessage(ctx context.Context, conn *connection, msg *m
 	return nil
 }
 
-func contextToError(e error) RPCError {
-	switch e {
-	case context.DeadlineExceeded:
-		return &rpcError{id: TimeoutError, error: "method call timed out"}
-	case context.Canceled:
-		return &rpcError{id: GenericError, error: "method call cancelled"}
-	default:
-		return &rpcError{id: GenericError, error: fmt.Sprintf("unknown cancellation reason: %+v", e)}
-	}
-}
-
-// call executes a method call, and if waitForReply is true, waits for
-// its completion.
+// call executes a method call, and if waitForReply is true, waits for its
+// completion.
 func (c *RPCConnection) call(ctx context.Context, waitForReply bool, protocolID, methodID uint64, callArgs rpcMessage) (uint64, *message, RPCError) {
 	conn := c.conn
 
@@ -976,6 +985,7 @@ func (c *RPCConnection) call(ctx context.Context, waitForReply bool, protocolID,
 	}
 }
 
+// send serializes a message and sends it down the pipe.
 func (c *RPCConnection) send(conn *connection, msg *message) RPCError {
 	bytes := msg.Bytes()
 	conn.writeLock.Lock()
@@ -1002,9 +1012,9 @@ func (c *RPCConnection) Wait() {
 	<-c.done
 }
 
-// Ready waits for the RPCConnection to either become ready for use,
-// or be terminated. Ready returns true if the cause for waking up
-// was that the connection became ready.
+// Ready waits for the RPCConnection to either become ready for use, or be
+// terminated. Ready returns true if the cause for waking up was that the
+// connection became ready.
 func (c *RPCConnection) Ready() bool {
 	select {
 	case <-c.conn.ready:
@@ -1014,12 +1024,15 @@ func (c *RPCConnection) Ready() bool {
 	}
 }
 
+// end signals that a connection should be terminated. It stores the error it
+// was called with, terminates the connection and calls onDisconnect if
+// available.
+//
+// Only the first call to end on a connection has any effect, so it is safe to
+// call multiple times.
 func (c *RPCConnection) end(conn *connection, err RPCError) {
-	if err != nil && conn.endReason == nil {
-		conn.endReason = err
-	}
-
 	if conn.connected {
+		conn.endReason = err
 		conn.connected = false
 		if conn.conn != nil {
 			conn.conn.Close()
@@ -1030,22 +1043,11 @@ func (c *RPCConnection) end(conn *connection, err RPCError) {
 	}
 }
 
-func (c *RPCConnection) setHandler(protocolID uint64, handler rpcCallHandler) {
-	c.handlers[protocolID] = handler
-}
-
-func makeSlice(n int) []byte {
-	// If the make fails, give a known error.
-	defer func() {
-		if recover() != nil {
-			panic(bytes.ErrTooLarge)
-		}
-	}()
-	return make([]byte, n)
-}
-
-func (c *RPCConnection) handlePrivateResponse(resultType uint64, msg *message) (RPCError, bool) {
-	if isRPCError(resultType) {
+// handlePrivateResponse is called from individual method response handlers
+// for unknown message types to handle private message types.
+func (c *RPCConnection) handlePrivateResponse(resultType uint64, msg *message) (err RPCError, isPrivate bool) {
+	switch resultType {
+	case privateTypeRPCError:
 		var r rpcError
 		if err := r.RPCDecode(msg); err != nil {
 			return &rpcError{id: GenericError, error: fmt.Sprintf("could not decode result: %v", err)}, true
