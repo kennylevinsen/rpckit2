@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"io/ioutil"
 	"net/http"
@@ -104,10 +105,22 @@ func (c *HTTPPingpongClient) Authenticate(ctx context.Context, reqUsername strin
 	if err != nil {
 		return
 	}
+
+	if !(resp.StatusCode >= 200 && resp.StatusCode < 300) {
+		var errorbody struct {
+			Error string `json:"error"`
+		}
+
+		if err = json.Unmarshal(b, &errorbody); err != nil {
+			return
+		}
+
+		err = errors.New(errorbody.Error)
+		return
+	}
 	if err = json.Unmarshal(b, &respbody); err != nil {
 		return
 	}
-
 	respSuccess = respbody.Success
 	return
 }
@@ -151,10 +164,22 @@ func (c *HTTPPingpongClient) PingWithReply(ctx context.Context, reqName string) 
 	if err != nil {
 		return
 	}
+
+	if !(resp.StatusCode >= 200 && resp.StatusCode < 300) {
+		var errorbody struct {
+			Error string `json:"error"`
+		}
+
+		if err = json.Unmarshal(b, &errorbody); err != nil {
+			return
+		}
+
+		err = errors.New(errorbody.Error)
+		return
+	}
 	if err = json.Unmarshal(b, &respbody); err != nil {
 		return
 	}
-
 	respGreeting = respbody.Greeting
 	return
 }
@@ -208,10 +233,22 @@ func (c *HTTPPingpongClient) TestMethod(ctx context.Context, reqString string, r
 	if err != nil {
 		return
 	}
+
+	if !(resp.StatusCode >= 200 && resp.StatusCode < 300) {
+		var errorbody struct {
+			Error string `json:"error"`
+		}
+
+		if err = json.Unmarshal(b, &errorbody); err != nil {
+			return
+		}
+
+		err = errors.New(errorbody.Error)
+		return
+	}
 	if err = json.Unmarshal(b, &respbody); err != nil {
 		return
 	}
-
 	respSuccess = respbody.Success
 	return
 }
@@ -256,7 +293,17 @@ func (c *httpCallServerForPingpong) RegisterToMux(m *http.ServeMux) {
 		)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
-			// TODO: Add error!
+			errorbody := struct {
+				Error string `json:"error"`
+			}{
+				Error: err.Error(),
+			}
+			if b, err = json.Marshal(&errorbody); err != nil {
+				return
+			}
+
+			w.Header().Set("Content-Type", "application/json")
+			w.Write(b)
 			return
 		}
 		if b, err = json.Marshal(&respbody); err != nil {
@@ -298,7 +345,17 @@ func (c *httpCallServerForPingpong) RegisterToMux(m *http.ServeMux) {
 		)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
-			// TODO: Add error!
+			errorbody := struct {
+				Error string `json:"error"`
+			}{
+				Error: err.Error(),
+			}
+			if b, err = json.Marshal(&errorbody); err != nil {
+				return
+			}
+
+			w.Header().Set("Content-Type", "application/json")
+			w.Write(b)
 			return
 		}
 		if b, err = json.Marshal(&respbody); err != nil {
@@ -345,7 +402,17 @@ func (c *httpCallServerForPingpong) RegisterToMux(m *http.ServeMux) {
 		)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
-			// TODO: Add error!
+			errorbody := struct {
+				Error string `json:"error"`
+			}{
+				Error: err.Error(),
+			}
+			if b, err = json.Marshal(&errorbody); err != nil {
+				return
+			}
+
+			w.Header().Set("Content-Type", "application/json")
+			w.Write(b)
 			return
 		}
 		if b, err = json.Marshal(&respbody); err != nil {
@@ -421,10 +488,22 @@ func (c *HTTPEchoClient) Echo(ctx context.Context, reqInput string, reqNames []s
 	if err != nil {
 		return
 	}
+
+	if !(resp.StatusCode >= 200 && resp.StatusCode < 300) {
+		var errorbody struct {
+			Error string `json:"error"`
+		}
+
+		if err = json.Unmarshal(b, &errorbody); err != nil {
+			return
+		}
+
+		err = errors.New(errorbody.Error)
+		return
+	}
 	if err = json.Unmarshal(b, &respbody); err != nil {
 		return
 	}
-
 	respOutput = respbody.Output
 	return
 }
@@ -455,6 +534,22 @@ func (c *HTTPEchoClient) Ping(ctx context.Context) (respOutput string, err error
 	b, err = ioutil.ReadAll(resp.Body)
 	resp.Body.Close()
 	if err != nil {
+		return
+	}
+
+	if !(resp.StatusCode >= 200 && resp.StatusCode < 300) {
+		var errorbody struct {
+			Error string `json:"error"`
+		}
+
+		if err = json.Unmarshal(b, &errorbody); err != nil {
+			return
+		}
+
+		err = errors.New(errorbody.Error)
+		return
+	}
+	if err = json.Unmarshal(b, &respbody); err != nil {
 		return
 	}
 	respOutput = respbody.Output
@@ -502,7 +597,17 @@ func (c *httpCallServerForEcho) RegisterToMux(m *http.ServeMux) {
 		)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
-			// TODO: Add error!
+			errorbody := struct {
+				Error string `json:"error"`
+			}{
+				Error: err.Error(),
+			}
+			if b, err = json.Marshal(&errorbody); err != nil {
+				return
+			}
+
+			w.Header().Set("Content-Type", "application/json")
+			w.Write(b)
 			return
 		}
 		if b, err = json.Marshal(&respbody); err != nil {
@@ -538,7 +643,17 @@ func (c *httpCallServerForEcho) RegisterToMux(m *http.ServeMux) {
 		)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
-			// TODO: Add error!
+			errorbody := struct {
+				Error string `json:"error"`
+			}{
+				Error: err.Error(),
+			}
+			if b, err = json.Marshal(&errorbody); err != nil {
+				return
+			}
+
+			w.Header().Set("Content-Type", "application/json")
+			w.Write(b)
 			return
 		}
 		if b, err = json.Marshal(&respbody); err != nil {

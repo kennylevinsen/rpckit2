@@ -38,11 +38,24 @@ func (c *HTTP{{ capitalize .ProtoName }}Client) {{ capitalize .Name }}(ctx conte
         return
     }
 
-    {{- if gt (len .Input) 0 }}
+    if !(resp.StatusCode >= 200 && resp.StatusCode < 300) {
+        var errorbody struct {
+            Error string `json:"error"`
+        }
+
+        if err = json.Unmarshal(b, &errorbody); err != nil {
+            return
+        }
+
+        err = errors.New(errorbody.Error)
+        return
+    }
+
+    {{- if gt (len .Output) 0 }}
     if err = json.Unmarshal(b, &respbody); err != nil {
         return
     }
-    {{ end }}
+    {{- end }}
 
     {{- range .Output }}
     resp{{ capitalize .Name }} = respbody.{{ capitalize .Name }}
