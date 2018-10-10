@@ -45,12 +45,7 @@ func (c *httpCallServerFor{{ capitalize .ProtoName }}) RegisterToMux(m *http.Ser
         {{ end }}
 
         {{- $methodName := .Name }}
-        {{ range .Output }}respbody.{{ capitalize .Name }}, {{ end }}err = c.methods.{{ capitalize .Name }}(
-            r.Context(),
-            {{- range .Input }}
-            reqbody.{{ capitalize .Name }},
-            {{- end }}
-        )
+        {{ range .Output }}respbody.{{ capitalize .Name }}, {{ end }}err = c.methods.{{ capitalize .Name }}(r.Context(){{- range .Input }}, reqbody.{{ capitalize .Name }}{{- end }})
         if err != nil {
             w.WriteHeader(http.StatusInternalServerError)
             errorbody := struct {

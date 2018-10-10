@@ -286,11 +286,7 @@ func (c *httpCallServerForPingpong) RegisterToMux(m *http.ServeMux) {
 			return
 		}
 
-		respbody.Success, err = c.methods.Authenticate(
-			r.Context(),
-			reqbody.Username,
-			reqbody.Password,
-		)
+		respbody.Success, err = c.methods.Authenticate(r.Context(), reqbody.Username, reqbody.Password)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			errorbody := struct {
@@ -339,10 +335,7 @@ func (c *httpCallServerForPingpong) RegisterToMux(m *http.ServeMux) {
 			return
 		}
 
-		respbody.Greeting, err = c.methods.PingWithReply(
-			r.Context(),
-			reqbody.Name,
-		)
+		respbody.Greeting, err = c.methods.PingWithReply(r.Context(), reqbody.Name)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			errorbody := struct {
@@ -391,15 +384,7 @@ func (c *httpCallServerForPingpong) RegisterToMux(m *http.ServeMux) {
 			return
 		}
 
-		respbody.Success, err = c.methods.TestMethod(
-			r.Context(),
-			reqbody.String,
-			reqbody.Bool,
-			reqbody.Int64,
-			reqbody.Int,
-			reqbody.Float,
-			reqbody.Double,
-		)
+		respbody.Success, err = c.methods.TestMethod(r.Context(), reqbody.String, reqbody.Bool, reqbody.Int64, reqbody.Int, reqbody.Float, reqbody.Double)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			errorbody := struct {
@@ -589,12 +574,7 @@ func (c *httpCallServerForEcho) RegisterToMux(m *http.ServeMux) {
 			return
 		}
 
-		respbody.Output, err = c.methods.Echo(
-			r.Context(),
-			reqbody.Input,
-			reqbody.Names,
-			reqbody.Values,
-		)
+		respbody.Output, err = c.methods.Echo(r.Context(), reqbody.Input, reqbody.Names, reqbody.Values)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			errorbody := struct {
@@ -638,9 +618,7 @@ func (c *httpCallServerForEcho) RegisterToMux(m *http.ServeMux) {
 			return
 		}
 
-		respbody.Output, err = c.methods.Ping(
-			r.Context(),
-		)
+		respbody.Output, err = c.methods.Ping(r.Context())
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			errorbody := struct {
