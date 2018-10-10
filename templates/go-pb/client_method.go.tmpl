@@ -2,7 +2,7 @@
 func (c *RPC{{ capitalize .ProtoName }}Client) {{ capitalize .Name }}(ctx context.Context,
     {{- $input := .Input }}
     {{- range $idx, $v := .Input }} req{{ capitalize $v.Name }} {{ $v.T.GoType }}{{- if ne (len $input) $idx }},{{ end }}{{ end }}) (
-    {{- range .Output }}resp{{ capitalize .Name }} {{ .T.GoType }}, {{ end }}err RPCError) {
+    {{- range .Output }}resp{{ capitalize .Name }} {{ .T.GoType }}, {{ end }}err error) {
     resultTypeID, msg, err := c.c.call(ctx, true, {{ .ProtoID }}, uint64(proto{{ capitalize .ProtoName }}Method{{ capitalize .Name }}), &rpcReqProto{{ capitalize .ProtoName }}Method{{ capitalize .Name }}{
         {{- range .Input }}
         {{ capitalize .Name }}: req{{ capitalize .Name }},
@@ -12,8 +12,6 @@ func (c *RPC{{ capitalize .ProtoName }}Client) {{ capitalize .Name }}(ctx contex
     if err != nil {
         if rpcErr, ok := err.(RPCError); ok {
             err = rpcErr
-        } else {
-            err = &rpcError{id: GenericError, error: fmt.Sprintf("call failed: %+v\n", err.Error())}
         }
         return
     }

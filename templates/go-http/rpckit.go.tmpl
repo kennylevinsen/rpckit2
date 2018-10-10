@@ -6,7 +6,7 @@
 {{ range .Methods }}
 {{ template "go-http/serialization.go.tmpl" dict "Prefix" "httpReq" "Name" .Name "Fields" .Input "ProtoName" $protoName }}
 {{ template "go-http/serialization.go.tmpl" dict "Prefix" "httpResp" "Name" .Name "Fields" .Output "ProtoName" $protoName }}
-{{ template "go-http/client_method.go.tmpl" dict "ProtoName" $protoName "Name" .Name "Input" .Input "Output" .Output }}
+{{ template "go-http/client_method.go.tmpl" dict "ProtoName" $protoName "Name" .Name "Input" .Input "Output" .Output "Description" .Description }}
 {{ end }}
 {{ template "go-http/server_method.go.tmpl" dict "ProtoName" $protoName "Methods" .Methods }}
 {{ end }}

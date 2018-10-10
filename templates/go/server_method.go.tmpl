@@ -1,6 +1,5 @@
-// The {{ capitalize .ProtoName }}Methods type defines a server that can
-// process requests from the {{ .ProtoName }} protocol.
-type {{ capitalize .ProtoName }}Methods interface {
+// The {{ capitalize .ProtoName }}Protocol interface defines the {{ .ProtoName }} protocol.
+type {{ capitalize .ProtoName }}Protocol interface {
     {{- range .Methods }}
     // {{ capitalize .Description }}
     {{ capitalize .Name }}(ctx context.Context,

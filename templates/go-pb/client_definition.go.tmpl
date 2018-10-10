@@ -1,7 +1,6 @@
 type proto{{ capitalize .ProtoName }}Method uint64
 
-// The RPC{{ capitalize .ProtoName }}Client type is a RPC client for
-// the {{ .ProtoName }} protocol.
+// The RPC{{ capitalize .ProtoName }}Client type is a RPC client for the {{ .ProtoName }} protocol.
 type RPC{{ capitalize .ProtoName }}Client struct {
 	c *RPCConnection
 }

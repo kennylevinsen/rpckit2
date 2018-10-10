@@ -1,9 +1,10 @@
-func HTTP{{ capitalize .ProtoName }}Server(methods {{ capitalize .ProtoName }}Methods) HTTPServer {
+// HTTP{{ capitalize .ProtoName }}Server creates a new HTTPServer for the {{ .ProtoName }} protocol.
+func HTTP{{ capitalize .ProtoName }}Server(methods {{ capitalize .ProtoName }}Protocol) HTTPServer {
     return &httpCallServerFor{{ capitalize .ProtoName }}{methods: methods}
 }
 
 type httpCallServerFor{{ capitalize .ProtoName }} struct {
-    methods {{ capitalize .ProtoName }}Methods
+    methods {{ capitalize .ProtoName }}Protocol
 }
 
 func (c *httpCallServerFor{{ capitalize .ProtoName }}) RegisterToMux(m *http.ServeMux) {

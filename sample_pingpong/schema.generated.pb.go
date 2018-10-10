@@ -1078,8 +1078,7 @@ func (c *RPCConnection) handlePrivateResponse(resultType uint64, msg *message) (
 
 type protoPingpongMethod uint64
 
-// The RPCPingpongClient type is a RPC client for
-// the pingpong protocol.
+// The RPCPingpongClient type is a RPC client for the pingpong protocol.
 type RPCPingpongClient struct {
 	c *RPCConnection
 }
@@ -1094,10 +1093,6 @@ const protoPingpongMethodAuthenticate protoPingpongMethod = 1
 type rpcReqProtoPingpongMethodAuthenticate struct {
 	Username string
 	Password string
-}
-
-func (s *rpcReqProtoPingpongMethodAuthenticate) RPCID() uint64 {
-	return uint64(protoPingpongMethodAuthenticate)
 }
 
 func (s *rpcReqProtoPingpongMethodAuthenticate) RPCEncode(m *message) error {
@@ -1130,12 +1125,12 @@ func (s *rpcReqProtoPingpongMethodAuthenticate) RPCDecode(m *message) error {
 	return err
 }
 
-type rpcRespProtoPingpongMethodAuthenticate struct {
-	Success bool
+func (s *rpcReqProtoPingpongMethodAuthenticate) RPCID() uint64 {
+	return uint64(protoPingpongMethodAuthenticate)
 }
 
-func (s *rpcRespProtoPingpongMethodAuthenticate) RPCID() uint64 {
-	return uint64(protoPingpongMethodAuthenticate)
+type rpcRespProtoPingpongMethodAuthenticate struct {
+	Success bool
 }
 
 func (s *rpcRespProtoPingpongMethodAuthenticate) RPCEncode(m *message) error {
@@ -1165,8 +1160,12 @@ func (s *rpcRespProtoPingpongMethodAuthenticate) RPCDecode(m *message) error {
 	return err
 }
 
+func (s *rpcRespProtoPingpongMethodAuthenticate) RPCID() uint64 {
+	return uint64(protoPingpongMethodAuthenticate)
+}
+
 // Authenticate using username and password
-func (c *RPCPingpongClient) Authenticate(ctx context.Context, reqUsername string, reqPassword string) (respSuccess bool, err RPCError) {
+func (c *RPCPingpongClient) Authenticate(ctx context.Context, reqUsername string, reqPassword string) (respSuccess bool, err error) {
 	resultTypeID, msg, err := c.c.call(ctx, true, 1, uint64(protoPingpongMethodAuthenticate), &rpcReqProtoPingpongMethodAuthenticate{
 		Username: reqUsername,
 		Password: reqPassword,
@@ -1175,8 +1174,6 @@ func (c *RPCPingpongClient) Authenticate(ctx context.Context, reqUsername string
 	if err != nil {
 		if rpcErr, ok := err.(RPCError); ok {
 			err = rpcErr
-		} else {
-			err = &rpcError{id: GenericError, error: fmt.Sprintf("call failed: %+v\n", err.Error())}
 		}
 		return
 	}
@@ -1206,10 +1203,6 @@ type rpcReqProtoPingpongMethodPingWithReply struct {
 	Name string
 }
 
-func (s *rpcReqProtoPingpongMethodPingWithReply) RPCID() uint64 {
-	return uint64(protoPingpongMethodPingWithReply)
-}
-
 func (s *rpcReqProtoPingpongMethodPingWithReply) RPCEncode(m *message) error {
 	m.WritePBString(1, s.Name)
 	return nil
@@ -1237,12 +1230,12 @@ func (s *rpcReqProtoPingpongMethodPingWithReply) RPCDecode(m *message) error {
 	return err
 }
 
-type rpcRespProtoPingpongMethodPingWithReply struct {
-	Greeting string
+func (s *rpcReqProtoPingpongMethodPingWithReply) RPCID() uint64 {
+	return uint64(protoPingpongMethodPingWithReply)
 }
 
-func (s *rpcRespProtoPingpongMethodPingWithReply) RPCID() uint64 {
-	return uint64(protoPingpongMethodPingWithReply)
+type rpcRespProtoPingpongMethodPingWithReply struct {
+	Greeting string
 }
 
 func (s *rpcRespProtoPingpongMethodPingWithReply) RPCEncode(m *message) error {
@@ -1272,8 +1265,12 @@ func (s *rpcRespProtoPingpongMethodPingWithReply) RPCDecode(m *message) error {
 	return err
 }
 
+func (s *rpcRespProtoPingpongMethodPingWithReply) RPCID() uint64 {
+	return uint64(protoPingpongMethodPingWithReply)
+}
+
 // PingWithReply replies with a greeting based on the provided name
-func (c *RPCPingpongClient) PingWithReply(ctx context.Context, reqName string) (respGreeting string, err RPCError) {
+func (c *RPCPingpongClient) PingWithReply(ctx context.Context, reqName string) (respGreeting string, err error) {
 	resultTypeID, msg, err := c.c.call(ctx, true, 1, uint64(protoPingpongMethodPingWithReply), &rpcReqProtoPingpongMethodPingWithReply{
 		Name: reqName,
 	})
@@ -1281,8 +1278,6 @@ func (c *RPCPingpongClient) PingWithReply(ctx context.Context, reqName string) (
 	if err != nil {
 		if rpcErr, ok := err.(RPCError); ok {
 			err = rpcErr
-		} else {
-			err = &rpcError{id: GenericError, error: fmt.Sprintf("call failed: %+v\n", err.Error())}
 		}
 		return
 	}
@@ -1315,10 +1310,6 @@ type rpcReqProtoPingpongMethodTestMethod struct {
 	Int    int64
 	Float  float32
 	Double float64
-}
-
-func (s *rpcReqProtoPingpongMethodTestMethod) RPCID() uint64 {
-	return uint64(protoPingpongMethodTestMethod)
 }
 
 func (s *rpcReqProtoPingpongMethodTestMethod) RPCEncode(m *message) error {
@@ -1363,12 +1354,12 @@ func (s *rpcReqProtoPingpongMethodTestMethod) RPCDecode(m *message) error {
 	return err
 }
 
-type rpcRespProtoPingpongMethodTestMethod struct {
-	Success bool
+func (s *rpcReqProtoPingpongMethodTestMethod) RPCID() uint64 {
+	return uint64(protoPingpongMethodTestMethod)
 }
 
-func (s *rpcRespProtoPingpongMethodTestMethod) RPCID() uint64 {
-	return uint64(protoPingpongMethodTestMethod)
+type rpcRespProtoPingpongMethodTestMethod struct {
+	Success bool
 }
 
 func (s *rpcRespProtoPingpongMethodTestMethod) RPCEncode(m *message) error {
@@ -1398,8 +1389,12 @@ func (s *rpcRespProtoPingpongMethodTestMethod) RPCDecode(m *message) error {
 	return err
 }
 
+func (s *rpcRespProtoPingpongMethodTestMethod) RPCID() uint64 {
+	return uint64(protoPingpongMethodTestMethod)
+}
+
 // TestMethod is a simple type test
-func (c *RPCPingpongClient) TestMethod(ctx context.Context, reqString string, reqBool bool, reqInt64 int64, reqInt int64, reqFloat float32, reqDouble float64) (respSuccess bool, err RPCError) {
+func (c *RPCPingpongClient) TestMethod(ctx context.Context, reqString string, reqBool bool, reqInt64 int64, reqInt int64, reqFloat float32, reqDouble float64) (respSuccess bool, err error) {
 	resultTypeID, msg, err := c.c.call(ctx, true, 1, uint64(protoPingpongMethodTestMethod), &rpcReqProtoPingpongMethodTestMethod{
 		String: reqString,
 		Bool:   reqBool,
@@ -1412,8 +1407,6 @@ func (c *RPCPingpongClient) TestMethod(ctx context.Context, reqString string, re
 	if err != nil {
 		if rpcErr, ok := err.(RPCError); ok {
 			err = rpcErr
-		} else {
-			err = &rpcError{id: GenericError, error: fmt.Sprintf("call failed: %+v\n", err.Error())}
 		}
 		return
 	}
@@ -1438,7 +1431,7 @@ func (c *RPCPingpongClient) TestMethod(ctx context.Context, reqString string, re
 }
 
 // RPCPingpongServer creates a new RPCServer for the pingpong protocol.
-func RPCPingpongServer(methods PingpongMethods) RPCServer {
+func RPCPingpongServer(methods PingpongProtocol) RPCServer {
 	return &rpcServer{
 		ProtocolID: 1,
 		Server:     &rpcCallServerForPingpong{methods: methods},
@@ -1446,7 +1439,7 @@ func RPCPingpongServer(methods PingpongMethods) RPCServer {
 }
 
 type rpcCallServerForPingpong struct {
-	methods PingpongMethods
+	methods PingpongProtocol
 }
 
 func (s *rpcCallServerForPingpong) rpcCall(ctx context.Context, methodID uint64, m *message) (resp rpcMessage) {
@@ -1524,8 +1517,7 @@ func (s *rpcCallServerForPingpong) rpcCall(ctx context.Context, methodID uint64,
 
 type protoEchoMethod uint64
 
-// The RPCEchoClient type is a RPC client for
-// the echo protocol.
+// The RPCEchoClient type is a RPC client for the echo protocol.
 type RPCEchoClient struct {
 	c *RPCConnection
 }
@@ -1541,10 +1533,6 @@ type rpcReqProtoEchoMethodEcho struct {
 	Input  string
 	Names  []string
 	Values map[string]int64
-}
-
-func (s *rpcReqProtoEchoMethodEcho) RPCID() uint64 {
-	return uint64(protoEchoMethodEcho)
 }
 
 func (s *rpcReqProtoEchoMethodEcho) RPCEncode(m *message) error {
@@ -1625,12 +1613,12 @@ func (s *rpcReqProtoEchoMethodEcho) RPCDecode(m *message) error {
 	return err
 }
 
-type rpcRespProtoEchoMethodEcho struct {
-	Output string
+func (s *rpcReqProtoEchoMethodEcho) RPCID() uint64 {
+	return uint64(protoEchoMethodEcho)
 }
 
-func (s *rpcRespProtoEchoMethodEcho) RPCID() uint64 {
-	return uint64(protoEchoMethodEcho)
+type rpcRespProtoEchoMethodEcho struct {
+	Output string
 }
 
 func (s *rpcRespProtoEchoMethodEcho) RPCEncode(m *message) error {
@@ -1660,8 +1648,12 @@ func (s *rpcRespProtoEchoMethodEcho) RPCDecode(m *message) error {
 	return err
 }
 
+func (s *rpcRespProtoEchoMethodEcho) RPCID() uint64 {
+	return uint64(protoEchoMethodEcho)
+}
+
 // Echo is yet another type test
-func (c *RPCEchoClient) Echo(ctx context.Context, reqInput string, reqNames []string, reqValues map[string]int64) (respOutput string, err RPCError) {
+func (c *RPCEchoClient) Echo(ctx context.Context, reqInput string, reqNames []string, reqValues map[string]int64) (respOutput string, err error) {
 	resultTypeID, msg, err := c.c.call(ctx, true, 2, uint64(protoEchoMethodEcho), &rpcReqProtoEchoMethodEcho{
 		Input:  reqInput,
 		Names:  reqNames,
@@ -1671,8 +1663,6 @@ func (c *RPCEchoClient) Echo(ctx context.Context, reqInput string, reqNames []st
 	if err != nil {
 		if rpcErr, ok := err.(RPCError); ok {
 			err = rpcErr
-		} else {
-			err = &rpcError{id: GenericError, error: fmt.Sprintf("call failed: %+v\n", err.Error())}
 		}
 		return
 	}
@@ -1698,27 +1688,16 @@ func (c *RPCEchoClient) Echo(ctx context.Context, reqInput string, reqNames []st
 
 const protoEchoMethodPing protoEchoMethod = 2
 
-type rpcReqProtoEchoMethodPing struct {
-}
+type rpcReqProtoEchoMethodPing struct{}
 
+func (s *rpcReqProtoEchoMethodPing) RPCEncode(m *message) error { return nil }
+func (s *rpcReqProtoEchoMethodPing) RPCDecode(m *message) error { return nil }
 func (s *rpcReqProtoEchoMethodPing) RPCID() uint64 {
 	return uint64(protoEchoMethodPing)
 }
 
-func (s *rpcReqProtoEchoMethodPing) RPCEncode(m *message) error {
-	return nil
-}
-
-func (s *rpcReqProtoEchoMethodPing) RPCDecode(m *message) error {
-	return nil
-}
-
 type rpcRespProtoEchoMethodPing struct {
 	Output string
-}
-
-func (s *rpcRespProtoEchoMethodPing) RPCID() uint64 {
-	return uint64(protoEchoMethodPing)
 }
 
 func (s *rpcRespProtoEchoMethodPing) RPCEncode(m *message) error {
@@ -1748,15 +1727,17 @@ func (s *rpcRespProtoEchoMethodPing) RPCDecode(m *message) error {
 	return err
 }
 
+func (s *rpcRespProtoEchoMethodPing) RPCID() uint64 {
+	return uint64(protoEchoMethodPing)
+}
+
 // Ping is a simple no-input test
-func (c *RPCEchoClient) Ping(ctx context.Context) (respOutput string, err RPCError) {
+func (c *RPCEchoClient) Ping(ctx context.Context) (respOutput string, err error) {
 	resultTypeID, msg, err := c.c.call(ctx, true, 2, uint64(protoEchoMethodPing), &rpcReqProtoEchoMethodPing{})
 
 	if err != nil {
 		if rpcErr, ok := err.(RPCError); ok {
 			err = rpcErr
-		} else {
-			err = &rpcError{id: GenericError, error: fmt.Sprintf("call failed: %+v\n", err.Error())}
 		}
 		return
 	}
@@ -1781,7 +1762,7 @@ func (c *RPCEchoClient) Ping(ctx context.Context) (respOutput string, err RPCErr
 }
 
 // RPCEchoServer creates a new RPCServer for the echo protocol.
-func RPCEchoServer(methods EchoMethods) RPCServer {
+func RPCEchoServer(methods EchoProtocol) RPCServer {
 	return &rpcServer{
 		ProtocolID: 2,
 		Server:     &rpcCallServerForEcho{methods: methods},
@@ -1789,7 +1770,7 @@ func RPCEchoServer(methods EchoMethods) RPCServer {
 }
 
 type rpcCallServerForEcho struct {
-	methods EchoMethods
+	methods EchoProtocol
 }
 
 func (s *rpcCallServerForEcho) rpcCall(ctx context.Context, methodID uint64, m *message) (resp rpcMessage) {

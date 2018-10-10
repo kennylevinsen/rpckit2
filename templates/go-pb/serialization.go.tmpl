@@ -1,11 +1,13 @@
+{{- if eq (len .Fields) 0 -}}
+type {{ .Prefix }}Proto{{ capitalize .ProtoName }}Method{{ capitalize .Name }} struct {}
+
+func (s *{{ .Prefix }}Proto{{ capitalize .ProtoName }}Method{{ capitalize .Name }}) RPCEncode(m *message) error { return nil }
+func (s *{{ .Prefix }}Proto{{ capitalize .ProtoName }}Method{{ capitalize .Name }}) RPCDecode(m *message) error { return nil }
+{{- else -}}
 type {{ .Prefix }}Proto{{ capitalize .ProtoName }}Method{{ capitalize .Name }} struct {
 {{- range .Fields }}
     {{ capitalize .Name }} {{ .T.GoType }}
 {{- end }}
-}
-
-func (s *{{ .Prefix }}Proto{{ capitalize .ProtoName }}Method{{ capitalize .Name }}) RPCID() uint64 {
-    return uint64(proto{{ capitalize .ProtoName }}Method{{ capitalize .Name }})
 }
 
 func (s *{{ .Prefix }}Proto{{ capitalize .ProtoName }}Method{{ capitalize .Name }}) RPCEncode(m *message) error {
@@ -29,9 +31,6 @@ func (s *{{ .Prefix }}Proto{{ capitalize .ProtoName }}Method{{ capitalize .Name 
 }
 
 func (s *{{ .Prefix }}Proto{{ capitalize .ProtoName }}Method{{ capitalize .Name }}) RPCDecode(m *message) error {
-    {{- if eq (len .Fields) 0 }}
-    return nil
-    {{- else }}
     var (
         err error
         tag uint64
@@ -100,5 +99,8 @@ func (s *{{ .Prefix }}Proto{{ capitalize .ProtoName }}Method{{ capitalize .Name 
         return nil
     }
     return err
-    {{- end }}
+}
+{{ end }}
+func (s *{{ .Prefix }}Proto{{ capitalize .ProtoName }}Method{{ capitalize .Name }}) RPCID() uint64 {
+    return uint64(proto{{ capitalize .ProtoName }}Method{{ capitalize .Name }})
 }

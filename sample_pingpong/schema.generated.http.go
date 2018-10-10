@@ -12,11 +12,13 @@ import (
 	"golang.org/x/net/publicsuffix"
 )
 
+// HTTPClient wraps a http client configured for use with protocol wrappers.
 type HTTPClient struct {
 	client  *http.Client
 	baseURL string
 }
 
+// NewHTTPClient creates a new HTTPClient.
 func NewHTTPClient(baseURL string) (*HTTPClient, error) {
 	jar, err := cookiejar.New(&cookiejar.Options{PublicSuffixList: publicsuffix.List})
 	if err != nil {
@@ -31,11 +33,11 @@ func NewHTTPClient(baseURL string) (*HTTPClient, error) {
 	}, nil
 }
 
-func (c *HTTPClient) NewRequest(method, url string, body io.Reader) (*http.Request, error) {
+func (c *HTTPClient) newRequest(method, url string, body io.Reader) (*http.Request, error) {
 	return http.NewRequest(method, c.baseURL+"/"+url, body)
 }
 
-func (c *HTTPClient) Do(req *http.Request) (*http.Response, error) {
+func (c *HTTPClient) do(req *http.Request) (*http.Response, error) {
 	return c.client.Do(req)
 }
 
@@ -43,11 +45,13 @@ type HTTPServer interface {
 	RegisterToMux(*http.ServeMux)
 }
 
+// The HTTPPingpongClient type is a HTTP client for the pingpong protocol.
 type HTTPPingpongClient struct {
 	client  *HTTPClient
 	baseURL string
 }
 
+// NewHTTPPingpongClient(c *HTTPClient) creates a new HTTP client for the pingpong protocol.
 func NewHTTPPingpongClient(c *HTTPClient) *HTTPPingpongClient {
 	return &HTTPPingpongClient{
 		client:  c,
@@ -55,8 +59,8 @@ func NewHTTPPingpongClient(c *HTTPClient) *HTTPPingpongClient {
 	}
 }
 
-func (c *HTTPPingpongClient) NewRequest(method, url string, body io.Reader) (*http.Request, error) {
-	return c.client.NewRequest(method, c.baseURL+"/"+url, body)
+func (c *HTTPPingpongClient) newRequest(method, url string, body io.Reader) (*http.Request, error) {
+	return c.client.newRequest(method, c.baseURL+"/"+url, body)
 }
 
 type httpReqProtoPingpongMethodAuthenticate struct {
@@ -68,6 +72,7 @@ type httpRespProtoPingpongMethodAuthenticate struct {
 	Success bool `json:"success"`
 }
 
+// Authenticate using username and password
 func (c *HTTPPingpongClient) Authenticate(ctx context.Context, reqUsername string, reqPassword string) (respSuccess bool, err error) {
 	var (
 		b        []byte
@@ -85,12 +90,12 @@ func (c *HTTPPingpongClient) Authenticate(ctx context.Context, reqUsername strin
 		return
 	}
 
-	if req, err = c.NewRequest("POST", "authenticate", bytes.NewReader(b)); err != nil {
+	if req, err = c.newRequest("POST", "authenticate", bytes.NewReader(b)); err != nil {
 		return
 	}
 
 	req = req.WithContext(ctx)
-	if resp, err = c.client.client.Do(req); err != nil {
+	if resp, err = c.client.do(req); err != nil {
 		return
 	}
 
@@ -115,6 +120,7 @@ type httpRespProtoPingpongMethodPingWithReply struct {
 	Greeting string `json:"greeting"`
 }
 
+// PingWithReply replies with a greeting based on the provided name
 func (c *HTTPPingpongClient) PingWithReply(ctx context.Context, reqName string) (respGreeting string, err error) {
 	var (
 		b        []byte
@@ -131,12 +137,12 @@ func (c *HTTPPingpongClient) PingWithReply(ctx context.Context, reqName string) 
 		return
 	}
 
-	if req, err = c.NewRequest("POST", "pingwithreply", bytes.NewReader(b)); err != nil {
+	if req, err = c.newRequest("POST", "pingwithreply", bytes.NewReader(b)); err != nil {
 		return
 	}
 
 	req = req.WithContext(ctx)
-	if resp, err = c.client.client.Do(req); err != nil {
+	if resp, err = c.client.do(req); err != nil {
 		return
 	}
 
@@ -166,6 +172,7 @@ type httpRespProtoPingpongMethodTestMethod struct {
 	Success bool `json:"success"`
 }
 
+// TestMethod is a simple type test
 func (c *HTTPPingpongClient) TestMethod(ctx context.Context, reqString string, reqBool bool, reqInt64 int64, reqInt int64, reqFloat float32, reqDouble float64) (respSuccess bool, err error) {
 	var (
 		b        []byte
@@ -187,12 +194,12 @@ func (c *HTTPPingpongClient) TestMethod(ctx context.Context, reqString string, r
 		return
 	}
 
-	if req, err = c.NewRequest("POST", "testmethod", bytes.NewReader(b)); err != nil {
+	if req, err = c.newRequest("POST", "testmethod", bytes.NewReader(b)); err != nil {
 		return
 	}
 
 	req = req.WithContext(ctx)
-	if resp, err = c.client.client.Do(req); err != nil {
+	if resp, err = c.client.do(req); err != nil {
 		return
 	}
 
@@ -209,12 +216,13 @@ func (c *HTTPPingpongClient) TestMethod(ctx context.Context, reqString string, r
 	return
 }
 
-func HTTPPingpongServer(methods PingpongMethods) HTTPServer {
+// HTTPPingpongServer creates a new HTTPServer for the pingpong protocol.
+func HTTPPingpongServer(methods PingpongProtocol) HTTPServer {
 	return &httpCallServerForPingpong{methods: methods}
 }
 
 type httpCallServerForPingpong struct {
-	methods PingpongMethods
+	methods PingpongProtocol
 }
 
 func (c *httpCallServerForPingpong) RegisterToMux(m *http.ServeMux) {
@@ -352,11 +360,13 @@ func (c *httpCallServerForPingpong) RegisterToMux(m *http.ServeMux) {
 	})
 }
 
+// The HTTPEchoClient type is a HTTP client for the echo protocol.
 type HTTPEchoClient struct {
 	client  *HTTPClient
 	baseURL string
 }
 
+// NewHTTPEchoClient(c *HTTPClient) creates a new HTTP client for the echo protocol.
 func NewHTTPEchoClient(c *HTTPClient) *HTTPEchoClient {
 	return &HTTPEchoClient{
 		client:  c,
@@ -364,8 +374,8 @@ func NewHTTPEchoClient(c *HTTPClient) *HTTPEchoClient {
 	}
 }
 
-func (c *HTTPEchoClient) NewRequest(method, url string, body io.Reader) (*http.Request, error) {
-	return c.client.NewRequest(method, c.baseURL+"/"+url, body)
+func (c *HTTPEchoClient) newRequest(method, url string, body io.Reader) (*http.Request, error) {
+	return c.client.newRequest(method, c.baseURL+"/"+url, body)
 }
 
 type httpReqProtoEchoMethodEcho struct {
@@ -378,6 +388,7 @@ type httpRespProtoEchoMethodEcho struct {
 	Output string `json:"output"`
 }
 
+// Echo is yet another type test
 func (c *HTTPEchoClient) Echo(ctx context.Context, reqInput string, reqNames []string, reqValues map[string]int64) (respOutput string, err error) {
 	var (
 		b        []byte
@@ -396,12 +407,12 @@ func (c *HTTPEchoClient) Echo(ctx context.Context, reqInput string, reqNames []s
 		return
 	}
 
-	if req, err = c.NewRequest("POST", "echo", bytes.NewReader(b)); err != nil {
+	if req, err = c.newRequest("POST", "echo", bytes.NewReader(b)); err != nil {
 		return
 	}
 
 	req = req.WithContext(ctx)
-	if resp, err = c.client.client.Do(req); err != nil {
+	if resp, err = c.client.do(req); err != nil {
 		return
 	}
 
@@ -418,13 +429,11 @@ func (c *HTTPEchoClient) Echo(ctx context.Context, reqInput string, reqNames []s
 	return
 }
 
-type httpReqProtoEchoMethodPing struct {
-}
-
 type httpRespProtoEchoMethodPing struct {
 	Output string `json:"output"`
 }
 
+// Ping is a simple no-input test
 func (c *HTTPEchoClient) Ping(ctx context.Context) (respOutput string, err error) {
 	var (
 		b    []byte
@@ -434,12 +443,12 @@ func (c *HTTPEchoClient) Ping(ctx context.Context) (respOutput string, err error
 		respbody httpRespProtoEchoMethodPing
 	)
 
-	if req, err = c.NewRequest("GET", "ping", bytes.NewReader(b)); err != nil {
+	if req, err = c.newRequest("GET", "ping", bytes.NewReader(b)); err != nil {
 		return
 	}
 
 	req = req.WithContext(ctx)
-	if resp, err = c.client.client.Do(req); err != nil {
+	if resp, err = c.client.do(req); err != nil {
 		return
 	}
 
@@ -452,12 +461,13 @@ func (c *HTTPEchoClient) Ping(ctx context.Context) (respOutput string, err error
 	return
 }
 
-func HTTPEchoServer(methods EchoMethods) HTTPServer {
+// HTTPEchoServer creates a new HTTPServer for the echo protocol.
+func HTTPEchoServer(methods EchoProtocol) HTTPServer {
 	return &httpCallServerForEcho{methods: methods}
 }
 
 type httpCallServerForEcho struct {
-	methods EchoMethods
+	methods EchoProtocol
 }
 
 func (c *httpCallServerForEcho) RegisterToMux(m *http.ServeMux) {

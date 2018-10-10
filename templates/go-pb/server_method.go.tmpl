@@ -1,5 +1,5 @@
 // RPC{{ capitalize .ProtoName }}Server creates a new RPCServer for the {{ .ProtoName }} protocol.
-func RPC{{ capitalize .ProtoName }}Server(methods {{ capitalize .ProtoName }}Methods) RPCServer {
+func RPC{{ capitalize .ProtoName }}Server(methods {{ capitalize .ProtoName }}Protocol) RPCServer {
     return &rpcServer{
         ProtocolID: {{ .ProtoID }},
         Server: &rpcCallServerFor{{ capitalize .ProtoName }}{methods: methods},
@@ -7,7 +7,7 @@ func RPC{{ capitalize .ProtoName }}Server(methods {{ capitalize .ProtoName }}Met
 }
 
 type rpcCallServerFor{{ capitalize .ProtoName }} struct {
-    methods {{ capitalize .ProtoName }}Methods
+    methods {{ capitalize .ProtoName }}Protocol
 }
 
 func (s *rpcCallServerFor{{ capitalize .ProtoName }}) rpcCall(ctx context.Context, methodID uint64, m *message) (resp rpcMessage) {

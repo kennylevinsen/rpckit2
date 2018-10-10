@@ -1,3 +1,4 @@
+// {{ capitalize .Description }}
 func (c *HTTP{{ capitalize .ProtoName }}Client) {{ capitalize .Name }}(ctx context.Context,
     {{- $input := .Input }}
     {{- range $idx, $v := .Input }} req{{ capitalize $v.Name }} {{ $v.T.GoType }}{{- if ne (len $input) $idx }},{{ end }}{{ end }}) (
@@ -22,12 +23,12 @@ func (c *HTTP{{ capitalize .ProtoName }}Client) {{ capitalize .Name }}(ctx conte
     }
     {{ end }}
 
-    if req, err = c.NewRequest({{ if gt (len .Input) 0 }}"POST"{{ else }}"GET"{{ end }}, {{ lower .Name | doublequote }}, bytes.NewReader(b)); err != nil {
+    if req, err = c.newRequest({{ if gt (len .Input) 0 }}"POST"{{ else }}"GET"{{ end }}, {{ lower .Name | doublequote }}, bytes.NewReader(b)); err != nil {
         return
     }
 
     req = req.WithContext(ctx)
-    if resp, err = c.client.client.Do(req); err != nil {
+    if resp, err = c.client.do(req); err != nil {
         return
     }
 

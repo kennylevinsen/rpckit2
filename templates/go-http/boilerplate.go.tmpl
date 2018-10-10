@@ -12,11 +12,13 @@ import (
     "golang.org/x/net/publicsuffix"
 )
 
+// HTTPClient wraps a http client configured for use with protocol wrappers.
 type HTTPClient struct {
     client *http.Client
     baseURL string
 }
 
+// NewHTTPClient creates a new HTTPClient.
 func NewHTTPClient(baseURL string) (*HTTPClient, error) {
     jar, err := cookiejar.New(&cookiejar.Options{PublicSuffixList: publicsuffix.List})
     if err != nil {
@@ -31,11 +33,11 @@ func NewHTTPClient(baseURL string) (*HTTPClient, error) {
     }, nil
 }
 
-func (c *HTTPClient) NewRequest(method, url string, body io.Reader) (*http.Request, error) {
+func (c *HTTPClient) newRequest(method, url string, body io.Reader) (*http.Request, error) {
     return http.NewRequest(method, c.baseURL + "/" + url, body)
 }
 
-func (c *HTTPClient) Do(req *http.Request) (*http.Response, error) {
+func (c *HTTPClient) do(req *http.Request) (*http.Response, error) {
     return c.client.Do(req)
 }
 

@@ -1,8 +1,10 @@
+// The HTTP{{ capitalize .ProtoName }}Client type is a HTTP client for the {{ .ProtoName }} protocol.
 type HTTP{{ capitalize .ProtoName }}Client struct {
     client *HTTPClient
     baseURL string
 }
 
+// NewHTTP{{ capitalize .ProtoName }}Client(c *HTTPClient) creates a new HTTP client for the {{ .ProtoName }} protocol.
 func NewHTTP{{ capitalize .ProtoName }}Client(c *HTTPClient) *HTTP{{ capitalize .ProtoName }}Client {
     return &HTTP{{- capitalize .ProtoName }}Client{
         client: c,
@@ -10,6 +12,6 @@ func NewHTTP{{ capitalize .ProtoName }}Client(c *HTTPClient) *HTTP{{ capitalize 
     }
 }
 
-func (c *HTTP{{ capitalize .ProtoName }}Client) NewRequest(method, url string, body io.Reader) (*http.Request, error) {
-    return c.client.NewRequest(method, c.baseURL + "/" + url, body)
+func (c *HTTP{{ capitalize .ProtoName }}Client) newRequest(method, url string, body io.Reader) (*http.Request, error) {
+    return c.client.newRequest(method, c.baseURL + "/" + url, body)
 }
