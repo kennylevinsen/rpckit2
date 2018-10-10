@@ -8,8 +8,10 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"math/rand"
 	"net"
 	"sync"
+	"time"
 )
 
 
@@ -602,17 +604,6 @@ func (c *connection) findCallSlot(callID uint64) chan *message {
 
 // ************************
 
-// RPCConnection is a low-level protobuf-based RPC session.
-type RPCConnection struct {
-	done           chan struct{}
-	servers map[uint64]rpcCallServer
-	dialer         func() (net.Conn, error)
-	onConnect      func(c *RPCConnection) error
-	onDisconnect   func(c *RPCConnection, err RPCError)
-
-	conn *connection
-}
-
 // RPCOptions are options to use when creating a new RPCConnection.
 type RPCOptions struct {
 	// Conn is the initial connection to use for the RPCConnection, bypassing
@@ -654,6 +645,17 @@ type RPCOptions struct {
 	Servers []RPCServer
 }
 
+// RPCConnection is a low-level protobuf-based RPC session.
+type RPCConnection struct {
+	done           chan struct{}
+	servers map[uint64]rpcCallServer
+	dialer         func() (net.Conn, error)
+	onConnect      func(c *RPCConnection) error
+	onDisconnect   func(c *RPCConnection, err RPCError)
+
+	conn *connection
+}
+
 // NewRPCConnection creates a new RPCConnection.
 func NewRPCConnection(options *RPCOptions) *RPCConnection {
 	c := &RPCConnection{
@@ -677,6 +679,16 @@ func NewRPCConnection(options *RPCOptions) *RPCConnection {
 		c.dial()
 	}
 	return c
+}
+
+// isDone is a convenience wrapper for chekcing if "done" has been asserted.
+func (c *RPCConnection) isDone() bool {
+	select {
+	case <-c.done:
+		return true
+	default:
+		return false
+	}
 }
 
 // refreshInnerConn renews the inner conenction if necessary.
@@ -729,13 +741,14 @@ func (c *RPCConnection) connect(conn net.Conn) bool {
 }
 
 func (c *RPCConnection) dial() {
-	for {
-		select {
-		case <-c.done:
-			return
-		default:
-		}
+	if c.isDone() {
+		return
+	}
 
+	curDelay := 1 * time.Second
+	maxDelay :=  1 * time.Minute
+
+	for {
 		conn, err := c.dialer()
 		if err == ErrGiveUp {
 			close(c.done)
@@ -748,6 +761,18 @@ func (c *RPCConnection) dial() {
 			// The readloop has been started, which will call us again if
 			// necessary.
 			return
+		}
+
+		// exponential back-off with 25% jitter
+		jitter := time.Duration(rand.Int63n(int64(curDelay / 4)))
+		select {
+		case <-c.done:
+			return
+		case <-time.After(curDelay + jitter):
+			curDelay *= 2
+			if curDelay > maxDelay {
+				curDelay = maxDelay
+			}
 		}
 	}
 }
@@ -763,11 +788,9 @@ func (c *RPCConnection) readLoop() {
 	// Check if the RPCConnection has been closed. We can end up here if the
 	// RPCConnection was closed after the dial loop checked but before a new
 	// connection was inserted, leading to Close closing an old connection.
-	select {
-	case <-c.done:
+	if c.isDone() {
 		c.end(conn, nil)
 		return
-	default:
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
