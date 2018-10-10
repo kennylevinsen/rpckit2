@@ -1455,11 +1455,7 @@ func (s *rpcCallServerForPingpong) rpcCall(ctx context.Context, methodID uint64,
 		if err := args.RPCDecode(m); err != nil {
 			return &rpcError{id: ProtocolError, error: fmt.Sprintf("unable to decode method call: %v", err)}
 		}
-		success, err := s.methods.Authenticate(
-			ctx,
-			args.Username,
-			args.Password,
-		)
+		success, err := s.methods.Authenticate(ctx, args.Username, args.Password)
 		if err != nil {
 			if rpcMsg, ok := err.(rpcMessage); ok {
 				return rpcMsg
@@ -1474,10 +1470,7 @@ func (s *rpcCallServerForPingpong) rpcCall(ctx context.Context, methodID uint64,
 		if err := args.RPCDecode(m); err != nil {
 			return &rpcError{id: ProtocolError, error: fmt.Sprintf("unable to decode method call: %v", err)}
 		}
-		greeting, err := s.methods.PingWithReply(
-			ctx,
-			args.Name,
-		)
+		greeting, err := s.methods.PingWithReply(ctx, args.Name)
 		if err != nil {
 			if rpcMsg, ok := err.(rpcMessage); ok {
 				return rpcMsg
@@ -1492,15 +1485,7 @@ func (s *rpcCallServerForPingpong) rpcCall(ctx context.Context, methodID uint64,
 		if err := args.RPCDecode(m); err != nil {
 			return &rpcError{id: ProtocolError, error: fmt.Sprintf("unable to decode method call: %v", err)}
 		}
-		success, err := s.methods.TestMethod(
-			ctx,
-			args.String,
-			args.Bool,
-			args.Int64,
-			args.Int,
-			args.Float,
-			args.Double,
-		)
+		success, err := s.methods.TestMethod(ctx, args.String, args.Bool, args.Int64, args.Int, args.Float, args.Double)
 		if err != nil {
 			if rpcMsg, ok := err.(rpcMessage); ok {
 				return rpcMsg
@@ -1786,12 +1771,7 @@ func (s *rpcCallServerForEcho) rpcCall(ctx context.Context, methodID uint64, m *
 		if err := args.RPCDecode(m); err != nil {
 			return &rpcError{id: ProtocolError, error: fmt.Sprintf("unable to decode method call: %v", err)}
 		}
-		output, err := s.methods.Echo(
-			ctx,
-			args.Input,
-			args.Names,
-			args.Values,
-		)
+		output, err := s.methods.Echo(ctx, args.Input, args.Names, args.Values)
 		if err != nil {
 			if rpcMsg, ok := err.(rpcMessage); ok {
 				return rpcMsg
@@ -1806,9 +1786,7 @@ func (s *rpcCallServerForEcho) rpcCall(ctx context.Context, methodID uint64, m *
 		if err := args.RPCDecode(m); err != nil {
 			return &rpcError{id: ProtocolError, error: fmt.Sprintf("unable to decode method call: %v", err)}
 		}
-		output, err := s.methods.Ping(
-			ctx,
-		)
+		output, err := s.methods.Ping(ctx)
 		if err != nil {
 			if rpcMsg, ok := err.(rpcMessage); ok {
 				return rpcMsg

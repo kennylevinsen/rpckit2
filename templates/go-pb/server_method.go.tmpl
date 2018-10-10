@@ -25,12 +25,7 @@ func (s *rpcCallServerFor{{ capitalize .ProtoName }}) rpcCall(ctx context.Contex
         if err := args.RPCDecode(m); err != nil {
             return &rpcError{id: ProtocolError, error: fmt.Sprintf("unable to decode method call: %v", err)}
         }
-        {{ range .Output }}{{ .Name }}, {{ end }}err := s.methods.{{ capitalize .Name }}(
-            ctx,
-            {{- range .Input }}
-            args.{{ capitalize .Name }},
-            {{- end }}
-        )
+        {{ range .Output }}{{ .Name }}, {{ end }}err := s.methods.{{ capitalize .Name }}(ctx{{- range .Input }}, args.{{ capitalize .Name }}{{- end }})
         if err != nil {
             if rpcMsg, ok := err.(rpcMessage); ok {
                 return rpcMsg
