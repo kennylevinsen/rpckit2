@@ -674,7 +674,7 @@ func NewRPCConnection(options *RPCOptions) *RPCConnection {
 	if options.Conn != nil {
 		c.connect(options.Conn)
 	} else {
-		c.dial()
+		go c.dial()
 	}
 	return c
 }
@@ -729,10 +729,11 @@ func (c *RPCConnection) connect(conn net.Conn) bool {
 	go c.readLoop()
 
 	if c.onConnect != nil {
-		if err := c.onConnect(c); err != nil {
-			c.end(c.conn, &rpcError{id: ApplicationError, error: err.Error()})
-			return true
-		}
+		go func() {
+			if err := c.onConnect(c); err != nil {
+				c.end(c.conn, &rpcError{id: ApplicationError, error: err.Error()})
+			}
+		}()
 	}
 
 	return true
