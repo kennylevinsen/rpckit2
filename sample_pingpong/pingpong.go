@@ -72,13 +72,12 @@ func testRPC() {
 				panic(err)
 			}
 
-			c.Close()
 
 			fmt.Printf("RPC test complete\n")
+			c.Close()
 			return nil
 		},
-	})
-
+	}).Wait()
 }
 
 func testHTTP() {

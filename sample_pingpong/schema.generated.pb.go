@@ -754,9 +754,7 @@ func (c *RPCConnection) dial() {
 			return
 		} else if err != nil {
 			c.end(c.conn, &rpcError{id: ApplicationError, error: err.Error()})
-			continue
-		}
-		if c.connect(conn) {
+		} else if err == nil && c.connect(conn) {
 			// The readloop has been started, which will call us again if
 			// necessary.
 			return
