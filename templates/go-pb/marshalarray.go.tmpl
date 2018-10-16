@@ -1,0 +1,3 @@
+for _, v := range {{ .Accessor }} {
+    {{ template "go-pb/marshal.go.tmpl" dict "ID" .ID "Accessor" "v" "Field" .Field.InnerValue "Message" .Message -}}
+}

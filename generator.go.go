@@ -10,6 +10,7 @@ import (
 	"strings"
 	"text/template"
 	"unicode"
+	"log"
 
 	"golang.org/x/tools/imports"
 )
@@ -19,6 +20,14 @@ import (
 var template_deps = []string{
 	"go-pb/boilerplate.go.tmpl",
 	"go-pb/property_to_wiretype.go.tmpl",
+	"go-pb/marshalsimple.go.tmpl",
+	"go-pb/marshalarray.go.tmpl",
+	"go-pb/marshalmap.go.tmpl",
+	"go-pb/marshal.go.tmpl",
+	"go-pb/unmarshalsimple.go.tmpl",
+	"go-pb/unmarshalarray.go.tmpl",
+	"go-pb/unmarshalmap.go.tmpl",
+	"go-pb/unmarshal.go.tmpl",
 	"go-pb/serialization.go.tmpl",
 	"go-pb/client_definition.go.tmpl",
 	"go-pb/client_method.go.tmpl",
@@ -54,6 +63,13 @@ type TemplateContext struct {
 
 func (g GoGenerator) Generate(p string) error {
 	funcs := template.FuncMap{
+		"log": func (formatter string, v ...interface{}) string {
+			log.Printf(formatter, v...)
+			return ""
+		},
+		"format": func (formatter string, v ...interface{}) string {
+			return fmt.Sprintf(formatter, v...)
+		},
 		"error": func(s string) error {
 			return errors.New(s)
 		},
@@ -113,8 +129,6 @@ func (g GoGenerator) Generate(p string) error {
 		})
 	}
 
-	// TODO: Clean up the copy-pasted code below.
-
 	for _, v := range []string{"pb", "http", ""} {
 		filepath := p
 		templatepath := "/rpckit.go.tmpl"
@@ -128,16 +142,16 @@ func (g GoGenerator) Generate(p string) error {
 
 		var buf bytes.Buffer
 		if err := tmpl.ExecuteTemplate(&buf, templatepath, ctx); err != nil {
-			return fmt.Errorf("%s template execution failed: %+v\n", v, err)
+			return fmt.Errorf("%s template execution failed: %+v", v, err)
 		}
 
 		final, err := imports.Process(filepath, buf.Bytes(), &imports.Options{Comments: true, FormatOnly: true})
 		if err != nil {
-			return fmt.Errorf("%s template prettification failed: %+v\n", v, err)
+			return fmt.Errorf("%s template prettification failed: %+v", v, err)
 		}
 
 		if err := ioutil.WriteFile(filepath, final, 0644); err != nil {
-			return fmt.Errorf("file write failed: %+v\n", err)
+			return fmt.Errorf("file write failed: %+v", err)
 		}
 	}
 

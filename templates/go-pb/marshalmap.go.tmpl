@@ -1,0 +1,7 @@
+for k, v := range {{ .Accessor }} {
+    m := {{ .Message }}
+    em := newEmbeddedMessage(messageCapacity)
+    {{ template "go-pb/marshal.go.tmpl" dict "ID" 1 "Accessor" "k" "Field" .Field.InnerKey "Message" "em" -}}
+    {{ template "go-pb/marshal.go.tmpl" dict "ID" 2 "Accessor" "v" "Field" .Field.InnerValue "Message" "em" -}}
+    m.WritePBMessage({{ .ID }}, em)
+}

@@ -1,0 +1,5 @@
+{{- log "UNMARSHAL: %#v" . }}
+{{- if .Field.IsMap -}}{{- template "go-pb/unmarshalmap.go.tmpl" . -}}
+{{- else if .Field.IsArray -}}{{- template "go-pb/unmarshalarray.go.tmpl" . -}}
+{{- else -}}{{- template "go-pb/unmarshalsimple.go.tmpl" . -}}
+{{- end -}}

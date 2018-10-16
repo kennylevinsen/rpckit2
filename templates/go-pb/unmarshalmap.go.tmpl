@@ -1,0 +1,35 @@
+m := {{ .Message }}
+var em *message
+if {{ .Accessor }} == nil {
+    {{ .Accessor }} = make({{ .Field.GoType}})
+}
+
+outer := {{ .Accessor }}
+var k {{ .Field.InnerKey.GoType }}
+var v {{ .Field.InnerValue.GoType }}
+em, err = m.ReadEmbeddedMessage()
+if err != nil {
+    break
+}
+
+for err == nil {
+    tag, err = em.ReadVarint()
+    switch tag {
+    case uint64(1 << 3) | uint64({{ template "go-pb/property_to_wiretype.go.tmpl" .Field.InnerKey.String}}):
+        {{ template "go-pb/unmarshal.go.tmpl" dict "Field" .Field.InnerKey "Accessor" "k" "Message" "em" -}}
+    case uint64(2 << 3) | uint64({{ template "go-pb/property_to_wiretype.go.tmpl" .Field.InnerValue.String}}):
+        {{ template "go-pb/unmarshal.go.tmpl" dict "Field" .Field.InnerValue "Accessor" "v" "Message" "em" -}}
+    default:
+        if err != io.EOF {
+            err = em.ReadPBSkip(tag)
+        }
+    }
+}
+
+outer[k] = v
+
+if err == io.EOF {
+    err = nil
+} else if err != nil {
+    break
+}
