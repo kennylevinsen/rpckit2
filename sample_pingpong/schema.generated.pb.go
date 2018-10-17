@@ -1110,8 +1110,10 @@ func (s *rpcReqProtoPingpongMethodAuthenticate) RPCDecode(m *message) error {
 		switch tag {
 		case uint64(1<<3) | uint64(wireTypeLengthDelimited):
 			s.Username, err = m.ReadString()
+
 		case uint64(2<<3) | uint64(wireTypeLengthDelimited):
 			s.Password, err = m.ReadString()
+
 		default:
 			if err != io.EOF {
 				err = m.ReadPBSkip(tag)
@@ -1147,6 +1149,7 @@ func (s *rpcRespProtoPingpongMethodAuthenticate) RPCDecode(m *message) error {
 		switch tag {
 		case uint64(1<<3) | uint64(wireTypeVarint):
 			s.Success, err = m.ReadBool()
+
 		default:
 			if err != io.EOF {
 				err = m.ReadPBSkip(tag)
@@ -1217,6 +1220,7 @@ func (s *rpcReqProtoPingpongMethodPingWithReply) RPCDecode(m *message) error {
 		switch tag {
 		case uint64(1<<3) | uint64(wireTypeLengthDelimited):
 			s.Name, err = m.ReadString()
+
 		default:
 			if err != io.EOF {
 				err = m.ReadPBSkip(tag)
@@ -1252,6 +1256,7 @@ func (s *rpcRespProtoPingpongMethodPingWithReply) RPCDecode(m *message) error {
 		switch tag {
 		case uint64(1<<3) | uint64(wireTypeLengthDelimited):
 			s.Greeting, err = m.ReadString()
+
 		default:
 			if err != io.EOF {
 				err = m.ReadPBSkip(tag)
@@ -1331,16 +1336,22 @@ func (s *rpcReqProtoPingpongMethodTestMethod) RPCDecode(m *message) error {
 		switch tag {
 		case uint64(1<<3) | uint64(wireTypeLengthDelimited):
 			s.String, err = m.ReadString()
+
 		case uint64(2<<3) | uint64(wireTypeVarint):
 			s.Bool, err = m.ReadBool()
+
 		case uint64(3<<3) | uint64(wireType64bit):
 			s.Int64, err = m.ReadInt64()
+
 		case uint64(4<<3) | uint64(wireTypeVarint):
 			s.Int, err = m.ReadInt()
+
 		case uint64(5<<3) | uint64(wireType32bit):
 			s.Float, err = m.ReadFloat()
+
 		case uint64(6<<3) | uint64(wireType64bit):
 			s.Double, err = m.ReadDouble()
+
 		default:
 			if err != io.EOF {
 				err = m.ReadPBSkip(tag)
@@ -1376,6 +1387,7 @@ func (s *rpcRespProtoPingpongMethodTestMethod) RPCDecode(m *message) error {
 		switch tag {
 		case uint64(1<<3) | uint64(wireTypeVarint):
 			s.Success, err = m.ReadBool()
+
 		default:
 			if err != io.EOF {
 				err = m.ReadPBSkip(tag)
@@ -1514,9 +1526,10 @@ func NewRPCEchoClient(c *RPCConnection) *RPCEchoClient {
 const protoEchoMethodEcho protoEchoMethod = 1
 
 type rpcReqProtoEchoMethodEcho struct {
-	Input  string
-	Names  []string
-	Values map[string]int64
+	Input     string
+	Names     []string
+	Values    map[string]map[string]int64
+	Something EchoThing
 }
 
 func (s *rpcReqProtoEchoMethodEcho) RPCEncode(m *message) error {
@@ -1525,10 +1538,25 @@ func (s *rpcReqProtoEchoMethodEcho) RPCEncode(m *message) error {
 		m.WritePBString(2, v)
 	}
 	for k, v := range s.Values {
+		m := m
 		em := newEmbeddedMessage(messageCapacity)
 		em.WritePBString(1, k)
-		em.WritePBInt(2, v)
+		for k, v := range v {
+			m := em
+			em := newEmbeddedMessage(messageCapacity)
+			em.WritePBString(1, k)
+			em.WritePBInt(2, v)
+			m.WritePBMessage(2, em)
+		}
 		m.WritePBMessage(3, em)
+	}
+	{
+		m := m
+		em := newEmbeddedMessage(messageCapacity)
+
+		em.WritePBString(1, s.Something.Wee)
+
+		m.WritePBMessage(4, em)
 	}
 	return nil
 }
@@ -1543,48 +1571,112 @@ func (s *rpcReqProtoEchoMethodEcho) RPCDecode(m *message) error {
 		switch tag {
 		case uint64(1<<3) | uint64(wireTypeLengthDelimited):
 			s.Input, err = m.ReadString()
+
 		case uint64(2<<3) | uint64(wireTypeLengthDelimited):
 			var v string
 			v, err = m.ReadString()
 			s.Names = append(s.Names, v)
+
 		case uint64(3<<3) | uint64(wireTypeLengthDelimited):
+			m := m
 			var em *message
 			if s.Values == nil {
-				s.Values = make(map[string]int64)
+				s.Values = make(map[string]map[string]int64)
 			}
 
+			outer := s.Values
 			var k string
-			var v int64
+			var v map[string]int64
 			em, err = m.ReadEmbeddedMessage()
 			if err != nil {
 				break
 			}
 
-			tag, err = em.ReadVarint()
-			switch tag {
-			case uint64(1<<3) | uint64(wireTypeLengthDelimited):
-				k, err = em.ReadString()
-			default:
-				if err != io.EOF {
-					err = m.ReadPBSkip(tag)
+			for err == nil {
+				tag, err = em.ReadVarint()
+				switch tag {
+				case uint64(1<<3) | uint64(wireTypeLengthDelimited):
+					k, err = em.ReadString()
+				case uint64(2<<3) | uint64(wireTypeLengthDelimited):
+					m := em
+					var em *message
+					if v == nil {
+						v = make(map[string]int64)
+					}
+
+					outer := v
+					var k string
+					var v int64
+					em, err = m.ReadEmbeddedMessage()
+					if err != nil {
+						break
+					}
+
+					for err == nil {
+						tag, err = em.ReadVarint()
+						switch tag {
+						case uint64(1<<3) | uint64(wireTypeLengthDelimited):
+							k, err = em.ReadString()
+						case uint64(2<<3) | uint64(wireTypeVarint):
+							v, err = em.ReadInt()
+						default:
+							if err != io.EOF {
+								err = em.ReadPBSkip(tag)
+							}
+						}
+					}
+
+					outer[k] = v
+
+					if err == io.EOF {
+						err = nil
+					} else if err != nil {
+						break
+					}
+				default:
+					if err != io.EOF {
+						err = em.ReadPBSkip(tag)
+					}
 				}
 			}
 
-			tag, err = em.ReadVarint()
-			switch tag {
-			case uint64(2<<3) | uint64(wireTypeVarint):
-				v, err = em.ReadInt()
-				s.Values[k] = v
-			default:
-				if err != io.EOF {
-					err = m.ReadPBSkip(tag)
-				}
-			}
+			outer[k] = v
+
 			if err == io.EOF {
 				err = nil
 			} else if err != nil {
 				break
 			}
+
+		case uint64(4<<3) | uint64(wireTypeLengthDelimited):
+			m := m
+			var em *message
+
+			em, err = m.ReadEmbeddedMessage()
+			if err != nil {
+				break
+			}
+
+			for err == nil {
+				tag, err = em.ReadVarint()
+				switch tag {
+
+				case uint64(1<<3) | uint64(wireTypeLengthDelimited):
+					s.Something.Wee, err = em.ReadString()
+
+				default:
+					if err != io.EOF {
+						err = em.ReadPBSkip(tag)
+					}
+				}
+			}
+
+			if err == io.EOF {
+				err = nil
+			} else if err != nil {
+				break
+			}
+
 		default:
 			if err != io.EOF {
 				err = m.ReadPBSkip(tag)
@@ -1620,6 +1712,7 @@ func (s *rpcRespProtoEchoMethodEcho) RPCDecode(m *message) error {
 		switch tag {
 		case uint64(1<<3) | uint64(wireTypeLengthDelimited):
 			s.Output, err = m.ReadString()
+
 		default:
 			if err != io.EOF {
 				err = m.ReadPBSkip(tag)
@@ -1637,11 +1730,12 @@ func (s *rpcRespProtoEchoMethodEcho) RPCID() uint64 {
 }
 
 // Echo is yet another type test
-func (c *RPCEchoClient) Echo(ctx context.Context, reqInput string, reqNames []string, reqValues map[string]int64) (respOutput string, err error) {
+func (c *RPCEchoClient) Echo(ctx context.Context, reqInput string, reqNames []string, reqValues map[string]map[string]int64, reqSomething EchoThing) (respOutput string, err error) {
 	resultTypeID, msg, err := c.c.call(ctx, true, 2, uint64(protoEchoMethodEcho), &rpcReqProtoEchoMethodEcho{
-		Input:  reqInput,
-		Names:  reqNames,
-		Values: reqValues,
+		Input:     reqInput,
+		Names:     reqNames,
+		Values:    reqValues,
+		Something: reqSomething,
 	})
 
 	if err != nil {
@@ -1699,6 +1793,7 @@ func (s *rpcRespProtoEchoMethodPing) RPCDecode(m *message) error {
 		switch tag {
 		case uint64(1<<3) | uint64(wireTypeLengthDelimited):
 			s.Output, err = m.ReadString()
+
 		default:
 			if err != io.EOF {
 				err = m.ReadPBSkip(tag)
@@ -1770,7 +1865,7 @@ func (s *rpcCallServerForEcho) rpcCall(ctx context.Context, methodID uint64, m *
 		if err := args.RPCDecode(m); err != nil {
 			return &rpcError{id: ProtocolError, error: fmt.Sprintf("unable to decode method call: %v", err)}
 		}
-		output, err := s.methods.Echo(ctx, args.Input, args.Names, args.Values)
+		output, err := s.methods.Echo(ctx, args.Input, args.Names, args.Values, args.Something)
 		if err != nil {
 			if rpcMsg, ok := err.(rpcMessage); ok {
 				return rpcMsg

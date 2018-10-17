@@ -1,0 +1,28 @@
+m := {{ .Message }}
+var em *message
+
+em, err = m.ReadEmbeddedMessage()
+if err != nil {
+    break
+}
+
+for err == nil {
+    tag, err = em.ReadVarint()
+    switch tag {
+    {{ $accessor := .Accessor }}
+    {{ range .Field.Fields }}
+    case uint64({{ .ID }} << 3) | uint64({{ template "go-pb/property_to_wiretype.go.tmpl" .T.String}}):
+        {{- template "go-pb/unmarshal.go.tmpl" dict "Field" .T "Accessor" (format "%s.%s" $accessor (capitalize .Name)) "Message" "em" -}}
+    {{- end }}
+    default:
+        if err != io.EOF {
+            err = em.ReadPBSkip(tag)
+        }
+    }
+}
+
+if err == io.EOF {
+    err = nil
+} else if err != nil {
+    break
+}

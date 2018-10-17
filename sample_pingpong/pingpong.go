@@ -55,11 +55,11 @@ func testRPC() {
 			if greeting != "hello Oliver" {
 				panic("incorrect greeting")
 			}
-			greeting2, err := echoClient.Echo(ctx, "weee", []string{"Hello", ", ", "World", "!"}, map[string]int64{
-				"five":      5,
-				"two":       2,
-				"thirtysix": 36,
-			})
+			greeting2, err := echoClient.Echo(ctx, "weee", []string{"Hello", ", ", "World", "!"}, map[string]map[string]int64{
+				"five":      map[string]int64{"five": 5, "fiftyfive": 55, "fivehundredandfiftyfive": 555},
+				"two":       map[string]int64{"two": 2, "twentytwo": 22, "twohundredandtwentytwo": 222},
+				"thirtysix": map[string]int64{"thirtysix": 36, "threethousandandthirtysix": 3636, "threehundredsixtythreethousandthirtysix": 363636},
+			}, EchoThing{Wee: "asdf"})
 			if err != nil {
 				panic(err)
 			}
@@ -118,11 +118,11 @@ func testHTTP() {
 	if greeting != "hello Oliver" {
 		panic("incorrect greeting")
 	}
-	greeting2, err := echoClient.Echo(ctx, "weee", []string{"Hello", ", ", "World", "!"}, map[string]int64{
-		"five":      5,
-		"two":       2,
-		"thirtysix": 36,
-	})
+	greeting2, err := echoClient.Echo(ctx, "weee", []string{"Hello", ", ", "World", "!"}, map[string]map[string]int64{
+		"five":      map[string]int64{"five": 5, "fiftyfive": 55, "fivehundredandfiftyfive": 555},
+		"two":       map[string]int64{"two": 2, "twentytwo": 22, "twohundredandtwentytwo": 222},
+		"thirtysix": map[string]int64{"thirtysix": 36, "threethousandandthirtysix": 3636, "threehundredsixtythreethousandthirtysix": 363636},
+	}, EchoThing{Wee: "asdf"})
 	if err != nil {
 		panic(err)
 	}
@@ -170,11 +170,8 @@ type echoServer struct {
 	authenticated bool
 }
 
-func (s *echoServer) Echo(ctx context.Context, input string, names []string, values map[string]int64) (string, error) {
-	if values == nil || values["five"] != 5 || values["two"] != 2 ||
-		values["thirtysix"] != 36 || len(names) != 4 {
-		return "", fmt.Errorf("NOPE.")
-	}
+func (s *echoServer) Echo(ctx context.Context, input string, names []string, values map[string]map[string]int64, echoThing EchoThing) (string, error) {
+	fmt.Printf("VALUES: %#v, %#v\n", values, echoThing)
 	return input, nil
 }
 

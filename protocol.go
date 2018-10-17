@@ -40,77 +40,57 @@ type Method struct {
 	Output      []Property
 }
 
+//
+// The PropertyType code is a big ugly, with many "IsXYZ" and accessor methods.
+// This would indeed have been much prettier with a simple outer interface and
+// type assertions, but these types are only accessed within the limited
+// confines of a text/template context, which cannot do fancy things like type
+// assertions.
+//
+// The best idea I've had so far, is to move all the "Is" into template
+// functions, but I can't really see it helping.
+//
+
 type PropertyType interface {
 	String() string
 	GoType() string
 	IsArray() bool
 	IsMap() bool
+	IsStruct() bool
 	InnerValue() PropertyType
 	InnerKey() PropertyType
+	StructName() string
+	Fields() []Property
 }
 
-type stringType struct{}
-func String() PropertyType { return stringType{} }
-func (stringType) String() string { return "String" }
-func (stringType) GoType() string { return "string" }
-func (stringType) IsArray() bool { return false }
-func (stringType) IsMap() bool { return false }
-func (stringType) InnerValue() PropertyType { return nil }
-func (stringType) InnerKey() PropertyType { return nil }
+type simpleType struct {
+	rpckitType string
+	golangType string
+}
+func (s *simpleType) String() string { return s.rpckitType }
+func (s *simpleType) GoType() string { return s.golangType }
+func (simpleType) IsArray() bool { return false }
+func (simpleType) IsMap() bool { return false }
+func (simpleType) IsStruct() bool { return false }
+func (simpleType) InnerValue() PropertyType { return nil }
+func (simpleType) InnerKey() PropertyType { return nil }
+func (simpleType) StructName() string { return "" }
+func (simpleType) Fields() []Property { return nil }
 
-type boolType struct {}
-func Bool() PropertyType { return boolType{} }
-func (boolType) String() string { return "Bool" }
-func (boolType) GoType() string { return "bool" }
-func (boolType) IsArray() bool { return false }
-func (boolType) IsMap() bool { return false }
-func (boolType) InnerValue() PropertyType { return nil }
-func (boolType) InnerKey() PropertyType { return nil }
+func newSimpleType(rpckittype, golangtype string) *simpleType {
+	return &simpleType{
+		rpckitType: rpckittype,
+		golangType: golangtype,
+	}
+}
 
-type int64Type struct {}
-func Int64() PropertyType { return int64Type{} }
-func (int64Type) String() string { return "Int64" }
-func (int64Type) GoType() string { return "int64" }
-func (int64Type) IsArray() bool { return false }
-func (int64Type) IsMap() bool { return false }
-func (int64Type) InnerValue() PropertyType { return nil }
-func (int64Type) InnerKey() PropertyType { return nil }
-
-type intType struct {}
-func Int() PropertyType { return intType{} }
-func (intType) String() string { return "Int" }
-func (intType) GoType() string { return "int64" }
-func (intType) IsArray() bool { return false }
-func (intType) IsMap() bool { return false }
-func (intType) InnerValue() PropertyType { return nil }
-func (intType) InnerKey() PropertyType { return nil }
-
-type floatType struct {}
-func Float() PropertyType { return floatType{} }
-func (floatType) String() string { return "Float" }
-func (floatType) GoType() string { return "float32" }
-func (floatType) IsArray() bool { return false }
-func (floatType) IsMap() bool { return false }
-func (floatType) InnerValue() PropertyType { return nil }
-func (floatType) InnerKey() PropertyType { return nil }
-
-type doubleType struct {}
-func Double() PropertyType { return doubleType{} }
-func (doubleType) String() string { return "Double" }
-func (doubleType) GoType() string { return "float64" }
-func (doubleType) IsArray() bool { return false }
-func (doubleType) IsMap() bool { return false }
-func (doubleType) InnerValue() PropertyType { return nil }
-func (doubleType) InnerKey() PropertyType { return nil }
-
-type bytesType struct{}
-func Bytes() PropertyType { return bytesType{} }
-func (bytesType) String() string { return "Bytes" }
-func (bytesType) GoType() string { return "[]byte" }
-func (bytesType) IsArray() bool { return false }
-func (bytesType) IsMap() bool { return false }
-func (bytesType) InnerValue() PropertyType { return nil }
-func (bytesType) InnerKey() PropertyType { return nil }
+func String() PropertyType { return newSimpleType("String", "string") }
+func Bool() PropertyType { return newSimpleType("Bool", "bool") }
+func Int64() PropertyType { return newSimpleType("Int64", "int64") }
+func Int() PropertyType { return newSimpleType("Int", "int64") }
+func Float() PropertyType { return newSimpleType("Float", "float32") }
+func Double() PropertyType { return newSimpleType("Double", "float64") }
+func Bytes() PropertyType { return newSimpleType("Bytes", "[]byte") }
 
 type arrayType struct {
 	inner PropertyType
@@ -120,8 +100,11 @@ func (arrayType) String() string { return "Array" }
 func (t *arrayType) GoType() string { return "[]" + t.inner.GoType() }
 func (arrayType) IsArray() bool { return true }
 func (arrayType) IsMap() bool { return false }
+func (arrayType) IsStruct() bool { return false }
 func (t *arrayType) InnerValue() PropertyType { return t.inner }
 func (arrayType) InnerKey() PropertyType { return nil }
+func (arrayType) StructName() string { return "" }
+func (arrayType) Fields() []Property { return nil }
 
 type mapType struct {
 	key PropertyType
@@ -134,8 +117,36 @@ func (t *mapType) GoType() string {
 }
 func (mapType) IsArray() bool { return false }
 func (mapType) IsMap() bool { return true }
+func (mapType) IsStruct() bool { return false }
 func (t *mapType) InnerValue() PropertyType { return t.value }
 func (t *mapType) InnerKey() PropertyType { return t.key }
+func (mapType) StructName() string { return "" }
+func (mapType) Fields() []Property { return nil }
+
+type StructField struct {
+	Key string
+	Value PropertyType
+}
+
+type structType struct {
+	name string
+	fields []Property
+}
+func Struct(name string, fields []Property) PropertyType {
+	return &structType{name: name, fields: fields}
+}
+func (structType) String() string { return "Struct" }
+func (t *structType) GoType() string {
+	return strings.Title(t.name)
+}
+
+func (structType) IsArray() bool { return false }
+func (structType) IsMap() bool { return false }
+func (structType) IsStruct() bool { return true }
+func (structType) InnerValue() PropertyType { return nil }
+func (structType) InnerKey() PropertyType { return nil }
+func (t *structType) StructName() string { return t.name }
+func (t *structType) Fields() []Property { return t.fields }
 
 type Property struct {
 	T    PropertyType

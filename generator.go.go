@@ -23,10 +23,12 @@ var template_deps = []string{
 	"go-pb/marshalsimple.go.tmpl",
 	"go-pb/marshalarray.go.tmpl",
 	"go-pb/marshalmap.go.tmpl",
+	"go-pb/marshalstruct.go.tmpl",
 	"go-pb/marshal.go.tmpl",
 	"go-pb/unmarshalsimple.go.tmpl",
 	"go-pb/unmarshalarray.go.tmpl",
 	"go-pb/unmarshalmap.go.tmpl",
+	"go-pb/unmarshalstruct.go.tmpl",
 	"go-pb/unmarshal.go.tmpl",
 	"go-pb/serialization.go.tmpl",
 	"go-pb/client_definition.go.tmpl",
@@ -41,6 +43,7 @@ var template_deps = []string{
 	"go-http/server_method.go.tmpl",
 	"go-http/rpckit.go.tmpl",
 
+	"go/types.go.tmpl",
 	"go/server_method.go.tmpl",
 	"go/rpckit.go.tmpl",
 }
@@ -62,10 +65,19 @@ type TemplateContext struct {
 }
 
 func (g GoGenerator) Generate(p string) error {
+	exists := make(map[string]bool)
+
 	funcs := template.FuncMap{
 		"log": func (formatter string, v ...interface{}) string {
 			log.Printf(formatter, v...)
 			return ""
+		},
+		"ifnotexists": func(name string) bool {
+			if exists[name] {
+				return false
+			}
+			exists[name] = true
+			return true
 		},
 		"format": func (formatter string, v ...interface{}) string {
 			return fmt.Sprintf(formatter, v...)

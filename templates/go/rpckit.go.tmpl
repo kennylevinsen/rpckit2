@@ -5,3 +5,10 @@ import "context"
 {{ range .Protocols }}
 {{ template "go/server_method.go.tmpl" dict "ProtoName" .Name "ProtoID" .ID "Methods" .Methods }}
 {{ end }}
+
+{{ range .Protocols }}
+{{ range .Methods }}
+{{ template "go/types.go.tmpl" dict "Fields" .Input }}
+{{ template "go/types.go.tmpl" dict "Fields" .Output }}
+{{ end }}
+{{ end }}

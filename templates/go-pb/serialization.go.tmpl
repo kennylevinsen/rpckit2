@@ -1,16 +1,17 @@
+{{ $typeName := .TypeName }}
 {{- if eq (len .Fields) 0 -}}
-type {{ .Prefix }}Proto{{ capitalize .ProtoName }}Method{{ capitalize .Name }} struct {}
+type {{ $typeName }} struct {}
 
-func (s *{{ .Prefix }}Proto{{ capitalize .ProtoName }}Method{{ capitalize .Name }}) RPCEncode(m *message) error { return nil }
-func (s *{{ .Prefix }}Proto{{ capitalize .ProtoName }}Method{{ capitalize .Name }}) RPCDecode(m *message) error { return nil }
+func (s *{{ .TypeName }}) RPCEncode(m *message) error { return nil }
+func (s *{{ .TypeName }}) RPCDecode(m *message) error { return nil }
 {{- else -}}
-type {{ .Prefix }}Proto{{ capitalize .ProtoName }}Method{{ capitalize .Name }} struct {
+type {{ .TypeName }} struct {
 {{- range .Fields }}
     {{ capitalize .Name }} {{ .T.GoType }}
 {{- end }}
 }
 
-func (s *{{ .Prefix }}Proto{{ capitalize .ProtoName }}Method{{ capitalize .Name }}) RPCEncode(m *message) error {
+func (s *{{ .TypeName }}) RPCEncode(m *message) error {
     {{- range .Fields }}
     {{- $accessor := format "s.%s" (capitalize .Name) -}}
     {{ template "go-pb/marshal.go.tmpl" dict "Field" .T "Accessor" $accessor "ID" .ID "Message" "m" }}
@@ -18,7 +19,7 @@ func (s *{{ .Prefix }}Proto{{ capitalize .ProtoName }}Method{{ capitalize .Name 
     return nil
 }
 
-func (s *{{ .Prefix }}Proto{{ capitalize .ProtoName }}Method{{ capitalize .Name }}) RPCDecode(m *message) error {
+func (s *{{ .TypeName }}) RPCDecode(m *message) error {
     var (
         err error
         tag uint64
@@ -42,6 +43,8 @@ func (s *{{ .Prefix }}Proto{{ capitalize .ProtoName }}Method{{ capitalize .Name 
     return err
 }
 {{ end }}
-func (s *{{ .Prefix }}Proto{{ capitalize .ProtoName }}Method{{ capitalize .Name }}) RPCID() uint64 {
-    return uint64(proto{{ capitalize .ProtoName }}Method{{ capitalize .Name }})
+{{ if .TypeID -}}
+func (s *{{ .TypeName }}) RPCID() uint64 {
+    return uint64({{ .TypeID }})
 }
+{{- end }}

@@ -1,5 +1,5 @@
-{{- log "MARSHAL: %#v" . }}
-{{- if .Field.IsMap -}}{{- template "go-pb/marshalmap.go.tmpl" . -}}
+{{- if .Field.IsStruct -}}{{- template "go-pb/marshalstruct.go.tmpl" . -}}
+{{- else if .Field.IsMap -}}{{- template "go-pb/marshalmap.go.tmpl" . -}}
 {{- else if .Field.IsArray -}}{{- template "go-pb/marshalarray.go.tmpl" . -}}
 {{- else -}}{{- template "go-pb/marshalsimple.go.tmpl" . -}}
 {{- end -}}

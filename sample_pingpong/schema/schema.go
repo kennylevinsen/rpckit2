@@ -57,7 +57,10 @@ func main() {
 		Input: []rpckit2.Property{
 			rpckit2.Property{ID: 1, T: rpckit2.String(), Name: "input"},
 			rpckit2.Property{ID: 2, T: rpckit2.Array(rpckit2.String()), Name: "names"},
-			rpckit2.Property{ID: 3, T: rpckit2.Map(rpckit2.String(), rpckit2.Int()), Name: "values"},
+			rpckit2.Property{ID: 3, T: rpckit2.Map(rpckit2.String(), rpckit2.Map(rpckit2.String(), rpckit2.Int())), Name: "values"},
+			rpckit2.Property{ID: 4, T: rpckit2.Struct("echoThing", []rpckit2.Property{
+				rpckit2.Property{ID: 1, T: rpckit2.String(), Name: "wee"},
+			}), Name: "something"},
 		},
 		Output: []rpckit2.Property{
 			rpckit2.Property{ID: 1, T: rpckit2.String(), Name: "output"},
