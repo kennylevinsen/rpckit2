@@ -1,9 +1,9 @@
 {
-    m := {{ .Message }}
     em := newEmbeddedMessage(messageCapacity)
-    {{- $accessor := .Accessor }}
-    {{ range .Field.Fields }}
-    {{ template "go-pb/marshal.go.tmpl" dict "ID" .ID "Accessor" (format "%s.%s" $accessor (capitalize .Name)) "Field" .T "Message" "em" }}
-    {{ end }}
+    var v rpcProto{{ capitalize .ProtoName }}Struct{{ .Field.GoType }}
+    v.v = {{ .Accessor }}
+    if err := v.RPCEncode(em); err != nil {
+        return err
+    }
     m.WritePBMessage({{ .ID }}, em)
 }

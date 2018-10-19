@@ -2,6 +2,14 @@ package main
 
 import "context"
 
+// Echo thing
+type EchoThing struct {
+	// WAAAAH
+	Wee string `json:"wee"`
+	// Woo describes the woo factor
+	Woo string `json:"woo"`
+}
+
 // The PingpongProtocol interface defines the pingpong protocol.
 type PingpongProtocol interface {
 	// Authenticate using username and password
@@ -18,8 +26,4 @@ type EchoProtocol interface {
 	Echo(ctx context.Context, reqInput string, reqNames []string, reqValues map[string]map[string]int64, reqSomething EchoThing) (respOutput string, err error)
 	// Ping is a simple no-input test
 	Ping(ctx context.Context) (respOutput string, err error)
-}
-
-type EchoThing struct {
-	Wee string
 }

@@ -1,14 +1,25 @@
-type {{ .TypeName }} struct {
-    Key {{ .T.InnerKey.GoType}}
-    Value {{ .T.InnerValue.GoType }}
+{{- if .IsArray }}
+{{ template "go-pb/serialization-map.go.tmpl" .InnerValue }}
+{{- else if .IsMap }}
+{{ template "go-pb/serialization-map.go.tmpl" .InnerKey }}
+{{ template "go-pb/serialization-map.go.tmpl" .InnerValue }}
+{{ $name := format "rpcMapKey%sValue%s" .InnerKey .InnerValue }}
+{{ if ifnotexists (format "rpcMap%s" .GoType) }}
+{{ $mapcnt := counter "rpcMap" }}
+{{ $name := format "rpcMap%d" $mapcnt }}
+{{ store (format "rpcMap-%s" .GoType) $name }}
+type {{ $name }} struct {
+    Key {{ .InnerKey.GoType}}
+    Value {{ .InnerValue.GoType }}
 }
 
-func (s *{{ .TypeName }}) RPCEncode(m *message) error {
-    {{ template "go-pb/marshal.go.tmpl" dict "Field" .T.InnerKey "Accessor" "s.Key" "ID" 1 "Message" "m" }}
-    {{ template "go-pb/marshal.go.tmpl" dict "Field" .T.InnerKey "Accessor" "s.Value" "ID" 2 "Message" "m" }}
+func (s *{{ $name }}) RPCEncode(m *message) error {
+    {{ template "go-pb/marshal.go.tmpl" dict "Field" .InnerKey "Accessor" "s.Key" "ID" 1 "Message" "m" -}}
+    {{ template "go-pb/marshal.go.tmpl" dict "Field" .InnerValue "Accessor" "s.Value" "ID" 2 "Message" "m" -}}
+    return nil
 }
 
-func (s *{{ .TypeName }}) RPCDecode(m *message) error {
+func (s *{{ $name }}) RPCDecode(m *message) error {
     var (
         err error
         tag uint64
@@ -16,10 +27,10 @@ func (s *{{ .TypeName }}) RPCDecode(m *message) error {
     for err == nil {
         tag, err = m.ReadVarint()
         switch tag {
-        case uint64(1 << 3) | uint64({{ template "go-pb/property_to_wiretype.go.tmpl" .T.InnerKey.String}}):
-            {{- template "go-pb/unmarshal.go.tmpl" dict "Field" .T "Accessor" "s.Key" "Message" "m" -}}
-        case uint64(2 << 3) | uint64({{ template "go-pb/property_to_wiretype.go.tmpl" .T.InnerValue.String}}):
-            {{- template "go-pb/unmarshal.go.tmpl" dict "Field" .T "Accessor" "s.Value" "Message" "m" -}}
+        case uint64(1 << 3) | uint64({{ template "go-pb/property_to_wiretype.go.tmpl" .InnerKey.String}}):
+            {{- template "go-pb/unmarshal.go.tmpl" dict "Field" .InnerKey "Accessor" "s.Key" "Message" "m" -}}
+        case uint64(2 << 3) | uint64({{ template "go-pb/property_to_wiretype.go.tmpl" .InnerValue.String}}):
+            {{- template "go-pb/unmarshal.go.tmpl" dict "Field" .InnerValue "Accessor" "s.Value" "Message" "m" -}}
         default:
             if err != io.EOF {
                 err = m.ReadPBSkip(tag)
@@ -31,3 +42,5 @@ func (s *{{ .TypeName }}) RPCDecode(m *message) error {
     }
     return err
 }
+{{ end }}
+{{ end }}

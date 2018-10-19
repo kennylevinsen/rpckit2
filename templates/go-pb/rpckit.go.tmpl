@@ -2,13 +2,26 @@
 {{ range .Protocols }}
 {{- $protoName := .Name -}}
 {{- $protoID := .ID -}}
-{{ template "go-pb/client_definition.go.tmpl" dict "ProtoName" $protoName "ProtoID" $protoID}}
+{{ template "go-pb/client_definition.go.tmpl" dict "ProtoName" $protoName "ProtoID" $protoID }}
+{{ range .Structs }}
+{{ template "go-pb/serialization-struct.go.tmpl" dict "TypeName" (format "rpcProto%sStruct%s" (capitalize $protoName) (capitalize .Name)) "Name" .Name "Fields" .Fields }}
+{{ range .Fields }}
+{{ template "go-pb/serialization-map.go.tmpl" .T }}
+{{ end }}
+{{ end }}
 {{ range .Methods }}
+{{ range .Input }}
+{{ template "go-pb/serialization-map.go.tmpl" .T }}
+{{ end }}
+{{ range .Output }}
+{{ template "go-pb/serialization-map.go.tmpl" .T }}
+{{ end }}
+
 {{- $typeID := format "proto%sMethod%s" (capitalize $protoName) (capitalize .Name)}}
 const {{ $typeID }} proto{{ capitalize $protoName }}Method = {{ .ID }}
 
-{{ template "go-pb/serialization.go.tmpl" dict "TypeName" (format "rpcReqProto%sMethod%s" (capitalize $protoName) (capitalize .Name)) "TypeID" $typeID "Fields" .Input }}
-{{ template "go-pb/serialization.go.tmpl" dict "TypeName" (format "rpcRespProto%sMethod%s" (capitalize $protoName) (capitalize .Name)) "TypeID" $typeID "Fields" .Output }}
+{{ template "go-pb/serialization.go.tmpl" dict "TypeName" (format "rpcReqProto%sMethod%s" (capitalize $protoName) (capitalize .Name)) "TypeID" $typeID "Fields" .Input "ProtoName" $protoName }}
+{{ template "go-pb/serialization.go.tmpl" dict "TypeName" (format "rpcRespProto%sMethod%s" (capitalize $protoName) (capitalize .Name)) "TypeID" $typeID "Fields" .Output "ProtoName" $protoName }}
 {{ template "go-pb/client_method.go.tmpl" dict "ProtoName" $protoName "ProtoID" $protoID "Name" .Name "Input" .Input "Output" .Output "Description" .Description }}
 {{ end }}
 {{ template "go-pb/server_method.go.tmpl" dict "ProtoName" $protoName "ProtoID" $protoID "Methods" .Methods }}

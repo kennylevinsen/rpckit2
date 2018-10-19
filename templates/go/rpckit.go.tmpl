@@ -3,12 +3,11 @@ package {{ .PackageName }}
 import "context"
 
 {{ range .Protocols }}
-{{ template "go/server_method.go.tmpl" dict "ProtoName" .Name "ProtoID" .ID "Methods" .Methods }}
+{{ range .Structs }}
+{{ template "go/types.go.tmpl" . }}
+{{ end }}
 {{ end }}
 
 {{ range .Protocols }}
-{{ range .Methods }}
-{{ template "go/types.go.tmpl" dict "Fields" .Input }}
-{{ template "go/types.go.tmpl" dict "Fields" .Output }}
-{{ end }}
+{{ template "go/server_method.go.tmpl" dict "ProtoName" .Name "ProtoID" .ID "Methods" .Methods }}
 {{ end }}

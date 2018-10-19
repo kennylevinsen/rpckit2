@@ -1,0 +1,35 @@
+type {{ .TypeName }} struct {
+    v {{ capitalize .Name }}
+}
+
+func (s *{{ .TypeName }}) RPCEncode(m *message) error {
+    {{- range .Fields }}
+    {{- $accessor := format "s.v.%s" (capitalize .Name) -}}
+    {{ template "go-pb/marshal.go.tmpl" dict "Field" .T "Accessor" $accessor "ID" .ID "Message" "m" }}
+    {{- end -}}
+    return nil
+}
+
+func (s *{{ .TypeName }}) RPCDecode(m *message) error {
+    var (
+        err error
+        tag uint64
+    )
+    for err == nil {
+        tag, err = m.ReadVarint()
+        switch tag {
+        {{- range .Fields }}
+        case uint64({{ .ID }} << 3) | uint64({{ template "go-pb/property_to_wiretype.go.tmpl" .T.String}}):
+            {{- template "go-pb/unmarshal.go.tmpl" dict "Field" .T "Accessor" (format "s.v.%s" (capitalize .Name)) "Message" "m" -}}
+        {{- end }}
+        default:
+            if err != io.EOF {
+                err = m.ReadPBSkip(tag)
+            }
+        }
+    }
+    if err == io.EOF {
+        return nil
+    }
+    return err
+}

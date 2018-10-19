@@ -1,7 +1,7 @@
 {{- if ne (len .Fields) 0 -}}
 type {{ .Prefix }}Proto{{ capitalize .ProtoName }}Method{{ capitalize .Name }} struct {
 {{- range .Fields }}
-    {{ capitalize .Name }} {{ .T.GoType }} `json:{{ doublequote .Name }}`
+    {{ capitalize .Name }} {{ .T.GoType }} `json:{{ camelize .Name | doublequote }}`
 {{- end }}
 }
 {{- end }}

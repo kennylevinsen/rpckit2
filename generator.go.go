@@ -31,6 +31,8 @@ var template_deps = []string{
 	"go-pb/unmarshalstruct.go.tmpl",
 	"go-pb/unmarshal.go.tmpl",
 	"go-pb/serialization.go.tmpl",
+	"go-pb/serialization-map.go.tmpl",
+	"go-pb/serialization-struct.go.tmpl",
 	"go-pb/client_definition.go.tmpl",
 	"go-pb/client_method.go.tmpl",
 	"go-pb/server_method.go.tmpl",
@@ -57,6 +59,7 @@ type TemplateProtocol struct {
 	Name    string
 	ID      uint64
 	Methods []Method
+	Structs []Struct
 }
 
 type TemplateContext struct {
@@ -66,6 +69,8 @@ type TemplateContext struct {
 
 func (g GoGenerator) Generate(p string) error {
 	exists := make(map[string]bool)
+	counter := make(map[string]int)
+	store := make(map[string]interface{})
 
 	funcs := template.FuncMap{
 		"log": func (formatter string, v ...interface{}) string {
@@ -79,6 +84,18 @@ func (g GoGenerator) Generate(p string) error {
 			exists[name] = true
 			return true
 		},
+		"counter": func(name string) int {
+			cnt := counter[name]
+			counter[name] = cnt+1
+			return cnt
+		},
+		"store": func(name string, v interface{}) string {
+			store[name] = v
+			return ""
+		},
+		"retrieve": func(name string) interface{} {
+			return store[name]
+		},
 		"format": func (formatter string, v ...interface{}) string {
 			return fmt.Sprintf(formatter, v...)
 		},
@@ -91,6 +108,18 @@ func (g GoGenerator) Generate(p string) error {
 			for idx, r := range s {
 				if idx == 0 {
 					b.WriteRune(unicode.ToTitle(r))
+					continue
+				}
+				b.WriteRune(r)
+			}
+			return b.String()
+		},
+		"camelize": func(s string) string {
+			var b strings.Builder
+			b.Grow(len(s))
+			for idx, r := range s {
+				if idx == 0 {
+					b.WriteRune(unicode.ToLower(r))
 					continue
 				}
 				b.WriteRune(r)
@@ -138,6 +167,7 @@ func (g GoGenerator) Generate(p string) error {
 			Name:    v.name,
 			ID:      v.id,
 			Methods: v.methods,
+			Structs: v.structs,
 		})
 	}
 
@@ -159,7 +189,9 @@ func (g GoGenerator) Generate(p string) error {
 
 		final, err := imports.Process(filepath, buf.Bytes(), &imports.Options{Comments: true, FormatOnly: true})
 		if err != nil {
-			return fmt.Errorf("%s template prettification failed: %+v", v, err)
+			fmt.Printf("%s template prettification failed: %+v\n", v, err)
+			// return fmt.Errorf("%s template prettification failed: %+v", v, err)
+			final = buf.Bytes()
 		}
 
 		if err := ioutil.WriteFile(filepath, final, 0644); err != nil {

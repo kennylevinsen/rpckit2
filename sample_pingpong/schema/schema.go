@@ -50,7 +50,17 @@ func main() {
 		},
 	})
 
+
 	server2 := rpckit2.NewProtocol("echo", 2)
+	server2.AddStruct(rpckit2.Struct{
+		Name: "echoThing",
+		Description: "Echo thing",
+		Fields: []rpckit2.Property{
+			rpckit2.Property{ID: 1, T: rpckit2.String(), Name: "wee", Description: "WAAAAH"},
+			rpckit2.Property{ID: 2, T: rpckit2.String(), Name: "woo", Description: "woo describes the woo factor"},
+		},
+	})
+
 	server2.AddMethod(rpckit2.Method{
 		ID: 1, Name: "Echo",
 		Description: "Echo is yet another type test",
@@ -58,9 +68,7 @@ func main() {
 			rpckit2.Property{ID: 1, T: rpckit2.String(), Name: "input"},
 			rpckit2.Property{ID: 2, T: rpckit2.Array(rpckit2.String()), Name: "names"},
 			rpckit2.Property{ID: 3, T: rpckit2.Map(rpckit2.String(), rpckit2.Map(rpckit2.String(), rpckit2.Int())), Name: "values"},
-			rpckit2.Property{ID: 4, T: rpckit2.Struct("echoThing", []rpckit2.Property{
-				rpckit2.Property{ID: 1, T: rpckit2.String(), Name: "wee"},
-			}), Name: "something"},
+			rpckit2.Property{ID: 4, T: rpckit2.StructName("echoThing"), Name: "something"},
 		},
 		Output: []rpckit2.Property{
 			rpckit2.Property{ID: 1, T: rpckit2.String(), Name: "output"},

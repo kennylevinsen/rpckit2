@@ -1,20 +1,7 @@
-{{ $struct := false }}
-{{ range .Fields }}
-{{ if .T.IsStruct }}
-{{ $struct = .T }}
-{{ template "go/types.go.tmpl" dict "Fields" .T.Fields }}
-{{ else if or .T.IsArray .T.IsMap }}
-{{ if .T.InnerValue.IsStruct }}
-{{ $struct = .T.InnerValue }}
-{{ template "go/types.go.tmpl" dict "Fields" .T.InnerValue.Fields }}
-{{ end }}
-{{ end }}
-{{ end }}
-
-{{ if $struct }}
-type {{ $struct.GoType }} struct {
-{{- range $struct.Fields }}
-    {{ capitalize .Name }} {{ .T.GoType }}
+// {{ capitalize .Description }}
+type {{ capitalize .Name }} struct {
+{{- range .Fields }}
+    {{ if .Description }}// {{ capitalize .Description }}{{ end }}
+    {{ capitalize .Name }} {{ .T.GoType }} `json:{{ camelize .Name | doublequote }}`
 {{- end }}
 }
-{{ end }}

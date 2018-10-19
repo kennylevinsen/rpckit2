@@ -14,7 +14,7 @@ type {{ .TypeName }} struct {
 func (s *{{ .TypeName }}) RPCEncode(m *message) error {
     {{- range .Fields }}
     {{- $accessor := format "s.%s" (capitalize .Name) -}}
-    {{ template "go-pb/marshal.go.tmpl" dict "Field" .T "Accessor" $accessor "ID" .ID "Message" "m" }}
+    {{ template "go-pb/marshal.go.tmpl" dict "Field" .T "Accessor" $accessor "ID" .ID "ProtoName" $.ProtoName }}
     {{- end -}}
     return nil
 }
@@ -29,7 +29,7 @@ func (s *{{ .TypeName }}) RPCDecode(m *message) error {
         switch tag {
         {{- range .Fields }}
         case uint64({{ .ID }} << 3) | uint64({{ template "go-pb/property_to_wiretype.go.tmpl" .T.String}}):
-            {{- template "go-pb/unmarshal.go.tmpl" dict "Field" .T "Accessor" (format "s.%s" (capitalize .Name)) "Message" "m" -}}
+            {{- template "go-pb/unmarshal.go.tmpl" dict "Field" .T "Accessor" (format "s.%s" (capitalize .Name)) "ProtoName" $.ProtoName -}}
         {{- end }}
         default:
             if err != io.EOF {

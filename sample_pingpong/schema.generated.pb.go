@@ -1523,6 +1523,141 @@ func NewRPCEchoClient(c *RPCConnection) *RPCEchoClient {
 	return &RPCEchoClient{c: c}
 }
 
+type rpcProtoEchoStructEchoThing struct {
+	v EchoThing
+}
+
+func (s *rpcProtoEchoStructEchoThing) RPCEncode(m *message) error {
+	m.WritePBString(1, s.v.Wee)
+	m.WritePBString(2, s.v.Woo)
+	return nil
+}
+
+func (s *rpcProtoEchoStructEchoThing) RPCDecode(m *message) error {
+	var (
+		err error
+		tag uint64
+	)
+	for err == nil {
+		tag, err = m.ReadVarint()
+		switch tag {
+		case uint64(1<<3) | uint64(wireTypeLengthDelimited):
+			s.v.Wee, err = m.ReadString()
+
+		case uint64(2<<3) | uint64(wireTypeLengthDelimited):
+			s.v.Woo, err = m.ReadString()
+
+		default:
+			if err != io.EOF {
+				err = m.ReadPBSkip(tag)
+			}
+		}
+	}
+	if err == io.EOF {
+		return nil
+	}
+	return err
+}
+
+type rpcMap0 struct {
+	Key   string
+	Value int64
+}
+
+func (s *rpcMap0) RPCEncode(m *message) error {
+	m.WritePBString(1, s.Key)
+	m.WritePBInt(2, s.Value)
+	return nil
+}
+
+func (s *rpcMap0) RPCDecode(m *message) error {
+	var (
+		err error
+		tag uint64
+	)
+	for err == nil {
+		tag, err = m.ReadVarint()
+		switch tag {
+		case uint64(1<<3) | uint64(wireTypeLengthDelimited):
+			s.Key, err = m.ReadString()
+		case uint64(2<<3) | uint64(wireTypeVarint):
+			s.Value, err = m.ReadInt()
+		default:
+			if err != io.EOF {
+				err = m.ReadPBSkip(tag)
+			}
+		}
+	}
+	if err == io.EOF {
+		return nil
+	}
+	return err
+}
+
+type rpcMap1 struct {
+	Key   string
+	Value map[string]int64
+}
+
+func (s *rpcMap1) RPCEncode(m *message) error {
+	m.WritePBString(1, s.Key)
+	for k, v := range s.Value {
+		em := newEmbeddedMessage(messageCapacity)
+		vv := rpcMap0{
+			Key:   k,
+			Value: v,
+		}
+		if err := vv.RPCEncode(em); err != nil {
+			return err
+		}
+		m.WritePBMessage(2, em)
+	}
+	return nil
+}
+
+func (s *rpcMap1) RPCDecode(m *message) error {
+	var (
+		err error
+		tag uint64
+	)
+	for err == nil {
+		tag, err = m.ReadVarint()
+		switch tag {
+		case uint64(1<<3) | uint64(wireTypeLengthDelimited):
+			s.Key, err = m.ReadString()
+		case uint64(2<<3) | uint64(wireTypeLengthDelimited):
+			var em *message
+			if s.Value == nil {
+				s.Value = make(map[string]int64)
+			}
+
+			outer := s.Value
+
+			var v rpcMap0
+
+			if em, err = m.ReadEmbeddedMessage(); err != nil {
+				break
+			}
+
+			if err = v.RPCDecode(em); err == io.EOF {
+				err = nil
+			} else if err != nil {
+				break
+			}
+
+			outer[v.Key] = v.Value
+		default:
+			if err != io.EOF {
+				err = m.ReadPBSkip(tag)
+			}
+		}
+	}
+	if err == io.EOF {
+		return nil
+	}
+	return err
+}
+
 const protoEchoMethodEcho protoEchoMethod = 1
 
 type rpcReqProtoEchoMethodEcho struct {
@@ -1538,24 +1673,23 @@ func (s *rpcReqProtoEchoMethodEcho) RPCEncode(m *message) error {
 		m.WritePBString(2, v)
 	}
 	for k, v := range s.Values {
-		m := m
 		em := newEmbeddedMessage(messageCapacity)
-		em.WritePBString(1, k)
-		for k, v := range v {
-			m := em
-			em := newEmbeddedMessage(messageCapacity)
-			em.WritePBString(1, k)
-			em.WritePBInt(2, v)
-			m.WritePBMessage(2, em)
+		vv := rpcMap1{
+			Key:   k,
+			Value: v,
+		}
+		if err := vv.RPCEncode(em); err != nil {
+			return err
 		}
 		m.WritePBMessage(3, em)
 	}
 	{
-		m := m
 		em := newEmbeddedMessage(messageCapacity)
-
-		em.WritePBString(1, s.Something.Wee)
-
+		var v rpcProtoEchoStructEchoThing
+		v.v = s.Something
+		if err := v.RPCEncode(em); err != nil {
+			return err
+		}
 		m.WritePBMessage(4, em)
 	}
 	return nil
@@ -1578,78 +1712,28 @@ func (s *rpcReqProtoEchoMethodEcho) RPCDecode(m *message) error {
 			s.Names = append(s.Names, v)
 
 		case uint64(3<<3) | uint64(wireTypeLengthDelimited):
-			m := m
 			var em *message
 			if s.Values == nil {
 				s.Values = make(map[string]map[string]int64)
 			}
 
 			outer := s.Values
-			var k string
-			var v map[string]int64
-			em, err = m.ReadEmbeddedMessage()
-			if err != nil {
+
+			var v rpcMap1
+
+			if em, err = m.ReadEmbeddedMessage(); err != nil {
 				break
 			}
 
-			for err == nil {
-				tag, err = em.ReadVarint()
-				switch tag {
-				case uint64(1<<3) | uint64(wireTypeLengthDelimited):
-					k, err = em.ReadString()
-				case uint64(2<<3) | uint64(wireTypeLengthDelimited):
-					m := em
-					var em *message
-					if v == nil {
-						v = make(map[string]int64)
-					}
-
-					outer := v
-					var k string
-					var v int64
-					em, err = m.ReadEmbeddedMessage()
-					if err != nil {
-						break
-					}
-
-					for err == nil {
-						tag, err = em.ReadVarint()
-						switch tag {
-						case uint64(1<<3) | uint64(wireTypeLengthDelimited):
-							k, err = em.ReadString()
-						case uint64(2<<3) | uint64(wireTypeVarint):
-							v, err = em.ReadInt()
-						default:
-							if err != io.EOF {
-								err = em.ReadPBSkip(tag)
-							}
-						}
-					}
-
-					outer[k] = v
-
-					if err == io.EOF {
-						err = nil
-					} else if err != nil {
-						break
-					}
-				default:
-					if err != io.EOF {
-						err = em.ReadPBSkip(tag)
-					}
-				}
-			}
-
-			outer[k] = v
-
-			if err == io.EOF {
+			if err = v.RPCDecode(em); err == io.EOF {
 				err = nil
 			} else if err != nil {
 				break
 			}
 
+			outer[v.Key] = v.Value
+
 		case uint64(4<<3) | uint64(wireTypeLengthDelimited):
-			m := m
 			var em *message
 
 			em, err = m.ReadEmbeddedMessage()
@@ -1657,25 +1741,14 @@ func (s *rpcReqProtoEchoMethodEcho) RPCDecode(m *message) error {
 				break
 			}
 
-			for err == nil {
-				tag, err = em.ReadVarint()
-				switch tag {
-
-				case uint64(1<<3) | uint64(wireTypeLengthDelimited):
-					s.Something.Wee, err = em.ReadString()
-
-				default:
-					if err != io.EOF {
-						err = em.ReadPBSkip(tag)
-					}
-				}
-			}
-
-			if err == io.EOF {
+			var v rpcProtoEchoStructEchoThing
+			if err = v.RPCDecode(em); err == io.EOF {
 				err = nil
 			} else if err != nil {
 				break
 			}
+
+			s.Something = v.v
 
 		default:
 			if err != io.EOF {
