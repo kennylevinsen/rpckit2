@@ -26,4 +26,6 @@ type EchoProtocol interface {
 	Echo(ctx context.Context, reqInput string, reqNames []string, reqValues map[string]map[string]int64, reqSomething EchoThing) (respOutput string, err error)
 	// Ping is a simple no-input test
 	Ping(ctx context.Context) (respOutput string, err error)
+	// ByteTest is a byte test
+	ByteTest(ctx context.Context, reqInput []byte) (respOutput []byte, err error)
 }

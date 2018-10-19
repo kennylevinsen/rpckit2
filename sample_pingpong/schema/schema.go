@@ -82,6 +82,16 @@ func main() {
 			rpckit2.Property{ID: 1, T: rpckit2.String(), Name: "output"},
 		},
 	})
+	server2.AddMethod(rpckit2.Method{
+		ID: 3, Name: "ByteTest",
+		Description: "ByteTest is a byte test",
+		Input:       []rpckit2.Property{
+			rpckit2.Property{ID: 1, T: rpckit2.Bytes(), Name: "input"},
+		},
+		Output: []rpckit2.Property{
+			rpckit2.Property{ID: 1, T: rpckit2.Bytes(), Name: "output"},
+		},
+	})
 
 	if err := (rpckit2.GoGenerator{
 		Protocols: []*rpckit2.Protocol{

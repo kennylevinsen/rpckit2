@@ -1913,6 +1913,112 @@ func (c *RPCEchoClient) Ping(ctx context.Context) (respOutput string, err error)
 	return
 }
 
+const protoEchoMethodByteTest protoEchoMethod = 3
+
+type rpcReqProtoEchoMethodByteTest struct {
+	Input []byte
+}
+
+func (s *rpcReqProtoEchoMethodByteTest) RPCEncode(m *message) error {
+	m.WritePBBytes(1, s.Input)
+	return nil
+}
+
+func (s *rpcReqProtoEchoMethodByteTest) RPCDecode(m *message) error {
+	var (
+		err error
+		tag uint64
+	)
+	for err == nil {
+		tag, err = m.ReadVarint()
+		switch tag {
+		case uint64(1<<3) | uint64(wireTypeLengthDelimited):
+			s.Input, err = m.ReadBytes()
+
+		default:
+			if err != io.EOF {
+				err = m.ReadPBSkip(tag)
+			}
+		}
+	}
+	if err == io.EOF {
+		return nil
+	}
+	return err
+}
+
+func (s *rpcReqProtoEchoMethodByteTest) RPCID() uint64 {
+	return uint64(protoEchoMethodByteTest)
+}
+
+type rpcRespProtoEchoMethodByteTest struct {
+	Output []byte
+}
+
+func (s *rpcRespProtoEchoMethodByteTest) RPCEncode(m *message) error {
+	m.WritePBBytes(1, s.Output)
+	return nil
+}
+
+func (s *rpcRespProtoEchoMethodByteTest) RPCDecode(m *message) error {
+	var (
+		err error
+		tag uint64
+	)
+	for err == nil {
+		tag, err = m.ReadVarint()
+		switch tag {
+		case uint64(1<<3) | uint64(wireTypeLengthDelimited):
+			s.Output, err = m.ReadBytes()
+
+		default:
+			if err != io.EOF {
+				err = m.ReadPBSkip(tag)
+			}
+		}
+	}
+	if err == io.EOF {
+		return nil
+	}
+	return err
+}
+
+func (s *rpcRespProtoEchoMethodByteTest) RPCID() uint64 {
+	return uint64(protoEchoMethodByteTest)
+}
+
+// ByteTest is a byte test
+func (c *RPCEchoClient) ByteTest(ctx context.Context, reqInput []byte) (respOutput []byte, err error) {
+	resultTypeID, msg, err := c.c.call(ctx, true, 2, uint64(protoEchoMethodByteTest), &rpcReqProtoEchoMethodByteTest{
+		Input: reqInput,
+	})
+
+	if err != nil {
+		if rpcErr, ok := err.(RPCError); ok {
+			err = rpcErr
+		}
+		return
+	}
+
+	switch resultTypeID {
+	case uint64(protoEchoMethodByteTest):
+		var r rpcRespProtoEchoMethodByteTest
+		if decodeErr := r.RPCDecode(msg); decodeErr != nil {
+			err = &rpcError{id: GenericError, error: fmt.Sprintf("could not decode result: %v", decodeErr)}
+			return
+		}
+		respOutput = r.Output
+	default:
+		var isPrivate bool
+		err, isPrivate = c.c.handlePrivateResponse(resultTypeID, msg)
+		if !isPrivate {
+			err = &rpcError{id: ProtocolError, error: fmt.Sprintf("unexpected return type for call type %d: %d", uint64(protoEchoMethodByteTest), resultTypeID)}
+		}
+	}
+
+	return
+}
+
 // RPCEchoServer creates a new RPCServer for the echo protocol.
 func RPCEchoServer(methods EchoProtocol) RPCServer {
 	return &rpcServer{
@@ -1961,6 +2067,21 @@ func (s *rpcCallServerForEcho) rpcCall(ctx context.Context, methodID uint64, m *
 			return &rpcError{id: ApplicationError, error: err.Error()}
 		}
 		return &rpcRespProtoEchoMethodPing{
+			Output: output,
+		}
+	case uint64(protoEchoMethodByteTest):
+		args := rpcReqProtoEchoMethodByteTest{}
+		if err := args.RPCDecode(m); err != nil {
+			return &rpcError{id: ProtocolError, error: fmt.Sprintf("unable to decode method call: %v", err)}
+		}
+		output, err := s.methods.ByteTest(ctx, args.Input)
+		if err != nil {
+			if rpcMsg, ok := err.(rpcMessage); ok {
+				return rpcMsg
+			}
+			return &rpcError{id: ApplicationError, error: err.Error()}
+		}
+		return &rpcRespProtoEchoMethodByteTest{
 			Output: output,
 		}
 	default:

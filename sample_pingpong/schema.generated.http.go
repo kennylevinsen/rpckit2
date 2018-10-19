@@ -82,6 +82,7 @@ func (c *HTTPPingpongClient) Authenticate(ctx context.Context, reqUsername strin
 		reqbody  httpReqProtoPingpongMethodAuthenticate
 		respbody httpRespProtoPingpongMethodAuthenticate
 	)
+
 	reqbody = httpReqProtoPingpongMethodAuthenticate{
 		Username: reqUsername,
 		Password: reqPassword,
@@ -118,10 +119,12 @@ func (c *HTTPPingpongClient) Authenticate(ctx context.Context, reqUsername strin
 		err = errors.New(errorbody.Error)
 		return
 	}
+
 	if err = json.Unmarshal(b, &respbody); err != nil {
 		return
 	}
 	respSuccess = respbody.Success
+
 	return
 }
 
@@ -142,6 +145,7 @@ func (c *HTTPPingpongClient) PingWithReply(ctx context.Context, reqName string) 
 		reqbody  httpReqProtoPingpongMethodPingWithReply
 		respbody httpRespProtoPingpongMethodPingWithReply
 	)
+
 	reqbody = httpReqProtoPingpongMethodPingWithReply{
 		Name: reqName,
 	}
@@ -177,10 +181,12 @@ func (c *HTTPPingpongClient) PingWithReply(ctx context.Context, reqName string) 
 		err = errors.New(errorbody.Error)
 		return
 	}
+
 	if err = json.Unmarshal(b, &respbody); err != nil {
 		return
 	}
 	respGreeting = respbody.Greeting
+
 	return
 }
 
@@ -206,6 +212,7 @@ func (c *HTTPPingpongClient) TestMethod(ctx context.Context, reqString string, r
 		reqbody  httpReqProtoPingpongMethodTestMethod
 		respbody httpRespProtoPingpongMethodTestMethod
 	)
+
 	reqbody = httpReqProtoPingpongMethodTestMethod{
 		String: reqString,
 		Bool:   reqBool,
@@ -246,10 +253,12 @@ func (c *HTTPPingpongClient) TestMethod(ctx context.Context, reqString string, r
 		err = errors.New(errorbody.Error)
 		return
 	}
+
 	if err = json.Unmarshal(b, &respbody); err != nil {
 		return
 	}
 	respSuccess = respbody.Success
+
 	return
 }
 
@@ -281,6 +290,7 @@ func (c *httpCallServerForPingpong) RegisterToMux(m *http.ServeMux) {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
+
 		if err = json.Unmarshal(b, &reqbody); err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			return
@@ -302,6 +312,7 @@ func (c *httpCallServerForPingpong) RegisterToMux(m *http.ServeMux) {
 			w.Write(b)
 			return
 		}
+
 		if b, err = json.Marshal(&respbody); err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			// TODO: Add error!
@@ -330,6 +341,7 @@ func (c *httpCallServerForPingpong) RegisterToMux(m *http.ServeMux) {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
+
 		if err = json.Unmarshal(b, &reqbody); err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			return
@@ -351,6 +363,7 @@ func (c *httpCallServerForPingpong) RegisterToMux(m *http.ServeMux) {
 			w.Write(b)
 			return
 		}
+
 		if b, err = json.Marshal(&respbody); err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			// TODO: Add error!
@@ -379,6 +392,7 @@ func (c *httpCallServerForPingpong) RegisterToMux(m *http.ServeMux) {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
+
 		if err = json.Unmarshal(b, &reqbody); err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			return
@@ -400,6 +414,7 @@ func (c *httpCallServerForPingpong) RegisterToMux(m *http.ServeMux) {
 			w.Write(b)
 			return
 		}
+
 		if b, err = json.Marshal(&respbody); err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			// TODO: Add error!
@@ -450,6 +465,7 @@ func (c *HTTPEchoClient) Echo(ctx context.Context, reqInput string, reqNames []s
 		reqbody  httpReqProtoEchoMethodEcho
 		respbody httpRespProtoEchoMethodEcho
 	)
+
 	reqbody = httpReqProtoEchoMethodEcho{
 		Input:     reqInput,
 		Names:     reqNames,
@@ -488,10 +504,12 @@ func (c *HTTPEchoClient) Echo(ctx context.Context, reqInput string, reqNames []s
 		err = errors.New(errorbody.Error)
 		return
 	}
+
 	if err = json.Unmarshal(b, &respbody); err != nil {
 		return
 	}
 	respOutput = respbody.Output
+
 	return
 }
 
@@ -536,10 +554,63 @@ func (c *HTTPEchoClient) Ping(ctx context.Context) (respOutput string, err error
 		err = errors.New(errorbody.Error)
 		return
 	}
+
 	if err = json.Unmarshal(b, &respbody); err != nil {
 		return
 	}
 	respOutput = respbody.Output
+
+	return
+}
+
+type httpReqProtoEchoMethodByteTest struct {
+	Input []byte `json:"input"`
+}
+
+type httpRespProtoEchoMethodByteTest struct {
+	Output []byte `json:"output"`
+}
+
+// ByteTest is a byte test
+func (c *HTTPEchoClient) ByteTest(ctx context.Context, reqInput []byte) (respOutput []byte, err error) {
+	var (
+		b    []byte
+		req  *http.Request
+		resp *http.Response
+	)
+
+	b = reqInput
+
+	if req, err = c.newRequest("POST", "bytetest", bytes.NewReader(b)); err != nil {
+		return
+	}
+
+	req = req.WithContext(ctx)
+	if resp, err = c.client.do(req); err != nil {
+		return
+	}
+
+	b, err = ioutil.ReadAll(resp.Body)
+	resp.Body.Close()
+	if err != nil {
+		return
+	}
+
+	if !(resp.StatusCode >= 200 && resp.StatusCode < 300) {
+		var errorbody struct {
+			Error string `json:"error"`
+		}
+
+		if err = json.Unmarshal(b, &errorbody); err != nil {
+			return
+		}
+
+		err = errors.New(errorbody.Error)
+		return
+	}
+
+	respOutput = b
+
 	return
 }
 
@@ -571,6 +642,7 @@ func (c *httpCallServerForEcho) RegisterToMux(m *http.ServeMux) {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
+
 		if err = json.Unmarshal(b, &reqbody); err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			return
@@ -592,6 +664,7 @@ func (c *httpCallServerForEcho) RegisterToMux(m *http.ServeMux) {
 			w.Write(b)
 			return
 		}
+
 		if b, err = json.Marshal(&respbody); err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			// TODO: Add error!
@@ -636,11 +709,56 @@ func (c *httpCallServerForEcho) RegisterToMux(m *http.ServeMux) {
 			w.Write(b)
 			return
 		}
+
 		if b, err = json.Marshal(&respbody); err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			// TODO: Add error!
 			return
 		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write(b)
+	})
+	m.HandleFunc("/echo/bytetest", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+
+		var (
+			err      error
+			b        []byte
+			reqbody  httpReqProtoEchoMethodByteTest
+			respbody httpRespProtoEchoMethodByteTest
+		)
+
+		b, err = ioutil.ReadAll(r.Body)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		reqbody.Input = b
+
+		respbody.Output, err = c.methods.ByteTest(r.Context(), reqbody.Input)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			errorbody := struct {
+				Error string `json:"error"`
+			}{
+				Error: err.Error(),
+			}
+			if b, err = json.Marshal(&errorbody); err != nil {
+				return
+			}
+
+			w.Header().Set("Content-Type", "application/json")
+			w.Write(b)
+			return
+		}
+
+		b = respbody.Output
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)

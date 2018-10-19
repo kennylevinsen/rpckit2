@@ -33,10 +33,14 @@ func (c *httpCallServerFor{{ capitalize .ProtoName }}) RegisterToMux(m *http.Ser
         }
 
         {{- if gt (len .Input) 0 }}
+        {{ if and (eq (len .Input) 1) (eq (index .Input 0).T.GoType "[]byte") }}
+        reqbody.{{ capitalize (index .Input 0).Name }} = b
+        {{ else }}
         if err = json.Unmarshal(b, &reqbody); err != nil {
             w.WriteHeader(http.StatusBadRequest)
             return
         }
+        {{ end }}
         {{ else }}
         if len(b) > 0 {
             w.WriteHeader(http.StatusBadRequest)
@@ -63,11 +67,15 @@ func (c *httpCallServerFor{{ capitalize .ProtoName }}) RegisterToMux(m *http.Ser
         }
 
         {{- if gt (len .Output) 0 }}
+        {{ if and (eq (len .Output) 1) (eq (index .Output 0).T.GoType "[]byte") }}
+        b = respbody.{{ capitalize (index .Output 0).Name }}
+        {{ else }}
         if b, err = json.Marshal(&respbody); err != nil {
             w.WriteHeader(http.StatusInternalServerError)
             // TODO: Add error!
             return
         }
+        {{ end }}
         {{ else }}
         b = nil
         {{ end }}

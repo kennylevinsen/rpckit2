@@ -135,6 +135,14 @@ func testHTTP() {
 		panic(err)
 	}
 
+	b, err := echoClient.ByteTest(ctx, []byte("Hello there!"))
+	if err != nil {
+		panic(err)
+	}
+	if string(b) != "Hello there!" {
+		panic(fmt.Sprintf("string was ", b))
+	}
+
 	fmt.Printf("HTTP test complete\n")
 }
 
@@ -177,4 +185,8 @@ func (s *echoServer) Echo(ctx context.Context, input string, names []string, val
 
 func (s *echoServer) Ping(ctx context.Context) (string, error) {
 	return "", nil
+}
+
+func (s *echoServer) ByteTest(ctx context.Context, input []byte) ([]byte, error) {
+	return input, nil
 }

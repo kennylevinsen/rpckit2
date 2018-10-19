@@ -7,11 +7,14 @@ func (c *HTTP{{ capitalize .ProtoName }}Client) {{ capitalize .Name }}(ctx conte
         b []byte
         req *http.Request
         resp *http.Response
-        {{ if gt (len .Input) 0 }}reqbody httpReqProto{{ capitalize .ProtoName }}Method{{ capitalize .Name }}{{ end }}
-        {{ if gt (len .Output) 0 }}respbody httpRespProto{{ capitalize .ProtoName }}Method{{ capitalize .Name }}{{ end }}
+        {{ if gt (len .Input) 0 }}{{ if not (and (eq (len .Input) 1) (eq (index .Input 0).T.GoType "[]byte")) }}reqbody httpReqProto{{ capitalize .ProtoName }}Method{{ capitalize .Name }}{{ end }}{{ end }}
+        {{ if gt (len .Output) 0 }}{{ if not (and (eq (len .Output) 1) (eq (index .Output 0).T.GoType "[]byte")) }}respbody httpRespProto{{ capitalize .ProtoName }}Method{{ capitalize .Name }}{{ end }}{{ end }}
     )
 
     {{- if gt (len .Input) 0 }}
+    {{ if and (eq (len .Input) 1) (eq (index .Input 0).T.GoType "[]byte") }}
+    b = req{{ capitalize (index .Input 0).Name }}
+    {{- else }}
     reqbody = httpReqProto{{ capitalize .ProtoName }}Method{{ capitalize .Name }}{
         {{- range .Input }}
         {{ capitalize .Name }}: req{{ capitalize .Name }},
@@ -21,6 +24,7 @@ func (c *HTTP{{ capitalize .ProtoName }}Client) {{ capitalize .Name }}(ctx conte
     if b, err = json.Marshal(&reqbody); err != nil {
         return
     }
+    {{ end }}
     {{ end }}
 
     if req, err = c.newRequest({{ if gt (len .Input) 0 }}"POST"{{ else }}"GET"{{ end }}, {{ lower .Name | doublequote }}, bytes.NewReader(b)); err != nil {
@@ -52,13 +56,17 @@ func (c *HTTP{{ capitalize .ProtoName }}Client) {{ capitalize .Name }}(ctx conte
     }
 
     {{- if gt (len .Output) 0 }}
+    {{ if and (eq (len .Output) 1) (eq (index .Output 0).T.GoType "[]byte") }}
+    resp{{ capitalize (index .Output 0).Name }} = b
+    {{ else }}
     if err = json.Unmarshal(b, &respbody); err != nil {
         return
     }
-    {{- end }}
 
     {{- range .Output }}
     resp{{ capitalize .Name }} = respbody.{{ capitalize .Name }}
+    {{- end }}
+    {{ end }}
     {{- end }}
     return
 }
