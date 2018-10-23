@@ -1,8 +1,8 @@
 {
     em := newEmbeddedMessage(messageCapacity)
-    var v rpcProto{{ capitalize .ProtoName }}Struct{{ .Field.GoType }}
-    v.v = {{ .Accessor }}
-    if err := v.RPCEncode(em); err != nil {
+    var vs rpcProto{{ capitalize .ProtoName }}Struct{{ .Field.GoType }}
+	vs.v = {{ .Accessor }}
+    if err := vs.RPCEncode(em); err != nil {
         return err
     }
     m.WritePBMessage({{ .ID }}, em)

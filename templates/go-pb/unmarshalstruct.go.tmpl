@@ -5,11 +5,11 @@ if err != nil {
     break
 }
 
-var v rpcProto{{ capitalize .ProtoName }}Struct{{ .Field.GoType }}
-if err = v.RPCDecode(em); err == io.EOF {
+var vs rpcProto{{ capitalize .ProtoName }}Struct{{ .Field.GoType }}
+if err = vs.RPCDecode(em); err == io.EOF {
     err = nil
 } else if err != nil {
     break
 }
 
-{{ .Accessor }} = v.v
+{{ .Accessor }} = vs.v

@@ -1684,11 +1684,10 @@ func (s *rpcReqProtoEchoMethodEcho) RPCEncode(m *message) error {
 		m.WritePBMessage(3, em)
 	}
 	{
-
 		em := newEmbeddedMessage(messageCapacity)
-		var v rpcProtoEchoStructEchoThing
-		v.v = s.Something
-		if err := v.RPCEncode(em); err != nil {
+		var vs rpcProtoEchoStructEchoThing
+		vs.v = s.Something
+		if err := vs.RPCEncode(em); err != nil {
 			return err
 		}
 		m.WritePBMessage(4, em)
@@ -1742,14 +1741,14 @@ func (s *rpcReqProtoEchoMethodEcho) RPCDecode(m *message) error {
 				break
 			}
 
-			var v rpcProtoEchoStructEchoThing
-			if err = v.RPCDecode(em); err == io.EOF {
+			var vs rpcProtoEchoStructEchoThing
+			if err = vs.RPCDecode(em); err == io.EOF {
 				err = nil
 			} else if err != nil {
 				break
 			}
 
-			s.Something = v.v
+			s.Something = vs.v
 
 		default:
 			if err != io.EOF {
