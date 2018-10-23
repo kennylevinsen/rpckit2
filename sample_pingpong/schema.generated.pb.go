@@ -1684,6 +1684,7 @@ func (s *rpcReqProtoEchoMethodEcho) RPCEncode(m *message) error {
 		m.WritePBMessage(3, em)
 	}
 	{
+
 		em := newEmbeddedMessage(messageCapacity)
 		var v rpcProtoEchoStructEchoThing
 		v.v = s.Something
