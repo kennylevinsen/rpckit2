@@ -13,6 +13,8 @@ type rpcCallServerFor{{ capitalize .ProtoName }} struct {
 func (s *rpcCallServerFor{{ capitalize .ProtoName }}) rpcCall(ctx context.Context, methodID uint64, m *message) (resp rpcMessage) {
     defer func() {
         if r := recover(); r != nil {
+		log.Error(r)
+		debug.PrintStack()
             resp = &rpcError{id: ApplicationError, error: "unknown error occurred"}
         }
     }()
