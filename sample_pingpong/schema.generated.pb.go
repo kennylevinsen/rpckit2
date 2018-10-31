@@ -1458,7 +1458,7 @@ type rpcCallServerForPingpong struct {
 func (s *rpcCallServerForPingpong) rpcCall(ctx context.Context, methodID uint64, m *message) (resp rpcMessage) {
 	defer func() {
 		if r := recover(); r != nil {
-			log.Print(r)
+			log.Error(r)
 			debug.PrintStack()
 			resp = &rpcError{id: ApplicationError, error: "unknown error occurred"}
 		}
@@ -2038,7 +2038,7 @@ type rpcCallServerForEcho struct {
 func (s *rpcCallServerForEcho) rpcCall(ctx context.Context, methodID uint64, m *message) (resp rpcMessage) {
 	defer func() {
 		if r := recover(); r != nil {
-			log.Print(r)
+			log.Error(r)
 			debug.PrintStack()
 			resp = &rpcError{id: ApplicationError, error: "unknown error occurred"}
 		}
