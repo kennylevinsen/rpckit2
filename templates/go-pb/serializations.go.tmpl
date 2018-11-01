@@ -1,0 +1,9 @@
+{{ range .Protocols }}
+    {{- $protoName := .Name -}}
+    {{- $protoID := .ID -}}
+    {{ range .Methods }}
+        {{- $typeID := format "proto%sMethod%s" (capitalize $protoName) (capitalize .Name)}}
+        {{ template "go-pb/serialization.go.tmpl" dict "TypeName" (format "rpcReqProto%sMethod%s" (capitalize $protoName) (capitalize .Name)) "TypeID" $typeID "Fields" .Input "ProtoName" $protoName }}
+        {{ template "go-pb/serialization.go.tmpl" dict "TypeName" (format "rpcRespProto%sMethod%s" (capitalize $protoName) (capitalize .Name)) "TypeID" $typeID "Fields" .Output "ProtoName" $protoName }}
+    {{ end }}
+{{ end }}

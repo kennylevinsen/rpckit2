@@ -1,0 +1,55 @@
+{{ range .Protocols }}
+type proto{{ capitalize .Name }}Method uint64
+{{- end }}
+
+const (
+{{ range .Protocols }}
+    {{- $protoName := .Name -}}
+    {{- $protoID := .ID -}}
+    {{ range .Methods }}
+        {{- $typeID := format "proto%sMethod%s" (capitalize $protoName) (capitalize .Name) -}}
+        {{ $typeID }} proto{{ capitalize $protoName }}Method = {{ .ID }}
+    {{ end }}
+{{ end }}
+)
+
+type protoDescriptor struct {
+    name string
+    methods map[uint64]methodDescriptor
+}
+
+type methodDescriptor struct {
+    name string
+}
+
+var protoMap = map[uint64]protoDescriptor{
+{{- range .Protocols }}
+    {{ .ID }}: protoDescriptor{
+        name: {{ doublequote .Name }},
+        methods: map[uint64]methodDescriptor{
+            {{- range .Methods }}
+            {{ .ID }}: methodDescriptor{name: {{ doublequote .Name }}},
+            {{- end }}
+        },
+    },
+{{- end }}
+}
+
+{{ range .Protocols }}
+    {{- $protoName := .Name -}}
+    {{- $protoID := .ID -}}
+    {{ range .Structs }}
+        {{ template "go-pb/serialization_struct.go.tmpl" dict "TypeName" (format "rpcProto%sStruct%s" (capitalize $protoName) (capitalize .Name)) "Name" .Name "Fields" .Fields "ProtoName" $protoName }}
+        {{ range .Fields }}
+            {{ template "go-pb/serialization_map.go.tmpl" dict "T" .T "ProtoName" $protoName }}
+        {{ end }}
+    {{ end }}
+    {{ range .Methods }}
+        {{ range .Input }}
+            {{ template "go-pb/serialization_map.go.tmpl" dict "T" .T "ProtoName" $protoName }}
+        {{ end }}
+        {{ range .Output }}
+            {{ template "go-pb/serialization_map.go.tmpl" dict "T" .T "ProtoName" $protoName }}
+        {{ end }}
+    {{ end }}
+{{ end }}

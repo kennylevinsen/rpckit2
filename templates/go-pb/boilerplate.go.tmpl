@@ -10,10 +10,9 @@ import (
 	"math"
 	"math/rand"
 	"net"
+	"strconv"
 	"sync"
 	"time"
-	"log"
-	"runtime/debug"
 )
 
 
@@ -645,6 +644,9 @@ type RPCOptions struct {
 	// If a method call is received for a protocol not on this list, an error
 	// reply will be sent.
 	Servers []RPCServer
+
+	// ErrorLog specifies an optional error logger.
+	ErrorLog func(format string, v ...interface{})
 }
 
 // RPCConnection is a low-level protobuf-based RPC session.
@@ -655,11 +657,17 @@ type RPCConnection struct {
 	onConnect      func(c *RPCConnection) error
 	onDisconnect   func(c *RPCConnection, err RPCError)
 
+	log func(format string, v ...interface{})
 	conn *connection
 }
 
 // NewRPCConnection creates a new RPCConnection.
 func NewRPCConnection(options *RPCOptions) *RPCConnection {
+	l := options.ErrorLog
+	if l == nil {
+		l = func(string, ...interface{}) {}
+	}
+
 	c := &RPCConnection{
 		done:         make(chan struct{}),
 		dialer:       options.Dialer,
@@ -667,6 +675,7 @@ func NewRPCConnection(options *RPCOptions) *RPCConnection {
 		onDisconnect: options.DisconnectHook,
 		onConnect:    options.ConnectHook,
 		conn:         newConnection(),
+		log:          l,
 	}
 
 	for _, h := range options.Servers {
@@ -910,7 +919,20 @@ func (c *RPCConnection) gotMessage(ctx context.Context, conn *connection, msg *m
 		}
 
 		go func() {
-			result := handler.rpcCall(ctx, methodID, msg)
+			result := func() (resp rpcMessage) {
+				defer func() {
+					if r := recover(); r != nil {
+						proto := protoMap[protocolID]
+						method := proto.methods[methodID]
+						c.log("panic in server method %s for protocol %s: %+v", strconv.Quote(method.name), strconv.Quote(proto.name), r)
+						resp = &rpcError{id: ApplicationError, error: "unknown error occurred"}
+					}
+				}()
+
+				resp = handler.rpcCall(ctx, methodID, msg)
+				return
+			}()
+
 			if result != nil {
 				reply := newMessage(messageCapacity)
 				reply.WriteVarint(messageTypeMethodReturn)

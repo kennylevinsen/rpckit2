@@ -1,0 +1,11 @@
+{{ range .Protocols }}
+// The RPC{{ capitalize .Name }}Client type is a RPC client for the {{ .Name }} protocol.
+type RPC{{ capitalize .Name }}Client struct {
+	c *RPCConnection
+}
+
+// NewRPC{{ capitalize .Name }}Client creates a new RPC client for the {{ .Name }} protocol.
+func NewRPC{{ capitalize .Name }}Client(c *RPCConnection) *RPC{{ capitalize .Name }}Client {
+	return &RPC{{- capitalize .Name }}Client{c: c}
+}
+{{ end }}

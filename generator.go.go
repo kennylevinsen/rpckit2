@@ -5,12 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"path"
 	"strconv"
 	"strings"
 	"text/template"
 	"unicode"
-	"log"
 
 	"golang.org/x/tools/imports"
 )
@@ -20,22 +20,25 @@ import (
 var template_deps = []string{
 	"go-pb/boilerplate.go.tmpl",
 	"go-pb/property_to_wiretype.go.tmpl",
-	"go-pb/marshalsimple.go.tmpl",
-	"go-pb/marshalarray.go.tmpl",
-	"go-pb/marshalmap.go.tmpl",
-	"go-pb/marshalstruct.go.tmpl",
+	"go-pb/marshal_simple.go.tmpl",
+	"go-pb/marshal_array.go.tmpl",
+	"go-pb/marshal_map.go.tmpl",
+	"go-pb/marshal_struct.go.tmpl",
 	"go-pb/marshal.go.tmpl",
-	"go-pb/unmarshalsimple.go.tmpl",
-	"go-pb/unmarshalarray.go.tmpl",
-	"go-pb/unmarshalmap.go.tmpl",
-	"go-pb/unmarshalstruct.go.tmpl",
+	"go-pb/unmarshal_simple.go.tmpl",
+	"go-pb/unmarshal_array.go.tmpl",
+	"go-pb/unmarshal_map.go.tmpl",
+	"go-pb/unmarshal_struct.go.tmpl",
 	"go-pb/unmarshal.go.tmpl",
+	"go-pb/prepare_serializers.go.tmpl",
+	"go-pb/serializations.go.tmpl",
 	"go-pb/serialization.go.tmpl",
-	"go-pb/serialization-map.go.tmpl",
-	"go-pb/serialization-struct.go.tmpl",
-	"go-pb/client_definition.go.tmpl",
-	"go-pb/client_method.go.tmpl",
-	"go-pb/server_method.go.tmpl",
+	"go-pb/serialization_map.go.tmpl",
+	"go-pb/serialization_struct.go.tmpl",
+	"go-pb/client_definitions.go.tmpl",
+	"go-pb/client_methods.go.tmpl",
+	"go-pb/server_definitions.go.tmpl",
+	"go-pb/server_methods.go.tmpl",
 	"go-pb/rpckit.go.tmpl",
 
 	"go-http/boilerplate.go.tmpl",
@@ -73,7 +76,7 @@ func (g GoGenerator) Generate(p string) error {
 	store := make(map[string]interface{})
 
 	funcs := template.FuncMap{
-		"log": func (formatter string, v ...interface{}) string {
+		"log": func(formatter string, v ...interface{}) string {
 			log.Printf(formatter, v...)
 			return ""
 		},
@@ -86,7 +89,7 @@ func (g GoGenerator) Generate(p string) error {
 		},
 		"counter": func(name string) int {
 			cnt := counter[name]
-			counter[name] = cnt+1
+			counter[name] = cnt + 1
 			return cnt
 		},
 		"store": func(name string, v interface{}) string {
@@ -96,7 +99,7 @@ func (g GoGenerator) Generate(p string) error {
 		"retrieve": func(name string) interface{} {
 			return store[name]
 		},
-		"format": func (formatter string, v ...interface{}) string {
+		"format": func(formatter string, v ...interface{}) string {
 			return fmt.Sprintf(formatter, v...)
 		},
 		"error": func(s string) error {

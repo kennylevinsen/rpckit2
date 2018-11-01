@@ -1,0 +1,14 @@
+{{ range .Protocols }}
+type rpcCallServerFor{{ capitalize .Name }} struct {
+    methods {{ capitalize .Name }}Protocol
+}
+{{ end }}
+{{ range .Protocols }}
+// RPC{{ capitalize .Name }}Server creates a new RPCServer for the {{ .Name }} protocol.
+func RPC{{ capitalize .Name }}Server(methods {{ capitalize .Name }}Protocol) RPCServer {
+    return &rpcServer{
+        ProtocolID: {{ .ID }},
+        Server: &rpcCallServerFor{{ capitalize .Name }}{methods: methods},
+    }
+}
+{{ end }}

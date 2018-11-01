@@ -1,8 +1,8 @@
 {{- if .T.IsArray }}
-{{ template "go-pb/serialization-map.go.tmpl" dict "T" .T.InnerValue "ProtoName" .ProtoName }}
+{{ template "go-pb/serialization_map.go.tmpl" dict "T" .T.InnerValue "ProtoName" .ProtoName }}
 {{- else if .T.IsMap }}
-{{ template "go-pb/serialization-map.go.tmpl" dict "T" .T.InnerKey "ProtoName" .ProtoName }}
-{{ template "go-pb/serialization-map.go.tmpl" dict "T" .T.InnerValue "ProtoName" .ProtoName }}
+{{ template "go-pb/serialization_map.go.tmpl" dict "T" .T.InnerKey "ProtoName" .ProtoName }}
+{{ template "go-pb/serialization_map.go.tmpl" dict "T" .T.InnerValue "ProtoName" .ProtoName }}
 {{ $name := format "rpcMapKey%sValue%s" .T.InnerKey .T.InnerValue }}
 {{ if ifnotexists (format "rpcMap%s" .T.GoType) }}
 {{ $mapcnt := counter "rpcMap" }}

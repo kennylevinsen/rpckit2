@@ -1,25 +1,6 @@
-// RPC{{ capitalize .ProtoName }}Server creates a new RPCServer for the {{ .ProtoName }} protocol.
-func RPC{{ capitalize .ProtoName }}Server(methods {{ capitalize .ProtoName }}Protocol) RPCServer {
-    return &rpcServer{
-        ProtocolID: {{ .ProtoID }},
-        Server: &rpcCallServerFor{{ capitalize .ProtoName }}{methods: methods},
-    }
-}
-
-type rpcCallServerFor{{ capitalize .ProtoName }} struct {
-    methods {{ capitalize .ProtoName }}Protocol
-}
-
-func (s *rpcCallServerFor{{ capitalize .ProtoName }}) rpcCall(ctx context.Context, methodID uint64, m *message) (resp rpcMessage) {
-    defer func() {
-        if r := recover(); r != nil {
-		log.Error(r)
-		debug.PrintStack()
-            resp = &rpcError{id: ApplicationError, error: "unknown error occurred"}
-        }
-    }()
-
-    {{ $protoName := .ProtoName -}}
+{{ range .Protocols }}
+func (s *rpcCallServerFor{{ capitalize .Name }}) rpcCall(ctx context.Context, methodID uint64, m *message) (resp rpcMessage) {
+    {{ $protoName := .Name -}}
     switch methodID {
     {{- range .Methods }}
     case uint64(proto{{ capitalize $protoName }}Method{{ capitalize .Name }}):
@@ -44,3 +25,4 @@ func (s *rpcCallServerFor{{ capitalize .ProtoName }}) rpcCall(ctx context.Contex
         return &rpcError{id: GenericError, error: fmt.Sprintf("unknown method ID: %d", methodID)}
     }
 }
+{{ end }}
