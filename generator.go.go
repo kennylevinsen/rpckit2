@@ -110,7 +110,7 @@ func (g GoGenerator) Generate(p string) error {
 			b.Grow(len(s))
 			for idx, r := range s {
 				if idx == 0 {
-					b.WriteRune(unicode.ToTitle(r))
+					b.WriteRune(unicode.ToUpper(r))
 					continue
 				}
 				b.WriteRune(r)
@@ -118,6 +118,19 @@ func (g GoGenerator) Generate(p string) error {
 			return b.String()
 		},
 		"camelize": func(s string) string {
+			isFullUpper := true
+			for _, r := range s {
+				if !unicode.IsUpper(r) {
+					isFullUpper = false
+					break
+				}
+			}
+
+			// If all letters are upper-case, we assume it is an abbreviation and lower-case it.
+			if isFullUpper {
+				return strings.ToLower(s)
+			}
+
 			var b strings.Builder
 			b.Grow(len(s))
 			for idx, r := range s {
@@ -129,7 +142,7 @@ func (g GoGenerator) Generate(p string) error {
 			}
 			return b.String()
 		},
-		"upper":       strings.ToTitle,
+		"upper":       strings.ToUpper,
 		"lower":       strings.ToLower,
 		"doublequote": strconv.Quote,
 		"dict": func(values ...interface{}) (map[string]interface{}, error) {
