@@ -231,7 +231,7 @@ func messageFromBytes(msg []byte) (*message, int) {
 		if len(msg) >= length {
 			m := &message{
 				buf: msg,
-				len: len(msg),
+				len: length,
 				pos: 4,
 			}
 			return m, length
@@ -247,6 +247,16 @@ func embeddedMessageFromBytes(msg []byte) *message {
 		embedded: true,
 	}
 	return m
+}
+
+func (m *message) Clone() *message {
+	b := make([]byte, m.len-m.pos)
+	copy(b, m.buf[m.pos:])
+	return &message{
+		buf:      b,
+		len:      len(b),
+		embedded: m.embedded,
+	}
 }
 
 func (m *message) Bytes() []byte {
@@ -963,7 +973,7 @@ func (c *RPCConnection) gotMessage(ctx context.Context, conn *connection, msg *m
 			return &rpcError{id: ProtocolError, error: fmt.Sprintf("method response received for unknown call: %v", callID)}
 		}
 
-		ch <- msg
+		ch <- msg.Clone()
 	}
 
 	return nil
