@@ -47,8 +47,12 @@ type rpcMessage interface {
 	RPCID() uint64
 }
 
+type rpcCallable interface {
+	call(ctx context.Context, h rpcCallServer) rpcMessage
+}
+
 type rpcCallServer interface {
-	rpcCall(ctx context.Context, methodID uint64, m *message) rpcMessage
+	handle(ctx context.Context, methodID uint64, m *message) (rpcCallable, error)
 }
 
 func makeSlice(n int) []byte {
@@ -915,20 +919,26 @@ func (c *RPCConnection) gotMessage(ctx context.Context, conn *connection, msg *m
 			return &rpcError{id: ProtocolError, error: "could not read methodID from method call"}
 		}
 
+		callable, err := handler.handle(ctx, methodID, msg)
 		go func() {
-			result := func() (resp rpcMessage) {
-				defer func() {
-					if r := recover(); r != nil {
-						proto := protoMap[protocolID]
-						method := proto.methods[methodID]
-						c.log("panic in server method %s for protocol %s: %+v", strconv.Quote(method.name), strconv.Quote(proto.name), r)
-						resp = &rpcError{id: ApplicationError, error: "unknown error occurred"}
-					}
-				}()
+			var result rpcMessage
+			if err != nil {
+				result = &rpcError{id: ProtocolError, error: err.Error()}
+			} else {
+				result = func() (resp rpcMessage) {
+					defer func() {
+						if r := recover(); r != nil {
+							proto := protoMap[protocolID]
+							method := proto.methods[methodID]
+							c.log("panic in server method %s for protocol %s: %+v", strconv.Quote(method.name), strconv.Quote(proto.name), r)
+							resp = &rpcError{id: ApplicationError, error: "unknown error occurred"}
+						}
+					}()
 
-				resp = handler.rpcCall(ctx, methodID, msg)
-				return
-			}()
+					resp = callable.call(ctx, handler)
+					return
+				}()
+			}
 
 			if result != nil {
 				reply := newMessage(messageCapacity)
@@ -1803,107 +1813,131 @@ func RPCEchoServer(methods EchoProtocol) RPCServer {
 	}
 }
 
-func (s *rpcCallServerForPingpong) rpcCall(ctx context.Context, methodID uint64, m *message) (resp rpcMessage) {
+func (args *rpcReqProtoPingpongMethodAuthenticate) call(ctx context.Context, s rpcCallServer) (resp rpcMessage) {
+	success, err := s.(*rpcCallServerForPingpong).methods.Authenticate(ctx, args.Username, args.Password)
+	if err != nil {
+		if rpcMsg, ok := err.(rpcMessage); ok {
+			return rpcMsg
+		}
+		return &rpcError{id: ApplicationError, error: err.Error()}
+	}
+	return &rpcRespProtoPingpongMethodAuthenticate{
+		Success: success,
+	}
+}
+
+func (args *rpcReqProtoPingpongMethodPingWithReply) call(ctx context.Context, s rpcCallServer) (resp rpcMessage) {
+	greeting, err := s.(*rpcCallServerForPingpong).methods.PingWithReply(ctx, args.Name)
+	if err != nil {
+		if rpcMsg, ok := err.(rpcMessage); ok {
+			return rpcMsg
+		}
+		return &rpcError{id: ApplicationError, error: err.Error()}
+	}
+	return &rpcRespProtoPingpongMethodPingWithReply{
+		Greeting: greeting,
+	}
+}
+
+func (args *rpcReqProtoPingpongMethodTestMethod) call(ctx context.Context, s rpcCallServer) (resp rpcMessage) {
+	success, err := s.(*rpcCallServerForPingpong).methods.TestMethod(ctx, args.String, args.Bool, args.Int64, args.Int, args.Float, args.Double)
+	if err != nil {
+		if rpcMsg, ok := err.(rpcMessage); ok {
+			return rpcMsg
+		}
+		return &rpcError{id: ApplicationError, error: err.Error()}
+	}
+	return &rpcRespProtoPingpongMethodTestMethod{
+		Success: success,
+	}
+}
+
+func (s *rpcCallServerForPingpong) handle(ctx context.Context, methodID uint64, m *message) (callable rpcCallable, err error) {
 	switch methodID {
 	case uint64(protoPingpongMethodAuthenticate):
 		args := rpcReqProtoPingpongMethodAuthenticate{}
 		if err := args.RPCDecode(m); err != nil {
-			return &rpcError{id: ProtocolError, error: fmt.Sprintf("unable to decode method call: %v", err)}
+			return nil, fmt.Errorf("unable to decode method call: %v", err)
 		}
-		success, err := s.methods.Authenticate(ctx, args.Username, args.Password)
-		if err != nil {
-			if rpcMsg, ok := err.(rpcMessage); ok {
-				return rpcMsg
-			}
-			return &rpcError{id: ApplicationError, error: err.Error()}
-		}
-		return &rpcRespProtoPingpongMethodAuthenticate{
-			Success: success,
-		}
+		return &args, nil
 	case uint64(protoPingpongMethodPingWithReply):
 		args := rpcReqProtoPingpongMethodPingWithReply{}
 		if err := args.RPCDecode(m); err != nil {
-			return &rpcError{id: ProtocolError, error: fmt.Sprintf("unable to decode method call: %v", err)}
+			return nil, fmt.Errorf("unable to decode method call: %v", err)
 		}
-		greeting, err := s.methods.PingWithReply(ctx, args.Name)
-		if err != nil {
-			if rpcMsg, ok := err.(rpcMessage); ok {
-				return rpcMsg
-			}
-			return &rpcError{id: ApplicationError, error: err.Error()}
-		}
-		return &rpcRespProtoPingpongMethodPingWithReply{
-			Greeting: greeting,
-		}
+		return &args, nil
 	case uint64(protoPingpongMethodTestMethod):
 		args := rpcReqProtoPingpongMethodTestMethod{}
 		if err := args.RPCDecode(m); err != nil {
-			return &rpcError{id: ProtocolError, error: fmt.Sprintf("unable to decode method call: %v", err)}
+			return nil, fmt.Errorf("unable to decode method call: %v", err)
 		}
-		success, err := s.methods.TestMethod(ctx, args.String, args.Bool, args.Int64, args.Int, args.Float, args.Double)
-		if err != nil {
-			if rpcMsg, ok := err.(rpcMessage); ok {
-				return rpcMsg
-			}
-			return &rpcError{id: ApplicationError, error: err.Error()}
-		}
-		return &rpcRespProtoPingpongMethodTestMethod{
-			Success: success,
-		}
+		return &args, nil
 	default:
-		return &rpcError{id: GenericError, error: fmt.Sprintf("unknown method ID: %d", methodID)}
+		return nil, fmt.Errorf("unknown method ID: %d", methodID)
 	}
 }
 
-func (s *rpcCallServerForEcho) rpcCall(ctx context.Context, methodID uint64, m *message) (resp rpcMessage) {
+func (args *rpcReqProtoEchoMethodEcho) call(ctx context.Context, s rpcCallServer) (resp rpcMessage) {
+	output, err := s.(*rpcCallServerForEcho).methods.Echo(ctx, args.Input, args.Names, args.Values, args.Something)
+	if err != nil {
+		if rpcMsg, ok := err.(rpcMessage); ok {
+			return rpcMsg
+		}
+		return &rpcError{id: ApplicationError, error: err.Error()}
+	}
+	return &rpcRespProtoEchoMethodEcho{
+		Output: output,
+	}
+}
+
+func (args *rpcReqProtoEchoMethodPing) call(ctx context.Context, s rpcCallServer) (resp rpcMessage) {
+	output, err := s.(*rpcCallServerForEcho).methods.Ping(ctx)
+	if err != nil {
+		if rpcMsg, ok := err.(rpcMessage); ok {
+			return rpcMsg
+		}
+		return &rpcError{id: ApplicationError, error: err.Error()}
+	}
+	return &rpcRespProtoEchoMethodPing{
+		Output: output,
+	}
+}
+
+func (args *rpcReqProtoEchoMethodByteTest) call(ctx context.Context, s rpcCallServer) (resp rpcMessage) {
+	output, err := s.(*rpcCallServerForEcho).methods.ByteTest(ctx, args.Input)
+	if err != nil {
+		if rpcMsg, ok := err.(rpcMessage); ok {
+			return rpcMsg
+		}
+		return &rpcError{id: ApplicationError, error: err.Error()}
+	}
+	return &rpcRespProtoEchoMethodByteTest{
+		Output: output,
+	}
+}
+
+func (s *rpcCallServerForEcho) handle(ctx context.Context, methodID uint64, m *message) (callable rpcCallable, err error) {
 	switch methodID {
 	case uint64(protoEchoMethodEcho):
 		args := rpcReqProtoEchoMethodEcho{}
 		if err := args.RPCDecode(m); err != nil {
-			return &rpcError{id: ProtocolError, error: fmt.Sprintf("unable to decode method call: %v", err)}
+			return nil, fmt.Errorf("unable to decode method call: %v", err)
 		}
-		output, err := s.methods.Echo(ctx, args.Input, args.Names, args.Values, args.Something)
-		if err != nil {
-			if rpcMsg, ok := err.(rpcMessage); ok {
-				return rpcMsg
-			}
-			return &rpcError{id: ApplicationError, error: err.Error()}
-		}
-		return &rpcRespProtoEchoMethodEcho{
-			Output: output,
-		}
+		return &args, nil
 	case uint64(protoEchoMethodPing):
 		args := rpcReqProtoEchoMethodPing{}
 		if err := args.RPCDecode(m); err != nil {
-			return &rpcError{id: ProtocolError, error: fmt.Sprintf("unable to decode method call: %v", err)}
+			return nil, fmt.Errorf("unable to decode method call: %v", err)
 		}
-		output, err := s.methods.Ping(ctx)
-		if err != nil {
-			if rpcMsg, ok := err.(rpcMessage); ok {
-				return rpcMsg
-			}
-			return &rpcError{id: ApplicationError, error: err.Error()}
-		}
-		return &rpcRespProtoEchoMethodPing{
-			Output: output,
-		}
+		return &args, nil
 	case uint64(protoEchoMethodByteTest):
 		args := rpcReqProtoEchoMethodByteTest{}
 		if err := args.RPCDecode(m); err != nil {
-			return &rpcError{id: ProtocolError, error: fmt.Sprintf("unable to decode method call: %v", err)}
+			return nil, fmt.Errorf("unable to decode method call: %v", err)
 		}
-		output, err := s.methods.ByteTest(ctx, args.Input)
-		if err != nil {
-			if rpcMsg, ok := err.(rpcMessage); ok {
-				return rpcMsg
-			}
-			return &rpcError{id: ApplicationError, error: err.Error()}
-		}
-		return &rpcRespProtoEchoMethodByteTest{
-			Output: output,
-		}
+		return &args, nil
 	default:
-		return &rpcError{id: GenericError, error: fmt.Sprintf("unknown method ID: %d", methodID)}
+		return nil, fmt.Errorf("unknown method ID: %d", methodID)
 	}
 }
 

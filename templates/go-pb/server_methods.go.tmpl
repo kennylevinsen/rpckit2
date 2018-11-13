@@ -1,28 +1,34 @@
 {{ range .Protocols }}
-func (s *rpcCallServerFor{{ capitalize .Name }}) rpcCall(ctx context.Context, methodID uint64, m *message) (resp rpcMessage) {
-    {{ $protoName := .Name -}}
+{{ $protoName := .Name -}}
+{{ range .Methods }}
+func (args *rpcReqProto{{ capitalize $protoName }}Method{{ capitalize .Name }}) call(ctx context.Context, s rpcCallServer) (resp rpcMessage) {
+    {{ range .Output }}{{ .Name }}, {{ end }}err := s.(*rpcCallServerFor{{ capitalize $protoName }}).methods.{{ capitalize .Name }}(ctx{{- range .Input }}, args.{{ capitalize .Name }}{{- end }})
+    if err != nil {
+        if rpcMsg, ok := err.(rpcMessage); ok {
+            return rpcMsg
+        }
+        return &rpcError{id: ApplicationError, error: err.Error()}
+    }
+    return &rpcRespProto{{ capitalize $protoName }}Method{{ capitalize .Name }}{
+        {{- range .Output }}
+        {{ capitalize .Name }}: {{ .Name }},
+        {{- end }}
+    }
+}
+{{ end }}
+
+func (s *rpcCallServerFor{{ capitalize .Name }}) handle(ctx context.Context, methodID uint64, m *message) (callable rpcCallable, err error) {
     switch methodID {
     {{- range .Methods }}
     case uint64(proto{{ capitalize $protoName }}Method{{ capitalize .Name }}):
         args := rpcReqProto{{ capitalize $protoName }}Method{{ capitalize .Name }}{}
         if err := args.RPCDecode(m); err != nil {
-            return &rpcError{id: ProtocolError, error: fmt.Sprintf("unable to decode method call: %v", err)}
+            return nil, fmt.Errorf("unable to decode method call: %v", err)
         }
-        {{ range .Output }}{{ .Name }}, {{ end }}err := s.methods.{{ capitalize .Name }}(ctx{{- range .Input }}, args.{{ capitalize .Name }}{{- end }})
-        if err != nil {
-            if rpcMsg, ok := err.(rpcMessage); ok {
-                return rpcMsg
-            }
-            return &rpcError{id: ApplicationError, error: err.Error()}
-        }
-        return &rpcRespProto{{ capitalize $protoName }}Method{{ capitalize .Name }}{
-            {{- range .Output }}
-            {{ capitalize .Name }}: {{ .Name }},
-            {{- end }}
-        }
+        return &args, nil
     {{- end }}
     default:
-        return &rpcError{id: GenericError, error: fmt.Sprintf("unknown method ID: %d", methodID)}
+        return nil, fmt.Errorf("unknown method ID: %d", methodID)
     }
 }
 {{ end }}

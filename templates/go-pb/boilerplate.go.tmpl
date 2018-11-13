@@ -48,8 +48,12 @@ type rpcMessage interface {
 	RPCID() uint64
 }
 
+type rpcCallable interface {
+	call(ctx context.Context, h rpcCallServer) rpcMessage
+}
+
 type rpcCallServer interface {
-	rpcCall(ctx context.Context, methodID uint64, m *message) rpcMessage
+	handle(ctx context.Context, methodID uint64, m *message) (rpcCallable, error)
 }
 
 func makeSlice(n int) []byte {
@@ -918,20 +922,27 @@ func (c *RPCConnection) gotMessage(ctx context.Context, conn *connection, msg *m
 			return &rpcError{id: ProtocolError, error: "could not read methodID from method call"}
 		}
 
+ 
+		callable, err := handler.handle(ctx, methodID, msg)
 		go func() {
-			result := func() (resp rpcMessage) {
-				defer func() {
-					if r := recover(); r != nil {
-						proto := protoMap[protocolID]
-						method := proto.methods[methodID]
-						c.log("panic in server method %s for protocol %s: %+v", strconv.Quote(method.name), strconv.Quote(proto.name), r)
-						resp = &rpcError{id: ApplicationError, error: "unknown error occurred"}
-					}
+			var result rpcMessage
+			if err != nil {
+				result = &rpcError{id: ProtocolError, error: err.Error()}
+			} else {
+				result = func() (resp rpcMessage) {
+					defer func() {
+						if r := recover(); r != nil {
+							proto := protoMap[protocolID]
+							method := proto.methods[methodID]
+							c.log("panic in server method %s for protocol %s: %+v", strconv.Quote(method.name), strconv.Quote(proto.name), r)
+							resp = &rpcError{id: ApplicationError, error: "unknown error occurred"}
+						}
+					}()
+	
+					resp = callable.call(ctx, handler)
+					return
 				}()
-
-				resp = handler.rpcCall(ctx, methodID, msg)
-				return
-			}()
+			}
 
 			if result != nil {
 				reply := newMessage(messageCapacity)
