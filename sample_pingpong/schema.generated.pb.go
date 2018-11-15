@@ -550,6 +550,10 @@ type connection struct {
 	callIDLock   sync.RWMutex
 	waitingCalls map[uint64]chan *message
 	nextID       uint64
+
+	curDelay    time.Duration
+	maxDelay    time.Duration
+	connectTime time.Time
 }
 
 func newConnection() *connection {
@@ -720,7 +724,11 @@ func (c *RPCConnection) refreshInnerConn() {
 	case <-c.conn.ready:
 		// Ready has already been fired, so the connection has been used.
 		// Create a fresh one.
-		c.conn = newConnection()
+		conn := newConnection()
+		conn.curDelay = c.conn.curDelay
+		conn.maxDelay = c.conn.maxDelay
+		conn.connectTime = time.Now()
+		c.conn = conn
 	default:
 		// Ready has not been fired, so we will not replace the connection.
 	}
@@ -769,8 +777,10 @@ func (c *RPCConnection) dial() {
 		return
 	}
 
-	curDelay := 1 * time.Second
-	maxDelay := 1 * time.Minute
+	if time.Now().After(c.conn.connectTime.Add(5*time.Second)) || c.conn.curDelay == 0 {
+		c.conn.curDelay = time.Second
+		c.conn.maxDelay = time.Minute
+	}
 
 	for {
 		conn, err := c.dialer()
@@ -786,14 +796,14 @@ func (c *RPCConnection) dial() {
 		}
 
 		// exponential back-off with 25% jitter
-		jitter := time.Duration(rand.Int63n(int64(curDelay / 4)))
+		jitter := time.Duration(rand.Int63n(int64(c.conn.curDelay / 4)))
 		select {
 		case <-c.done:
 			return
-		case <-time.After(curDelay + jitter):
-			curDelay *= 2
-			if curDelay > maxDelay {
-				curDelay = maxDelay
+		case <-time.After(c.conn.curDelay + jitter):
+			c.conn.curDelay *= 2
+			if c.conn.curDelay > c.conn.maxDelay {
+				c.conn.curDelay = c.conn.maxDelay
 			}
 		}
 	}
