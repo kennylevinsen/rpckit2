@@ -7,7 +7,7 @@ outer := {{ .Accessor }}
 {{ $vname := retrieve (format "rpcMap-%s" .Field.GoType) }}
 var v {{ $vname }}
 
-if em, err = m.ReadEmbeddedMessage(); err != nil {
+if em, err = m.ReadEmbeddedMessageNoCopy(); err != nil {
     break
 }
 

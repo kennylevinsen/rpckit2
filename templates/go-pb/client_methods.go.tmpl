@@ -7,11 +7,45 @@ func (c *RPC{{ capitalize $protoName }}Client) {{ capitalize .Name }}(ctx contex
     {{- $input := .Input }}
     {{- range $idx, $v := .Input }} req{{ capitalize $v.Name }} {{ $v.T.GoType }}{{- if ne (len $input) $idx }},{{ end }}{{ end }}) (
     {{- range .Output }}resp{{ capitalize .Name }} {{ .T.GoType }}, {{ end }}err error) {
-    resultTypeID, msg, err := c.c.call(ctx, true, {{ $protoID }}, uint64(proto{{ capitalize $protoName }}Method{{ capitalize .Name }}), &rpcReqProto{{ capitalize $protoName }}Method{{ capitalize .Name }}{
+
+    var decoderErr error
+    decoder := func(msg *message) error {
+        resultTypeID, err := msg.ReadVarint()
+		if err != nil {
+            decoderErr = &rpcError{id: GenericError, error: fmt.Sprintf("error while decoding message type: %v", err)}
+            return decoderErr
+		}
+        switch resultTypeID {
+        case uint64(proto{{ capitalize $protoName }}Method{{ capitalize .Name }}):
+            var r rpcRespProto{{ capitalize $protoName }}Method{{ capitalize .Name }}
+            if err := r.RPCDecode(msg); err != nil {
+                decoderErr = &rpcError{id: GenericError, error: fmt.Sprintf("could not decode result: %v", err)}
+                return decoderErr
+            }
+            {{- range .Output }}
+            resp{{ capitalize .Name }} = r.{{ capitalize .Name }}
+            {{- end}}
+            return nil
+        default:
+            var isPrivate bool
+            err, isPrivate = c.c.handlePrivateResponse(resultTypeID, msg)
+            if !isPrivate {
+                decoderErr = &rpcError{id: ProtocolError, error: fmt.Sprintf("unexpected return type for call type %d: %d", uint64(proto{{ capitalize $protoName }}Method{{ capitalize .Name }}), resultTypeID)}
+                return decoderErr
+            }
+            return nil
+        }
+    }
+
+    err = c.c.call(ctx,decoder, true, {{ $protoID }}, uint64(proto{{ capitalize $protoName }}Method{{ capitalize .Name }}), &rpcReqProto{{ capitalize $protoName }}Method{{ capitalize .Name }}{
         {{- range .Input }}
         {{ capitalize .Name }}: req{{ capitalize .Name }},
         {{- end }}
     })
+
+    if decoderErr != nil {
+        err = decoderErr
+    }
 
     if err != nil {
         if rpcErr, ok := err.(RPCError); ok {
@@ -19,25 +53,6 @@ func (c *RPC{{ capitalize $protoName }}Client) {{ capitalize .Name }}(ctx contex
         }
         return
     }
-
-    switch resultTypeID {
-    case uint64(proto{{ capitalize $protoName }}Method{{ capitalize .Name }}):
-        var r rpcRespProto{{ capitalize $protoName }}Method{{ capitalize .Name }}
-        if decodeErr := r.RPCDecode(msg); decodeErr != nil {
-            err = &rpcError{id: GenericError, error: fmt.Sprintf("could not decode result: %v", decodeErr)}
-            return
-        }
-        {{- range .Output }}
-        resp{{ capitalize .Name }} = r.{{ capitalize .Name }}
-        {{- end}}
-    default:
-        var isPrivate bool
-        err, isPrivate = c.c.handlePrivateResponse(resultTypeID, msg)
-        if !isPrivate {
-            err = &rpcError{id: ProtocolError, error: fmt.Sprintf("unexpected return type for call type %d: %d", uint64(proto{{ capitalize $protoName }}Method{{ capitalize .Name }}), resultTypeID)}
-        }
-    }
-
     return
 }
 {{ end }}

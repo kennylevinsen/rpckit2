@@ -278,7 +278,7 @@ func (m *message) grow(needed int) {
 	}
 }
 
-func (m *message) ReadBytes() ([]byte, error) {
+func (m *message) ReadBytesNoCopy() ([]byte, error) {
 	v, err := m.ReadVarint()
 	if err != nil {
 		m.LastError = err
@@ -297,13 +297,23 @@ func (m *message) ReadBytes() ([]byte, error) {
 	return str, nil
 }
 
+func (m *message) ReadBytes() ([]byte, error) {
+	a, err := m.ReadBytesNoCopy()
+	if err != nil {
+		return nil, err
+	}
+	b := make([]byte, len(a))
+	copy(b, a)
+	return b, nil
+}
+
 func (m *message) ReadString() (string, error) {
-	str, err := m.ReadBytes()
+	str, err := m.ReadBytesNoCopy()
 	return string(str), err
 }
 
-func (m *message) ReadEmbeddedMessage() (*message, error) {
-	b, err := m.ReadBytes()
+func (m *message) ReadEmbeddedMessageNoCopy() (*message, error) {
+	b, err := m.ReadBytesNoCopy()
 	if err != nil {
 		return nil, err
 	}
@@ -531,6 +541,11 @@ func (m *message) WritePBMessage(fieldNumber uint64, em *message) {
 
 // ************************
 
+type callSlot struct {
+	waiter chan struct{}
+	decoder func(m *message) error
+}
+
 // connection provides the network connection context for RPCConnection.
 type connection struct {
 	// ready signals whether connection setup is completed. Users should
@@ -550,7 +565,7 @@ type connection struct {
 	writeLock sync.Mutex
 
 	callIDLock   sync.RWMutex
-	waitingCalls map[uint64]chan *message
+	waitingCalls map[uint64]*callSlot
 	nextID       uint64
 
 	curDelay time.Duration
@@ -562,13 +577,13 @@ func newConnection() *connection {
 	return &connection{
 		ready:        make(chan struct{}, 0),
 		connected:    true,
-		waitingCalls: make(map[uint64]chan *message),
+		waitingCalls: make(map[uint64]*callSlot),
 	}
 }
 
 // acquireCallSlot allocates a waitingCalls call slot with associated message
 // channel for use with a method call.
-func (c *connection) acquireCallSlot() (uint64, chan *message) {
+func (c *connection) acquireCallSlot(f func(m *message) error) (uint64, *callSlot) {
 	c.callIDLock.Lock()
 	defer c.callIDLock.Unlock()
 
@@ -587,9 +602,12 @@ func (c *connection) acquireCallSlot() (uint64, chan *message) {
 	}
 
 	// Take the slot
-	ch := make(chan *message, 1)
-	c.waitingCalls[uint64(n)] = ch
-	return uint64(n), ch
+	cs := &callSlot{
+		waiter: make(chan struct{}, 0),
+		decoder: f,
+	}
+	c.waitingCalls[uint64(n)] = cs
+	return uint64(n), cs
 }
 
 // releaseCallSlot deallocates a waitingCalls call slot, and closes the
@@ -602,23 +620,26 @@ func (c *connection) releaseCallSlot(callID uint64) {
 	c.callIDLock.Lock()
 	defer c.callIDLock.Unlock()
 
+	_, ok := c.waitingCalls[callID]
+	if !ok {
+		panic("attempted to release free call slot")
+	}
+	delete(c.waitingCalls, callID)
+}
+
+// findAndReleaseCallSlot finds a waitingCalls call slot, returns the
+// associated channel, and releases the call slot. It panics if the slot does
+// not exist.
+func (c *connection) findAndReleaseCallSlot(callID uint64) *callSlot {
+	c.callIDLock.RLock()
+	defer c.callIDLock.RUnlock()
+
 	v, ok := c.waitingCalls[callID]
 	if !ok {
 		panic("attempted to release free call slot")
 	}
-	if v == nil {
-		panic("attempted to release unused call slot")
-	}
-	close(v)
 	delete(c.waitingCalls, callID)
-}
-
-// findCallSlot finds a waitingCalls call slot, and returns the associated
-// channel. It returns nil if the slot does not exist.
-func (c *connection) findCallSlot(callID uint64) chan *message {
-	c.callIDLock.RLock()
-	defer c.callIDLock.RUnlock()
-	return c.waitingCalls[callID]
+	return v
 }
 
 // ************************
@@ -670,7 +691,7 @@ type RPCOptions struct {
 // RPCConnection is a low-level protobuf-based RPC session.
 type RPCConnection struct {
 	done           chan struct{}
-	servers map[uint64]rpcCallServer
+	servers        map[uint64]rpcCallServer
 	dialer         func() (net.Conn, error)
 	onConnect      func(c *RPCConnection) error
 	onDisconnect   func(c *RPCConnection, err RPCError)
@@ -982,12 +1003,16 @@ func (c *RPCConnection) gotMessage(ctx context.Context, conn *connection, msg *m
 			return &rpcError{id: ProtocolError, error: "could not read callID from method return"}
 		}
 
-		ch := conn.findCallSlot(callID)
-		if ch == nil {
+		callSlot := conn.findAndReleaseCallSlot(callID)
+		if callSlot == nil {
 			return &rpcError{id: ProtocolError, error: fmt.Sprintf("method response received for unknown call: %v", callID)}
 		}
 
-		ch <- msg.Clone()
+		if err := callSlot.decoder(msg); err != nil {
+			return &rpcError{id: ProtocolError, error: fmt.Sprintf("could not decode response received for call: %+v", err)}
+		}
+
+		close(callSlot.waiter)
 	}
 
 	return nil
@@ -995,30 +1020,30 @@ func (c *RPCConnection) gotMessage(ctx context.Context, conn *connection, msg *m
 
 // call executes a method call, and if waitForReply is true, waits for its
 // completion.
-func (c *RPCConnection) call(ctx context.Context, waitForReply bool, protocolID, methodID uint64, callArgs rpcMessage) (uint64, *message, RPCError) {
+func (c *RPCConnection) call(ctx context.Context, decoder func(m *message) error, waitForReply bool, protocolID, methodID uint64, callArgs rpcMessage) RPCError {
 	conn := c.conn
 
 	// Wait for connection readiness or context cancellation.
 	select {
 	case <-conn.ready:
 	case <-ctx.Done():
-		return 0, nil, contextToError(ctx.Err())
+		return contextToError(ctx.Err())
 	}
 
 	// Connection is ready, but is it still connected?
 	if !conn.connected {
 		if conn.endReason != nil {
 			if err, ok := conn.endReason.(RPCError); ok {
-				return 0, nil, err
+				return err
 			}
-			return 0, nil, &rpcError{id: GenericError, error: conn.endReason.Error()}
+			return &rpcError{id: GenericError, error: conn.endReason.Error()}
 		} else {
-			return 0, nil, &rpcError{id: ConnectionError, error: "not connected"}
+			return &rpcError{id: ConnectionError, error: "not connected"}
 		}
 	}
 
 	// Prepare the message
-	callID, ch := conn.acquireCallSlot()
+	callID, callSlot := conn.acquireCallSlot(decoder)
 	m := newMessage(messageCapacity)
 	m.WriteVarint(messageTypeMethodCall)
 	m.WriteVarint(callID)
@@ -1027,38 +1052,23 @@ func (c *RPCConnection) call(ctx context.Context, waitForReply bool, protocolID,
 
 	if err := callArgs.RPCEncode(m); err != nil {
 		conn.releaseCallSlot(callID)
-		return 0, nil, &rpcError{id: GenericError, error: fmt.Sprintf("unable to encode method call arguments: %v", err)}
+		return &rpcError{id: GenericError, error: fmt.Sprintf("unable to encode method call arguments: %v", err)}
 	}
 
 	// Send the message
 	sendErr := c.send(conn, m)
 	if sendErr != nil || !waitForReply {
 		conn.releaseCallSlot(callID)
-		return 0, nil, sendErr
+		return sendErr
 	}
 
 	// Wait for reply
 	select {
-	case msg := <-ch:
-		conn.releaseCallSlot(callID)
-
-		resultTypeID, err := msg.ReadVarint()
-		if err != nil {
-			err2 := &rpcError{id: GenericError, error: fmt.Sprintf("error while decoding message type: %v", err)}
-			c.end(conn, err2)
-			return 0, nil, err2
-		}
-		return resultTypeID, msg, nil
+	case <-callSlot.waiter: return nil
 	case <-ctx.Done():
-		// We got cancelled. Let a goroutine manage cleanup of the call-slot.
-		go func() {
-			<-ch
-			conn.releaseCallSlot(callID)
-		}()
-
 		// TODO(kl): Should we send a hint to the server, to let it cancel
 		// operation on this request?
-		return 0, nil, contextToError(ctx.Err())
+		return contextToError(ctx.Err())
 	}
 }
 

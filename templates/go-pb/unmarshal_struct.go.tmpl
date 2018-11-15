@@ -1,6 +1,6 @@
 var em *message
 
-em, err = m.ReadEmbeddedMessage()
+em, err = m.ReadEmbeddedMessageNoCopy()
 if err != nil {
     break
 }
