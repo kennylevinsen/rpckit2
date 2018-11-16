@@ -719,8 +719,6 @@ func NewRPCConnection(options *RPCOptions) *RPCConnection {
 		c.servers[h.protocolID()] = h.handler()
 	}
 
-	c.refreshInnerConn()
-
 	if options.Conn != nil {
 		c.connect(options.Conn)
 	} else {
@@ -729,7 +727,7 @@ func NewRPCConnection(options *RPCOptions) *RPCConnection {
 	return c
 }
 
-// isDone is a convenience wrapper for chekcing if "done" has been asserted.
+// isDone is a convenience wrapper for checking if "done" has been asserted.
 func (c *RPCConnection) isDone() bool {
 	select {
 	case <-c.done:
@@ -740,18 +738,21 @@ func (c *RPCConnection) isDone() bool {
 }
 
 // refreshInnerConn renews the inner conenction if necessary.
-func (c *RPCConnection) refreshInnerConn() {
+func (c *RPCConnection) refreshInnerConn() *connection {
+	conn := c.conn
 	select {
-	case <-c.conn.ready:
+	case <-conn.ready:
 		// Ready has already been fired, so the connection has been used.
 		// Create a fresh one.
-		conn := newConnection()
+		conn = newConnection()
 		conn.curDelay = c.conn.curDelay
 		conn.maxDelay = c.conn.maxDelay
 		conn.connectTime = time.Now()
 		c.conn = conn
+		return conn
 	default:
 		// Ready has not been fired, so we will not replace the connection.
+		return conn
 	}
 }
 
@@ -768,24 +769,24 @@ func (c *RPCConnection) sendPreamble(conn *connection) RPCError {
 //
 // The return value indicates whether the read loop has been started.
 func (c *RPCConnection) connect(conn net.Conn) bool {
-	c.refreshInnerConn()
-	c.conn.conn = conn
+	cc := c.refreshInnerConn()
+	cc.conn = conn
 
-	if err := c.sendPreamble(c.conn); err != nil {
-		c.end(c.conn, err)
-		close(c.conn.ready)
+	if err := c.sendPreamble(cc); err != nil {
+		c.end(cc, err)
+		close(cc.ready)
 		return false
 	}
 
 	// TODO(kl): Wait for onConnect to release ready!
 	// How, though? Magic context to bypass ready wait?
-	close(c.conn.ready)
+	close(cc.ready)
 	go c.readLoop()
 
 	if c.onConnect != nil {
 		go func() {
 			if err := c.onConnect(c); err != nil {
-				c.end(c.conn, &rpcError{id: ApplicationError, error: err.Error()})
+				c.end(cc, &rpcError{id: ApplicationError, error: err.Error()})
 			}
 		}()
 	}
@@ -798,9 +799,11 @@ func (c *RPCConnection) dial() {
 		return
 	}
 
-	if time.Now().After(c.conn.connectTime.Add(5*time.Second)) || c.conn.curDelay == 0 {
-		c.conn.curDelay = time.Second
-		c.conn.maxDelay = time.Minute
+	cc := c.conn
+
+	if time.Now().After(cc.connectTime.Add(5*time.Second)) || cc.curDelay == 0 {
+		cc.curDelay = time.Second
+		cc.maxDelay = time.Minute
 	}
 
 	for {
@@ -808,8 +811,6 @@ func (c *RPCConnection) dial() {
 		if err == ErrGiveUp {
 			close(c.done)
 			return
-		} else if err != nil {
-			c.end(c.conn, &rpcError{id: ApplicationError, error: err.Error()})
 		} else if err == nil && c.connect(conn) {
 			// The readloop has been started, which will call us again if
 			// necessary.
@@ -817,14 +818,14 @@ func (c *RPCConnection) dial() {
 		}
 
 		// exponential back-off with 25% jitter
-		jitter := time.Duration(rand.Int63n(int64(c.conn.curDelay / 4)))
+		jitter := time.Duration(rand.Int63n(int64(cc.curDelay / 4)))
 		select {
 		case <-c.done:
 			return
-		case <-time.After(c.conn.curDelay + jitter):
-			c.conn.curDelay *= 2
-			if c.conn.curDelay > c.conn.maxDelay {
-				c.conn.curDelay = c.conn.maxDelay
+		case <-time.After(cc.curDelay + jitter):
+			cc.curDelay *= 2
+			if cc.curDelay > cc.maxDelay {
+				cc.curDelay = cc.maxDelay
 			}
 		}
 	}
