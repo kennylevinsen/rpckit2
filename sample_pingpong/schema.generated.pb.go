@@ -65,15 +65,22 @@ func makeSlice(n int) []byte {
 	return make([]byte, n)
 }
 
-func contextToError(e error) RPCError {
+func toRPCError(e error) RPCError {
 	switch e {
+	case nil:
+		return nil
 	case context.DeadlineExceeded:
 		return &rpcError{id: TimeoutError, error: "method call timed out"}
 	case context.Canceled:
 		return &rpcError{id: GenericError, error: "method call cancelled"}
-	default:
-		return &rpcError{id: GenericError, error: fmt.Sprintf("unknown cancellation reason: %+v", e)}
 	}
+
+	switch x := e.(type) {
+	case RPCError:
+		return x
+	}
+
+	return &rpcError{id: GenericError, error: fmt.Sprintf("unknown cancellation reason: %+v", e)}
 }
 
 // ************************
@@ -87,6 +94,7 @@ const (
 	ProtocolError    RPCErrorID = 2
 	ApplicationError RPCErrorID = 3
 	ConnectionError  RPCErrorID = 4
+	Shutdown         RPCErrorID = 5
 )
 
 // RPCError represent RPC errors.
@@ -562,12 +570,11 @@ type connection struct {
 	// writeLock is used to avoid output corruption by serializing writes.
 	writeLock sync.Mutex
 
-	callIDLock   sync.RWMutex
-	waitingCalls map[uint64]*callSlot
-	nextID       uint64
+	waitingCallsMutex sync.Mutex
+	waitingCalls      map[uint64]*callSlot
+	nextID            uint64
 
 	curDelay    time.Duration
-	maxDelay    time.Duration
 	connectTime time.Time
 }
 
@@ -582,8 +589,8 @@ func newConnection() *connection {
 // acquireCallSlot allocates a waitingCalls call slot with associated message
 // channel for use with a method call.
 func (c *connection) acquireCallSlot(f func(m *message) error) (uint64, *callSlot) {
-	c.callIDLock.Lock()
-	defer c.callIDLock.Unlock()
+	c.waitingCallsMutex.Lock()
+	defer c.waitingCallsMutex.Unlock()
 
 	// Find a slot
 	//
@@ -608,29 +615,12 @@ func (c *connection) acquireCallSlot(f func(m *message) error) (uint64, *callSlo
 	return uint64(n), cs
 }
 
-// releaseCallSlot deallocates a waitingCalls call slot, and closes the
-// associated channel.
-//
-// Note: The call slot must only be released once pending replies have been
-// received. It is a potentially fatal protocol violation to release a call
-// slot with pending responses.
-func (c *connection) releaseCallSlot(callID uint64) {
-	c.callIDLock.Lock()
-	defer c.callIDLock.Unlock()
-
-	_, ok := c.waitingCalls[callID]
-	if !ok {
-		panic("attempted to release free call slot")
-	}
-	delete(c.waitingCalls, callID)
-}
-
 // findAndReleaseCallSlot finds a waitingCalls call slot, returns the
 // associated channel, and releases the call slot. It panics if the slot does
 // not exist.
 func (c *connection) findAndReleaseCallSlot(callID uint64) *callSlot {
-	c.callIDLock.RLock()
-	defer c.callIDLock.RUnlock()
+	c.waitingCallsMutex.Lock()
+	defer c.waitingCallsMutex.Unlock()
 
 	v, ok := c.waitingCalls[callID]
 	if !ok {
@@ -684,6 +674,20 @@ type RPCOptions struct {
 
 	// ErrorLog specifies an optional error logger.
 	ErrorLog func(format string, v ...interface{})
+
+	// CallTimeout defines the timeout for call RPC calls. If zero, no timeout
+	// will be set.
+	CallTimeout time.Duration
+
+	// InitialRetryDelay sets the first delay value for connection retries.
+	InitialRetryDelay time.Duration
+
+	// MaxRetryDelay sets the maximum delay value for connetion retries.
+	MaxRetryDelay time.Duration
+
+	// RetryResetDelay sets the delay after which a running connection is
+	// deemed successful, after which the exponential retry state will be reset.
+	RetryResetDelay time.Duration
 }
 
 // RPCConnection is a low-level protobuf-based RPC session.
@@ -696,6 +700,12 @@ type RPCConnection struct {
 
 	log  func(format string, v ...interface{})
 	conn *connection
+
+	callTimeout time.Duration
+
+	resetDelay time.Duration
+	startDelay time.Duration
+	maxDelay   time.Duration
 }
 
 // NewRPCConnection creates a new RPCConnection.
@@ -713,6 +723,22 @@ func NewRPCConnection(options *RPCOptions) *RPCConnection {
 		onConnect:    options.ConnectHook,
 		conn:         newConnection(),
 		log:          l,
+
+		callTimeout: options.CallTimeout,
+
+		resetDelay: options.RetryResetDelay,
+		startDelay: options.InitialRetryDelay,
+		maxDelay:   options.MaxRetryDelay,
+	}
+
+	if c.resetDelay == 0 {
+		c.resetDelay = 5 * time.Second
+	}
+	if c.startDelay == 0 {
+		c.startDelay = 1 * time.Second
+	}
+	if c.maxDelay == 0 {
+		c.maxDelay = 1 * time.Minute
 	}
 
 	for _, h := range options.Servers {
@@ -746,7 +772,6 @@ func (c *RPCConnection) refreshInnerConn() *connection {
 		// Create a fresh one.
 		conn = newConnection()
 		conn.curDelay = c.conn.curDelay
-		conn.maxDelay = c.conn.maxDelay
 		conn.connectTime = time.Now()
 		c.conn = conn
 		return conn
@@ -801,9 +826,8 @@ func (c *RPCConnection) dial() {
 
 	cc := c.conn
 
-	if time.Now().After(cc.connectTime.Add(5*time.Second)) || cc.curDelay == 0 {
-		cc.curDelay = time.Second
-		cc.maxDelay = time.Minute
+	if time.Now().After(cc.connectTime.Add(c.resetDelay)) || cc.curDelay == 0 {
+		cc.curDelay = c.startDelay
 	}
 
 	for {
@@ -824,8 +848,8 @@ func (c *RPCConnection) dial() {
 			return
 		case <-time.After(cc.curDelay + jitter):
 			cc.curDelay *= 2
-			if cc.curDelay > cc.maxDelay {
-				cc.curDelay = cc.maxDelay
+			if cc.curDelay > c.maxDelay {
+				cc.curDelay = c.maxDelay
 			}
 		}
 	}
@@ -843,7 +867,7 @@ func (c *RPCConnection) readLoop() {
 	// RPCConnection was closed after the dial loop checked but before a new
 	// connection was inserted, leading to Close closing an old connection.
 	if c.isDone() {
-		c.end(conn, nil)
+		c.end(conn, &rpcError{id: Shutdown, error: "connection is shutting down"})
 		return
 	}
 
@@ -902,10 +926,7 @@ func (c *RPCConnection) readLoop() {
 		m, err := conn.conn.Read(buf[len(buf):cap(buf)])
 		buf = buf[0 : len(buf)+m]
 		if err == io.EOF {
-			c.end(conn, nil)
-			return
-		} else if err != nil {
-			c.end(conn, &rpcError{id: GenericError, error: fmt.Sprintf("error reading from connection in readLoop(): %v", err)})
+			c.end(conn, &rpcError{id: ConnectionError, error: fmt.Sprintf("error reading from connection in readLoop(): %v", err)})
 			return
 		}
 
@@ -1020,11 +1041,17 @@ func (c *RPCConnection) gotMessage(ctx context.Context, conn *connection, msg *m
 func (c *RPCConnection) call(ctx context.Context, decoder func(m *message) error, waitForReply bool, protocolID, methodID uint64, callArgs rpcMessage) RPCError {
 	conn := c.conn
 
+	if c.callTimeout != 0 {
+		var cancel func()
+		ctx, cancel = context.WithTimeout(ctx, c.callTimeout)
+		defer cancel()
+	}
+
 	// Wait for connection readiness or context cancellation.
 	select {
 	case <-conn.ready:
 	case <-ctx.Done():
-		return contextToError(ctx.Err())
+		return toRPCError(ctx.Err())
 	}
 
 	// Connection is ready, but is it still connected?
@@ -1048,25 +1075,26 @@ func (c *RPCConnection) call(ctx context.Context, decoder func(m *message) error
 	m.WriteVarint(methodID)
 
 	if err := callArgs.RPCEncode(m); err != nil {
-		conn.releaseCallSlot(callID)
+		conn.findAndReleaseCallSlot(callID)
 		return &rpcError{id: GenericError, error: fmt.Sprintf("unable to encode method call arguments: %v", err)}
 	}
 
 	// Send the message
 	sendErr := c.send(conn, m)
 	if sendErr != nil || !waitForReply {
-		conn.releaseCallSlot(callID)
+		conn.findAndReleaseCallSlot(callID)
 		return sendErr
 	}
 
 	// Wait for reply
 	select {
 	case <-callSlot.waiter:
-		return nil
+		// Return any existing errors
+		return toRPCError(conn.endReason)
 	case <-ctx.Done():
 		// TODO(kl): Should we send a hint to the server, to let it cancel
 		// operation on this request?
-		return contextToError(ctx.Err())
+		return toRPCError(ctx.Err())
 	}
 }
 
@@ -1088,7 +1116,7 @@ func (c *RPCConnection) send(conn *connection, msg *message) RPCError {
 // Close terminates the RPCConnection.
 func (c *RPCConnection) Close() {
 	close(c.done)
-	c.end(c.conn, nil)
+	c.end(c.conn, &rpcError{id: Shutdown, error: "connection is shutting down"})
 }
 
 // Wait waits for the RPCConnection to be terminated.
@@ -1123,6 +1151,13 @@ func (c *RPCConnection) end(conn *connection, err RPCError) {
 		}
 		if c.onDisconnect != nil {
 			c.onDisconnect(c, err)
+		}
+
+		conn.waitingCallsMutex.Lock()
+		defer conn.waitingCallsMutex.Unlock()
+		for idx, callSlot := range conn.waitingCalls {
+			close(callSlot.waiter)
+			delete(conn.waitingCalls, idx)
 		}
 	}
 }
