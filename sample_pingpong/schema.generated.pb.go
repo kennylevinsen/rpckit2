@@ -15,6 +15,18 @@ import (
 	"time"
 )
 
+type rpcContextValue int
+
+const connectionContextKey rpcContextValue = 1
+
+func RPCGetConnFromContext(ctx context.Context) net.Conn {
+	v := ctx.Value(connectionContextKey)
+	if v, ok := v.(net.Conn); ok {
+		return v
+	}
+	return nil
+}
+
 // RPC method types.
 const (
 	messageTypeMethodCall   = 1
@@ -871,7 +883,7 @@ func (c *RPCConnection) readLoop() {
 		return
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(context.WithValue(context.Background(), connectionContextKey, conn.conn))
 	defer func() {
 		// Clean up on termination
 		cancel()
