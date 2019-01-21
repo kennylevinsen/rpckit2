@@ -2066,6 +2066,7 @@ func (c *RPCPingpongClient) Authenticate(ctx context.Context, reqUsername string
 				decoderErr = &rpcError{id: ProtocolError, error: fmt.Sprintf("unexpected return type for call type %d: %d", uint64(protoPingpongMethodAuthenticate), resultTypeID)}
 				return decoderErr
 			}
+			decoderErr = err
 			return nil
 		}
 	}
@@ -2114,6 +2115,7 @@ func (c *RPCPingpongClient) PingWithReply(ctx context.Context, reqName string) (
 				decoderErr = &rpcError{id: ProtocolError, error: fmt.Sprintf("unexpected return type for call type %d: %d", uint64(protoPingpongMethodPingWithReply), resultTypeID)}
 				return decoderErr
 			}
+			decoderErr = err
 			return nil
 		}
 	}
@@ -2161,6 +2163,7 @@ func (c *RPCPingpongClient) TestMethod(ctx context.Context, reqString string, re
 				decoderErr = &rpcError{id: ProtocolError, error: fmt.Sprintf("unexpected return type for call type %d: %d", uint64(protoPingpongMethodTestMethod), resultTypeID)}
 				return decoderErr
 			}
+			decoderErr = err
 			return nil
 		}
 	}
@@ -2213,6 +2216,7 @@ func (c *RPCEchoClient) Echo(ctx context.Context, reqInput string, reqNames []st
 				decoderErr = &rpcError{id: ProtocolError, error: fmt.Sprintf("unexpected return type for call type %d: %d", uint64(protoEchoMethodEcho), resultTypeID)}
 				return decoderErr
 			}
+			decoderErr = err
 			return nil
 		}
 	}
@@ -2263,6 +2267,7 @@ func (c *RPCEchoClient) Ping(ctx context.Context) (respOutput string, err error)
 				decoderErr = &rpcError{id: ProtocolError, error: fmt.Sprintf("unexpected return type for call type %d: %d", uint64(protoEchoMethodPing), resultTypeID)}
 				return decoderErr
 			}
+			decoderErr = err
 			return nil
 		}
 	}
@@ -2308,6 +2313,7 @@ func (c *RPCEchoClient) ByteTest(ctx context.Context, reqInput []byte) (respOutp
 				decoderErr = &rpcError{id: ProtocolError, error: fmt.Sprintf("unexpected return type for call type %d: %d", uint64(protoEchoMethodByteTest), resultTypeID)}
 				return decoderErr
 			}
+			decoderErr = err
 			return nil
 		}
 	}

@@ -33,6 +33,7 @@ func (c *RPC{{ capitalize $protoName }}Client) {{ capitalize .Name }}(ctx contex
                 decoderErr = &rpcError{id: ProtocolError, error: fmt.Sprintf("unexpected return type for call type %d: %d", uint64(proto{{ capitalize $protoName }}Method{{ capitalize .Name }}), resultTypeID)}
                 return decoderErr
             }
+            decoderErr = err
             return nil
         }
     }
