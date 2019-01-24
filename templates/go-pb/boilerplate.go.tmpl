@@ -912,8 +912,16 @@ func (c *RPCConnection) readLoop() {
 	var (
 		off, minRead int = 0, 256
 		buf = make([]byte, 0, 512)
+		n int
+		err error
 	)
 	for {
+		// Process any errors from last iteration
+		if err != nil {
+			c.end(conn, &rpcError{id: ConnectionError, error: fmt.Sprintf("error reading from connection in readLoop(): %v", err)})
+			return
+		}
+
 		if off >= len(buf) {
 			// Reset the buffer offset
 			buf = buf[:0]
@@ -937,12 +945,10 @@ func (c *RPCConnection) readLoop() {
 			off = 0
 		}
 
-		m, err := conn.conn.Read(buf[len(buf):cap(buf)])
-		buf = buf[0 : len(buf)+m]
-		if err == io.EOF {
-			c.end(conn, &rpcError{id: ConnectionError, error: fmt.Sprintf("error reading from connection in readLoop(): %v", err)})
-			return
-		}
+		// Error processing is deferred until next iteration to process any
+		// received data.
+		n, err = conn.conn.Read(buf[len(buf):cap(buf)])
+		buf = buf[0 : len(buf)+n]
 
 		// Process our buffer content
 		for {
