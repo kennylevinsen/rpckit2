@@ -48,12 +48,6 @@ func (c *RPC{{ capitalize $protoName }}Client) {{ capitalize .Name }}(ctx contex
         err = decoderErr
     }
 
-    if err != nil {
-        if rpcErr, ok := err.(RPCError); ok {
-            err = rpcErr
-        }
-        return
-    }
     return
 }
 {{ end }}

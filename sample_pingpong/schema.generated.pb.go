@@ -17,7 +17,10 @@ import (
 
 type rpcContextValue int
 
-const connectionContextKey rpcContextValue = 1
+const (
+	connectionContextKey  rpcContextValue = 1
+	alwaysReadyContextKey rpcContextValue = 2
+)
 
 func RPCGetConnFromContext(ctx context.Context) net.Conn {
 	v := ctx.Value(connectionContextKey)
@@ -577,7 +580,7 @@ type connection struct {
 	connected bool
 
 	// endReason is the first error that caused the connection to terminate.
-	endReason error
+	endReason RPCError
 
 	// writeLock is used to avoid output corruption by serializing writes.
 	writeLock sync.Mutex
@@ -642,6 +645,16 @@ func (c *connection) findAndReleaseCallSlot(callID uint64) *callSlot {
 	return v
 }
 
+// releaseAllCallSlots releases all known call slots
+func (c *connection) releaseAllCallSlots() {
+	c.waitingCallsMutex.Lock()
+	defer c.waitingCallsMutex.Unlock()
+	for id, slot := range c.waitingCalls {
+		close(slot.waiter)
+		delete(c.waitingCalls, id)
+	}
+}
+
 // ************************
 
 // RPCOptions are options to use when creating a new RPCConnection.
@@ -665,18 +678,22 @@ type RPCOptions struct {
 	Dialer func() (net.Conn, error)
 
 	// ConnectHook, if not nil, is called every time a connection is deemed
-	// ready to use, after successfully sending an RPC preamble.
+	// ready to use, after successfully sending an RPC preamble. All RPC calls
+	// wait until the connect hook has finished before being allowed to run.
 	//
 	// It can be used to reestablish state after connection reset, such as by
 	// sending authentication messages.
 	//
-	// Note that the connection is already marked as ready when this handler
-	// is called, and all other calls will be permitted to run in parallel.
-	ConnectHook func(c *RPCConnection) error
+	// ConnectHook is called with a special context that allows RPC calls to be
+	// made despite the connection not yet being marked as ready. Failure to
+	// use the provided context for RPC calls from within the connect hook will
+	// result in a deadlock.
+	ConnectHook func(ctx context.Context, c *RPCConnection) error
 
-	// DisconnectHook, if not nil, is called every time a connection  is
-	// terminated, with the error that caused it to terminate.
-	DisconnectHook func(c *RPCConnection, err RPCError)
+	// DisconnectHook, if not nil, is called every time a connection is
+	// terminated, with the error that caused it to terminate. Reconnect will
+	// not be attempted before the disconnect hook has returned.
+	DisconnectHook func(ctx context.Context, c *RPCConnection, err RPCError)
 
 	// Servers specify the server implementations that will be used to service
 	//
@@ -707,8 +724,8 @@ type RPCConnection struct {
 	done         chan struct{}
 	servers      map[uint64]rpcCallServer
 	dialer       func() (net.Conn, error)
-	onConnect    func(c *RPCConnection) error
-	onDisconnect func(c *RPCConnection, err RPCError)
+	onConnect    func(ctx context.Context, c *RPCConnection) error
+	onDisconnect func(ctx context.Context, c *RPCConnection, err RPCError)
 
 	log  func(format string, v ...interface{})
 	conn *connection
@@ -795,9 +812,7 @@ func (c *RPCConnection) refreshInnerConn() *connection {
 
 func (c *RPCConnection) sendPreamble(conn *connection) RPCError {
 	if _, err := c.conn.conn.Write(rpcPreamble); err != nil {
-		err := &rpcError{id: ConnectionError, error: fmt.Sprintf("could not write preamble: %v", err)}
-		c.end(conn, err)
-		return err
+		return &rpcError{id: ConnectionError, error: fmt.Sprintf("could not write preamble: %v", err)}
 	}
 	return nil
 }
@@ -810,21 +825,23 @@ func (c *RPCConnection) connect(conn net.Conn) bool {
 	cc.conn = conn
 
 	if err := c.sendPreamble(cc); err != nil {
-		c.end(cc, err)
-		close(cc.ready)
+		conn.Close()
+		cc.conn = nil
 		return false
 	}
 
-	// TODO(kl): Wait for onConnect to release ready!
-	// How, though? Magic context to bypass ready wait?
-	close(cc.ready)
 	go c.readLoop()
 
 	if c.onConnect != nil {
 		go func() {
-			if err := c.onConnect(c); err != nil {
+			// We run the onConnect handler with a magic context to permit traffic
+			ctx := context.WithValue(context.Background(), alwaysReadyContextKey, true)
+			if err := c.onConnect(ctx, c); err != nil {
 				c.end(cc, &rpcError{id: ApplicationError, error: err.Error()})
 			}
+			// Even if we fail, we have to mark the connection as ready, as it has
+			// already been put to use and must not be recycled.
+			close(cc.ready)
 		}()
 	}
 
@@ -889,6 +906,11 @@ func (c *RPCConnection) readLoop() {
 		cancel()
 		if bad := recover(); bad != nil {
 			c.end(conn, &rpcError{id: GenericError, error: fmt.Sprintf("unhandled error in readLoop(): %v", bad)})
+		}
+
+		conn.releaseAllCallSlots()
+		if c.onDisconnect != nil {
+			c.onDisconnect(context.Background(), c, conn.endReason)
 		}
 
 		if c.dialer != nil {
@@ -1065,11 +1087,21 @@ func (c *RPCConnection) call(ctx context.Context, decoder func(m *message) error
 		defer cancel()
 	}
 
-	// Wait for connection readiness or context cancellation.
-	select {
-	case <-conn.ready:
-	case <-ctx.Done():
-		return toRPCError(ctx.Err())
+	// Is this an "always ready" context?
+	if ctx.Value(alwaysReadyContextKey) == nil {
+		// Wait for connection readiness or context cancellation.
+		select {
+		case <-conn.ready:
+		case <-ctx.Done():
+			return toRPCError(ctx.Err())
+		}
+	} else {
+		// Wait chekc forcontext cancellation.
+		select {
+		case <-ctx.Done():
+			return toRPCError(ctx.Err())
+		default:
+		}
 	}
 
 	// Connection is ready, but is it still connected?
@@ -1166,16 +1198,6 @@ func (c *RPCConnection) end(conn *connection, err RPCError) {
 		conn.connected = false
 		if conn.conn != nil {
 			conn.conn.Close()
-		}
-		if c.onDisconnect != nil {
-			c.onDisconnect(c, err)
-		}
-
-		conn.waitingCallsMutex.Lock()
-		defer conn.waitingCallsMutex.Unlock()
-		for idx, callSlot := range conn.waitingCalls {
-			close(callSlot.waiter)
-			delete(conn.waitingCalls, idx)
 		}
 	}
 }
@@ -2086,12 +2108,6 @@ func (c *RPCPingpongClient) Authenticate(ctx context.Context, reqUsername string
 		err = decoderErr
 	}
 
-	if err != nil {
-		if rpcErr, ok := err.(RPCError); ok {
-			err = rpcErr
-		}
-		return
-	}
 	return
 }
 
@@ -2134,12 +2150,6 @@ func (c *RPCPingpongClient) PingWithReply(ctx context.Context, reqName string) (
 		err = decoderErr
 	}
 
-	if err != nil {
-		if rpcErr, ok := err.(RPCError); ok {
-			err = rpcErr
-		}
-		return
-	}
 	return
 }
 
@@ -2187,12 +2197,6 @@ func (c *RPCPingpongClient) TestMethod(ctx context.Context, reqString string, re
 		err = decoderErr
 	}
 
-	if err != nil {
-		if rpcErr, ok := err.(RPCError); ok {
-			err = rpcErr
-		}
-		return
-	}
 	return
 }
 
@@ -2238,12 +2242,6 @@ func (c *RPCEchoClient) Echo(ctx context.Context, reqInput string, reqNames []st
 		err = decoderErr
 	}
 
-	if err != nil {
-		if rpcErr, ok := err.(RPCError); ok {
-			err = rpcErr
-		}
-		return
-	}
 	return
 }
 
@@ -2284,12 +2282,6 @@ func (c *RPCEchoClient) Ping(ctx context.Context) (respOutput string, err error)
 		err = decoderErr
 	}
 
-	if err != nil {
-		if rpcErr, ok := err.(RPCError); ok {
-			err = rpcErr
-		}
-		return
-	}
 	return
 }
 
@@ -2332,11 +2324,5 @@ func (c *RPCEchoClient) ByteTest(ctx context.Context, reqInput []byte) (respOutp
 		err = decoderErr
 	}
 
-	if err != nil {
-		if rpcErr, ok := err.(RPCError); ok {
-			err = rpcErr
-		}
-		return
-	}
 	return
 }

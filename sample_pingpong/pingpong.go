@@ -30,13 +30,11 @@ func testRPC() {
 		}
 	}()
 
-	ctx := context.Background()
-
 	NewRPCConnection(&RPCOptions{
 		Dialer: func() (net.Conn, error) {
 			return net.Dial("tcp", "127.0.0.1:9999")
 		},
-		ConnectHook: func(c *RPCConnection) error {
+		ConnectHook: func(ctx context.Context, c *RPCConnection) error {
 			serverClient := NewRPCPingpongClient(c)
 			echoClient := NewRPCEchoClient(c)
 
@@ -71,7 +69,6 @@ func testRPC() {
 			if err != nil {
 				panic(err)
 			}
-
 
 			fmt.Printf("RPC test complete\n")
 			c.Close()
