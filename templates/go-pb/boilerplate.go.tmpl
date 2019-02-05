@@ -845,6 +845,8 @@ func (c *RPCConnection) connect(conn net.Conn) bool {
 			// already been put to use and must not be recycled.
 			close(cc.ready)
 		}()
+	} else {
+		close(cc.ready)
 	}
 
 	return true
