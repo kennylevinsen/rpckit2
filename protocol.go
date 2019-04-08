@@ -42,6 +42,14 @@ type Struct struct {
 	Fields      []Property
 }
 
+type MethodInputOptions struct {}
+type MethodOutputOptions struct {}
+
+type StructFieldOptions struct {
+	Getter bool
+	Setter bool
+}
+
 //
 // The PropertyType code is a bit ugly, with many "IsXYZ" and accessor methods.
 // This would indeed have been much prettier with a simple outer interface and
@@ -147,6 +155,7 @@ type Property struct {
 	ID          int64
 	Name        string
 	Description string
+	Options 	interface{}
 }
 
 func panicf(msg string, args ...interface{}) {
@@ -155,8 +164,8 @@ func panicf(msg string, args ...interface{}) {
 
 func verifyMethod(p *Protocol, method Method) {
 	verifyID(method.ID)
-	verifyProperties(p, method.Input)
-	verifyProperties(p, method.Output)
+	verifyProperties(p, method.Input, false, true)
+	verifyProperties(p, method.Output, false, false)
 	for _, m := range p.methods {
 		if m.ID == method.ID {
 			panicf("method %v is being registered for id %v which is already in use", method.Name, method.ID)
@@ -168,7 +177,7 @@ func verifyMethod(p *Protocol, method Method) {
 }
 
 func verifyStruct(p *Protocol, s Struct) {
-	verifyProperties(p, s.Fields)
+	verifyProperties(p, s.Fields, true, false)
 	for _, m := range p.structs {
 		if strings.ToLower(m.Name) == strings.ToLower(s.Name) {
 			panicf("struct name %v is already in use", s.Name)
@@ -176,7 +185,7 @@ func verifyStruct(p *Protocol, s Struct) {
 	}
 }
 
-func verifyProperties(p *Protocol, properties []Property) {
+func verifyProperties(p *Protocol, properties []Property, isStruct, isInput bool) {
 	if properties == nil {
 		return
 	}
@@ -201,6 +210,26 @@ func verifyProperties(p *Protocol, properties []Property) {
 			}
 			if !found {
 				panicf("the struct %s has not been defined", prop.T.GoType())
+			}
+		}
+
+		if isStruct {
+			if prop.Options != nil {
+				if _, ok := prop.Options.(StructFieldOptions); !ok {
+					panicf("the struct property with id %v can only recieve options of type StructFieldOptions, but recieved type %T", prop.ID, prop.Options)
+				}
+			}
+		} else {
+			if prop.Options != nil {
+				if isInput {
+					if _, ok := prop.Options.(MethodInputOptions); !ok {
+						panicf("the input property with id %v can only recieve options of type MethodInputOptions, but recieved type %T", prop.ID, prop.Options)
+					}
+				} else {
+					if _, ok := prop.Options.(MethodOutputOptions); !ok {
+						panicf("the output property with id %v can only recieve options of type MethodInputOptions, but recieved type %T", prop.ID, prop.Options)
+					}
+				}
 			}
 		}
 		names[prop.Name] = true

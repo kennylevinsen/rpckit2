@@ -5,3 +5,12 @@ type {{ capitalize .Name }} struct {
     {{ capitalize .Name }} {{ .T.GoType }} `json:{{ camelize .Name | doublequote }}`
 {{- end }}
 }
+{{- range .Fields }}{{- if .Options }}{{ if .Options.Getter }}
+func (s *{{ capitalize $.Name }}) Get{{ capitalize .Name }}() {{ .T.GoType }} { return s.{{ capitalize .Name }} }
+{{- end }}{{- end }}{{- end }}
+
+{{- range .Fields }}{{- if .Options }}{{ if .Options.Setter }}
+func (s *{{ capitalize $.Name }}) Set{{ capitalize .Name }}(v {{ .T.GoType }}) {
+	s.{{ capitalize .Name }} = v
+}
+{{- end }}{{- end }}{{- end }}
