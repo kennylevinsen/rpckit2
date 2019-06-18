@@ -6,5 +6,5 @@ type {{ required .ProtoName | capitalize }}Protocol interface {
     {{- $input := required .Input }}
     {{- range $idx, $v := required .Input }} req{{ required $v.Name | capitalize }} {{ required $v.T.GoType }}{{- if ne (len $input) $idx }},{{ end }}{{ end }}) (
     {{- range required .Output }}resp{{ required .Name | capitalize }} {{ required .T.GoType }}, {{ end }}err error)
-    {{- end }}
+    {{ end }}
 }

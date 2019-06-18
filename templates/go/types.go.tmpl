@@ -1,9 +1,11 @@
 // {{ required .Description | capitalize }}
 type {{ required .Name | capitalize }} struct {
-{{- range required .Fields }}
-    {{ if .Description }}// {{ required .Description | capitalize }}{{ end }}
+{{ range required .Fields -}}
+    {{ if .Description }}
+    // {{ required .Description | capitalize }}
+    {{ end -}}
     {{ required .Name | capitalize }} {{ .T.GoType }} `json:{{ required .Name | camelize | doublequote }}`
-{{- end }}
+{{ end }}
 }
 {{- range required .Fields }}{{- if .Options }}{{ if .Options.Getter }}
 func (s *{{ required $.Name | capitalize }}) Get{{ required .Name | capitalize }}() {{ required .T.GoType }} { return s.{{ required .Name | capitalize }} }
