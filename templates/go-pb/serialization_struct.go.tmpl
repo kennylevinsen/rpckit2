@@ -1,16 +1,16 @@
-type {{ .TypeName }} struct {
-    v {{ capitalize .Name }}
+type {{ required .TypeName }} struct {
+    v {{ required .Name | capitalize }}
 }
 
-func (s *{{ .TypeName }}) RPCEncode(m *message) error {
-    {{- range .Fields }}
+func (s *{{ required .TypeName }}) RPCEncode(m *message) error {
+    {{- range required .Fields }}
     {{- $accessor := format "s.v.%s" (capitalize .Name) -}}
     {{ template "go-pb/marshal.go.tmpl" dict "Field" .T "Accessor" $accessor "ID" .ID "Message" "m" "ProtoName" $.ProtoName }}
     {{- end -}}
     return nil
 }
 
-func (s *{{ .TypeName }}) RPCDecode(m *message) error {
+func (s *{{ required .TypeName }}) RPCDecode(m *message) error {
     var (
         err error
         tag uint64
@@ -18,9 +18,9 @@ func (s *{{ .TypeName }}) RPCDecode(m *message) error {
     for err == nil {
         tag, err = m.ReadVarint()
         switch tag {
-        {{- range .Fields }}
+        {{- range required .Fields }}
         case uint64({{ .ID }} << 3) | uint64({{ template "go-pb/property_to_wiretype.go.tmpl" .T.String}}):
-            {{- template "go-pb/unmarshal.go.tmpl" dict "Field" .T "Accessor" (format "s.v.%s" (capitalize .Name)) "Message" "m" "ProtoName" $.ProtoName -}}
+            {{- template "go-pb/unmarshal.go.tmpl" dict "Field" .T "Accessor" (format "s.v.%s" (required .Name | capitalize)) "Message" "m" "ProtoName" $.ProtoName -}}
         {{- end }}
         default:
             if err != io.EOF {

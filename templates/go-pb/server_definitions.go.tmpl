@@ -1,14 +1,14 @@
-{{ range .Protocols }}
-type rpcCallServerFor{{ capitalize .Name }} struct {
-    methods {{ capitalize .Name }}Protocol
+{{ range required .Protocols }}
+type rpcCallServerFor{{ required .Name | capitalize }} struct {
+    methods {{ required .Name | capitalize }}Protocol
 }
 {{ end }}
-{{ range .Protocols }}
-// RPC{{ capitalize .Name }}Server creates a new RPCServer for the {{ .Name }} protocol.
-func RPC{{ capitalize .Name }}Server(methods {{ capitalize .Name }}Protocol) RPCServer {
+{{ range required .Protocols }}
+// RPC{{ required .Name | capitalize }}Server creates a new RPCServer for the {{ required .Name }} protocol.
+func RPC{{ required .Name | capitalize }}Server(methods {{ required .Name | capitalize }}Protocol) RPCServer {
     return &rpcServer{
-        ProtocolID: {{ .ID }},
-        Server: &rpcCallServerFor{{ capitalize .Name }}{methods: methods},
+        ProtocolID: {{ required .ID }},
+        Server: &rpcCallServerFor{{ required .Name | capitalize }}{methods: methods},
     }
 }
 {{ end }}

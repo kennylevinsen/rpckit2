@@ -1,7 +1,7 @@
 {{ template "go-http/boilerplate.go.tmpl" . }}
-{{ range .Protocols }}
-{{- $protoName := .Name -}}
-{{- $protoID := .ID -}}
+{{ range required .Protocols }}
+{{- $protoName := required .Name -}}
+{{- $protoID := required .ID -}}
 {{ template "go-http/client_definition.go.tmpl" dict "ProtoName" $protoName "ProtoID" $protoID}}
 {{ range .Methods }}
 {{ template "go-http/serialization.go.tmpl" dict "Prefix" "httpReq" "Name" .Name "Fields" .Input "ProtoName" $protoName }}

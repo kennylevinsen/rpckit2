@@ -1,25 +1,25 @@
-{{ $typeName := .TypeName }}
+{{ $typeName := required .TypeName }}
 {{- if eq (len .Fields) 0 -}}
 type {{ $typeName }} struct {}
 
-func (s *{{ .TypeName }}) RPCEncode(m *message) error { return nil }
-func (s *{{ .TypeName }}) RPCDecode(m *message) error { return nil }
+func (s *{{ required .TypeName }}) RPCEncode(m *message) error { return nil }
+func (s *{{ required .TypeName }}) RPCDecode(m *message) error { return nil }
 {{- else -}}
-type {{ .TypeName }} struct {
-{{- range .Fields }}
-    {{ capitalize .Name }} {{ .T.GoType }}
+type {{ required .TypeName }} struct {
+{{- range required .Fields }}
+    {{ required .Name | capitalize }} {{ .T.GoType }}
 {{- end }}
 }
 
-func (s *{{ .TypeName }}) RPCEncode(m *message) error {
-    {{- range .Fields }}
-    {{- $accessor := format "s.%s" (capitalize .Name) -}}
+func (s *{{ required .TypeName }}) RPCEncode(m *message) error {
+    {{- range required .Fields }}
+    {{- $accessor := format "s.%s" (required .Name | capitalize) -}}
     {{ template "go-pb/marshal.go.tmpl" dict "Field" .T "Accessor" $accessor "ID" .ID "ProtoName" $.ProtoName }}
     {{- end -}}
     return nil
 }
 
-func (s *{{ .TypeName }}) RPCDecode(m *message) error {
+func (s *{{ required .TypeName }}) RPCDecode(m *message) error {
     var (
         err error
         tag uint64
@@ -28,8 +28,8 @@ func (s *{{ .TypeName }}) RPCDecode(m *message) error {
         tag, err = m.ReadVarint()
         switch tag {
         {{- range .Fields }}
-        case uint64({{ .ID }} << 3) | uint64({{ template "go-pb/property_to_wiretype.go.tmpl" .T.String}}):
-            {{- template "go-pb/unmarshal.go.tmpl" dict "Field" .T "Accessor" (format "s.%s" (capitalize .Name)) "ProtoName" $.ProtoName -}}
+        case uint64({{ required .ID }} << 3) | uint64({{ template "go-pb/property_to_wiretype.go.tmpl" .T.String}}):
+            {{- template "go-pb/unmarshal.go.tmpl" dict "Field" .T "Accessor" (format "s.%s" (required .Name | capitalize)) "ProtoName" $.ProtoName -}}
         {{- end }}
         default:
             if err != io.EOF {
@@ -44,7 +44,7 @@ func (s *{{ .TypeName }}) RPCDecode(m *message) error {
 }
 {{ end }}
 {{ if .TypeID -}}
-func (s *{{ .TypeName }}) RPCID() uint64 {
-    return uint64({{ .TypeID }})
+func (s *{{ required .TypeName }}) RPCID() uint64 {
+    return uint64({{ required .TypeID }})
 }
 {{- end }}

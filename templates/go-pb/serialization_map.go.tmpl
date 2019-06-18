@@ -8,18 +8,18 @@
 {{ $mapcnt := counter "rpcMap" }}
 {{ $name := format "rpcMap%d" $mapcnt }}
 {{ store (format "rpcMap-%s" .T.GoType) $name }}
-type {{ $name }} struct {
-    Key {{ .T.InnerKey.GoType}}
-    Value {{ .T.InnerValue.GoType }}
+type {{ required $name }} struct {
+    Key {{ required .T.InnerKey.GoType}}
+    Value {{ required .T.InnerValue.GoType }}
 }
 
-func (s *{{ $name }}) RPCEncode(m *message) error {
+func (s *{{ required $name }}) RPCEncode(m *message) error {
     {{ template "go-pb/marshal.go.tmpl" dict "Field" .T.InnerKey "Accessor" "s.Key" "ID" 1 "Message" "m" "ProtoName" .ProtoName -}}
     {{ template "go-pb/marshal.go.tmpl" dict "Field" .T.InnerValue "Accessor" "s.Value" "ID" 2 "Message" "m" "ProtoName" .ProtoName -}}
     return nil
 }
 
-func (s *{{ $name }}) RPCDecode(m *message) error {
+func (s *{{ required $name }}) RPCDecode(m *message) error {
     var (
         err error
         tag uint64

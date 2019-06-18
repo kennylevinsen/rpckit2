@@ -1,1 +1,1 @@
-m.WritePB{{ .Field.String }}({{ .ID }}, {{ .Accessor }})
+m.WritePB{{ required .Field.String }}({{ required .ID }}, {{ required .Accessor }})

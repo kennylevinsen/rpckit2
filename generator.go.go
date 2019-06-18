@@ -87,6 +87,18 @@ func (g GoGenerator) Generate(p string) error {
 			exists[name] = true
 			return true
 		},
+		"required": func(i interface{}, d ...string) (interface{}, error) {
+			if i == nil {
+				return "", fmt.Errorf("required value missing")
+			}
+			switch x := i.(type) {
+			case string:
+				if x == "" {
+					return "", fmt.Errorf("required value empty")
+				}
+			}
+			return i, nil
+		},
 		"counter": func(name string) int {
 			cnt := counter[name]
 			counter[name] = cnt + 1

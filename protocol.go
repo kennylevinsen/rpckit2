@@ -164,11 +164,17 @@ func panicf(msg string, args ...interface{}) {
 
 func verifyMethod(p *Protocol, method Method) {
 	verifyID(method.ID)
+	if method.Name == "" {
+		panicf("method %d lacks a name", method.ID)
+	}
+	if method.Description == "" {
+		panicf("method %v lacks a description", method.Name)
+	}
 	verifyProperties(p, method.Input, false, true)
 	verifyProperties(p, method.Output, false, false)
 	for _, m := range p.methods {
 		if m.ID == method.ID {
-			panicf("method %v is being registered for id %v which is already in use", method.Name, method.ID)
+			panicf("method %v is being registered for id %v which is already in use by %v", method.Name, method.ID, m.Name)
 		}
 		if strings.ToLower(m.Name) == strings.ToLower(method.Name) {
 			panicf("method name %v is already in use", method.Name)
@@ -177,6 +183,12 @@ func verifyMethod(p *Protocol, method Method) {
 }
 
 func verifyStruct(p *Protocol, s Struct) {
+	if s.Name == "" {
+		panicf("struct lacks a name")
+	}
+	if s.Description == "" {
+		panicf("struct %v lacks a description", s.Name)
+	}
 	verifyProperties(p, s.Fields, true, false)
 	for _, m := range p.structs {
 		if strings.ToLower(m.Name) == strings.ToLower(s.Name) {

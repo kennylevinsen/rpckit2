@@ -1,11 +1,11 @@
 var em *message
-if {{ .Accessor }} == nil {
-    {{ .Accessor }} = make({{ .Field.GoType}})
+if {{ required .Accessor }} == nil {
+    {{ required .Accessor }} = make({{ required .Field.GoType}})
 }
 
-outer := {{ .Accessor }}
+outer := {{ required .Accessor }}
 {{ $vname := retrieve (format "rpcMap-%s" .Field.GoType) }}
-var v {{ $vname }}
+var v {{ required $vname }}
 
 if em, err = m.ReadEmbeddedMessageNoCopy(); err != nil {
     break

@@ -1,5 +1,5 @@
 {{- $vname := retrieve (format "rpcMap-%s" .Field.GoType) -}}
-for k, v := range {{ .Accessor }} {
+for k, v := range {{ required .Accessor }} {
     em := newEmbeddedMessage(messageCapacity)
     vv := {{ $vname }}{
         Key: k,
@@ -8,5 +8,5 @@ for k, v := range {{ .Accessor }} {
     if err := vv.RPCEncode(em); err != nil {
         return err
     }
-    m.WritePBMessage({{ .ID }}, em)
+    m.WritePBMessage({{ required .ID }}, em)
 }

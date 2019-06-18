@@ -1,13 +1,13 @@
-package {{ .PackageName }}
+package {{ required .PackageName }}
 
 import "context"
 
-{{ range .Protocols }}
-{{ range .Structs }}
+{{ range required .Protocols }}
+{{ range required .Structs }}
 {{ template "go/types.go.tmpl" . }}
 {{ end }}
 {{ end }}
 
-{{ range .Protocols }}
+{{ range required .Protocols }}
 {{ template "go/server_method.go.tmpl" dict "ProtoName" .Name "ProtoID" .ID "Methods" .Methods }}
 {{ end }}

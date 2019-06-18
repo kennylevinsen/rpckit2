@@ -1,10 +1,10 @@
-// The {{ capitalize .ProtoName }}Protocol interface defines the {{ .ProtoName }} protocol.
-type {{ capitalize .ProtoName }}Protocol interface {
-    {{- range .Methods }}
-    // {{ capitalize .Description }}
-    {{ capitalize .Name }}(ctx context.Context,
-    {{- $input := .Input }}
-    {{- range $idx, $v := .Input }} req{{ capitalize $v.Name }} {{ $v.T.GoType }}{{- if ne (len $input) $idx }},{{ end }}{{ end }}) (
-    {{- range .Output }}resp{{ capitalize .Name }} {{ .T.GoType }}, {{ end }}err error)
+// The {{ required .ProtoName | capitalize }}Protocol interface defines the {{ required .ProtoName }} protocol.
+type {{ required .ProtoName | capitalize }}Protocol interface {
+    {{- range required .Methods }}
+    // {{ required .Description | capitalize }}
+    {{ required .Name | capitalize }}(ctx context.Context,
+    {{- $input := required .Input }}
+    {{- range $idx, $v := required .Input }} req{{ required $v.Name | capitalize }} {{ required $v.T.GoType }}{{- if ne (len $input) $idx }},{{ end }}{{ end }}) (
+    {{- range required .Output }}resp{{ required .Name | capitalize }} {{ required .T.GoType }}, {{ end }}err error)
     {{- end }}
 }

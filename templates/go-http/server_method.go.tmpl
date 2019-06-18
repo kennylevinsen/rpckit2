@@ -1,16 +1,16 @@
-// HTTP{{ capitalize .ProtoName }}Server creates a new HTTPServer for the {{ .ProtoName }} protocol.
-func HTTP{{ capitalize .ProtoName }}Server(methods {{ capitalize .ProtoName }}Protocol) HTTPServer {
-    return &httpCallServerFor{{ capitalize .ProtoName }}{methods: methods}
+// HTTP{{ required .ProtoName | capitalize }}Server creates a new HTTPServer for the {{ required .ProtoName }} protocol.
+func HTTP{{ required .ProtoName | capitalize }}Server(methods {{ required .ProtoName | capitalize }}Protocol) HTTPServer {
+    return &httpCallServerFor{{ required .ProtoName | capitalize }}{methods: methods}
 }
 
-type httpCallServerFor{{ capitalize .ProtoName }} struct {
-    methods {{ capitalize .ProtoName }}Protocol
+type httpCallServerFor{{ required .ProtoName | capitalize }} struct {
+    methods {{ required .ProtoName | capitalize }}Protocol
 }
 
-func (c *httpCallServerFor{{ capitalize .ProtoName }}) RegisterToMux(m *http.ServeMux) {
-    {{- $protoName := .ProtoName }}
-    {{- range .Methods }}
-    m.HandleFunc("/{{ $protoName }}/{{ lower .Name }}", func(w http.ResponseWriter, r *http.Request) {
+func (c *httpCallServerFor{{ required .ProtoName | capitalize }}) RegisterToMux(m *http.ServeMux) {
+    {{- $protoName := required .ProtoName }}
+    {{- range required .Methods }}
+    m.HandleFunc("/{{ required $protoName }}/{{ required .Name | lower }}", func(w http.ResponseWriter, r *http.Request) {
         {{- if gt (len .Input) 0 }}
         if r.Method != "POST" {
             w.WriteHeader(http.StatusMethodNotAllowed)
@@ -22,8 +22,8 @@ func (c *httpCallServerFor{{ capitalize .ProtoName }}) RegisterToMux(m *http.Ser
         var (
             err error
             b []byte
-            {{ if gt (len .Input) 0 }}reqbody httpReqProto{{ capitalize $protoName }}Method{{ capitalize .Name }}{{ end }}
-            {{ if gt (len .Output) 0 }}respbody httpRespProto{{ capitalize $protoName }}Method{{ capitalize .Name }}{{ end }}
+            {{ if gt (len .Input) 0 }}reqbody httpReqProto{{ required $protoName | capitalize }}Method{{ required .Name | capitalize }}{{ end }}
+            {{ if gt (len .Output) 0 }}respbody httpRespProto{{ required $protoName | capitalize }}Method{{ required .Name | capitalize }}{{ end }}
         )
 
         b, err = ioutil.ReadAll(r.Body)
@@ -34,7 +34,7 @@ func (c *httpCallServerFor{{ capitalize .ProtoName }}) RegisterToMux(m *http.Ser
 
         {{- if gt (len .Input) 0 }}
         {{ if and (eq (len .Input) 1) (eq (index .Input 0).T.GoType "[]byte") }}
-        reqbody.{{ capitalize (index .Input 0).Name }} = b
+        reqbody.{{ required (index .Input 0).Name | capitalize}} = b
         {{ else }}
         if err = json.Unmarshal(b, &reqbody); err != nil {
             w.WriteHeader(http.StatusBadRequest)
@@ -48,8 +48,8 @@ func (c *httpCallServerFor{{ capitalize .ProtoName }}) RegisterToMux(m *http.Ser
         }
         {{ end }}
 
-        {{- $methodName := .Name }}
-        {{ range .Output }}respbody.{{ capitalize .Name }}, {{ end }}err = c.methods.{{ capitalize .Name }}(r.Context(){{- range .Input }}, reqbody.{{ capitalize .Name }}{{- end }})
+        {{- $methodName := required .Name }}
+        {{ range .Output }}respbody.{{ required .Name | capitalize }}, {{ end }}err = c.methods.{{ required .Name | capitalize }}(r.Context(){{- range .Input }}, reqbody.{{ required .Name | capitalize }}{{- end }})
         if err != nil {
             w.WriteHeader(http.StatusInternalServerError)
             errorbody := struct {
@@ -68,7 +68,7 @@ func (c *httpCallServerFor{{ capitalize .ProtoName }}) RegisterToMux(m *http.Ser
 
         {{- if gt (len .Output) 0 }}
         {{ if and (eq (len .Output) 1) (eq (index .Output 0).T.GoType "[]byte") }}
-        b = respbody.{{ capitalize (index .Output 0).Name }}
+        b = respbody.{{ required (index .Output 0).Name | capitalize }}
         {{ else }}
         if b, err = json.Marshal(&respbody); err != nil {
             w.WriteHeader(http.StatusInternalServerError)
