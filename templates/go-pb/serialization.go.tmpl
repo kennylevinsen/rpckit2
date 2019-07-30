@@ -28,7 +28,7 @@ func (s *{{ required .TypeName }}) RPCDecode(m *message) error {
         tag, err = m.ReadVarint()
         switch tag {
         {{- range .Fields }}
-        case uint64({{ required .ID }} << 3) | uint64({{ template "go-pb/property_to_wiretype.go.tmpl" .T.String}}):
+        case uint64({{ required .ID }} << 3) | uint64({{ if .T.IsArray }}{{ template "go-pb/property_to_wiretype.go.tmpl" .T.InnerValue.String}}{{ else }}{{ template "go-pb/property_to_wiretype.go.tmpl" .T.String}}{{ end }}):
             {{- template "go-pb/unmarshal.go.tmpl" dict "Field" .T "Accessor" (format "s.%s" (required .Name | capitalize)) "ProtoName" $.ProtoName -}}
         {{- end }}
         default:

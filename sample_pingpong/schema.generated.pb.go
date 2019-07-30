@@ -1316,7 +1316,7 @@ func (s *rpcMap0) RPCDecode(m *message) error {
 		switch tag {
 		case uint64(1<<3) | uint64(wireTypeLengthDelimited):
 			s.Key, err = m.ReadString()
-		case uint64(2<<3) | uint64(wireTypeVarint):
+		case uint64(2<<3) | uint64(wireTypeLengthDelimited):
 			s.Value, err = m.ReadInt()
 		default:
 			if err != io.EOF {
