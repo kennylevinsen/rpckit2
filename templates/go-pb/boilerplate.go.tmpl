@@ -706,6 +706,10 @@ type RPCOptions struct {
 	// ErrorLog specifies an optional error logger.
 	ErrorLog func(format string, v ...interface{})
 
+	// PanicHandler is called during a server method panic in order to obtain
+	// the error messag eto send the client.
+	PanicHandler func(protocol, method string, r interface{}) string
+
 	// CallTimeout defines the timeout for call RPC calls. If zero, no timeout
 	// will be set.
 	CallTimeout time.Duration
@@ -729,8 +733,9 @@ type RPCConnection struct {
 	onConnect      func(ctx context.Context, c *RPCConnection) error
 	onDisconnect   func(ctx context.Context, c *RPCConnection, err RPCError)
 
-	log func(format string, v ...interface{})
-	conn *connection
+	log          func(format string, v ...interface{})
+	panicHandler func(protocol, method string, r interface{}) string
+	conn         *connection
 
 	callTimeout time.Duration
 
@@ -741,10 +746,6 @@ type RPCConnection struct {
 
 // NewRPCConnection creates a new RPCConnection.
 func NewRPCConnection(options *RPCOptions) *RPCConnection {
-	l := options.ErrorLog
-	if l == nil {
-		l = func(string, ...interface{}) {}
-	}
 
 	c := &RPCConnection{
 		done:         make(chan struct{}),
@@ -753,13 +754,25 @@ func NewRPCConnection(options *RPCOptions) *RPCConnection {
 		onDisconnect: options.DisconnectHook,
 		onConnect:    options.ConnectHook,
 		conn:         newConnection(),
-		log:          l,
+		log:          options.ErrorLog,
+		panicHandler: options.PanicHandler,
+
 
 		callTimeout: options.CallTimeout,
 
 		resetDelay: options.RetryResetDelay,
 		startDelay: options.InitialRetryDelay,
 		maxDelay:   options.MaxRetryDelay,
+	}
+
+	if c.log == nil {
+		c.log = func(string, ...interface{}) {}
+	}
+	if c.panicHandler == nil {
+		c.panicHandler = func(protocol, method string, r interface{}) string {
+			c.log("panic in server method %s for protocol %s: %+v", strconv.Quote(method), strconv.Quote(protocol), r)
+			return "unknown error occurred"
+		}
 	}
 
 	if c.resetDelay == 0 {
@@ -1026,7 +1039,7 @@ func (c *RPCConnection) gotMessage(ctx context.Context, conn *connection, msg *m
 			return &rpcError{id: ProtocolError, error: "could not read methodID from method call"}
 		}
 
- 
+
 		callable, err := handler.handle(ctx, methodID, msg)
 		go func() {
 			var result rpcMessage
@@ -1036,13 +1049,21 @@ func (c *RPCConnection) gotMessage(ctx context.Context, conn *connection, msg *m
 				result = func() (resp rpcMessage) {
 					defer func() {
 						if r := recover(); r != nil {
-							proto := protoMap[protocolID]
-							method := proto.methods[methodID]
-							c.log("panic in server method %s for protocol %s: %+v", strconv.Quote(method.name), strconv.Quote(proto.name), r)
-							resp = &rpcError{id: ApplicationError, error: "unknown error occurred"}
+							func() {
+								defer func() {
+									if r := recover(); r != nil {
+										c.log("panic in panic handler: %+v", r)
+										resp = &rpcError{id: ApplicationError, error: "unknown error occurred"}
+									}
+								}()
+
+								proto := protoMap[protocolID]
+								method := proto.methods[methodID]
+								resp = &rpcError{id: ApplicationError, error: c.panicHandler(proto.name, method.name, r)}
+							}()
 						}
 					}()
-	
+
 					resp = callable.call(ctx, handler)
 					return
 				}()
