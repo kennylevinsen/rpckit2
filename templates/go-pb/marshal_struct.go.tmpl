@@ -1,6 +1,6 @@
 {
     em := newEmbeddedMessage(messageCapacity)
-    var vs rpcProto{{ required .ProtoName | capitalize }}Struct{{ required .Field.GoType }}
+    var vs rpcGlobalStruct{{ required .Field.GoType }}
 	vs.v = {{ required .Accessor }}
     if err := vs.RPCEncode(em); err != nil {
         return err

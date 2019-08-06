@@ -39,10 +39,12 @@ var protoMap = map[uint64]protoDescriptor{
     {{- $protoName := required .Name -}}
     {{- $protoID := required .ID -}}
     {{ range required .Structs }}
+        {{ if ifnotexists (format "rpcGlobalStruct%s" (required .Name | capitalize)) -}}
         {{ range required .Fields }}
             {{ template "go-pb/serialization_map.go.tmpl" dict "T" .T "ProtoName" $protoName }}
         {{ end }}
-        {{ template "go-pb/serialization_struct.go.tmpl" dict "TypeName" (format "rpcProto%sStruct%s" (required $protoName | capitalize) (required .Name | capitalize)) "Name" .Name "Fields" .Fields "ProtoName" $protoName }}
+        {{ template "go-pb/serialization_struct.go.tmpl" dict "TypeName" (format "rpcGlobalStruct%s" (required .Name | capitalize)) "Name" .Name "Fields" .Fields "ProtoName" $protoName }}
+        {{- end }}
     {{ end }}
     {{ range required .Methods }}
         {{ range required .Input }}

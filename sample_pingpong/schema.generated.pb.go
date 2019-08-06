@@ -1279,17 +1279,17 @@ var protoMap = map[uint64]protoDescriptor{
 	},
 }
 
-type rpcProtoEchoStructEchoThing struct {
+type rpcGlobalStructEchoThing struct {
 	v EchoThing
 }
 
-func (s *rpcProtoEchoStructEchoThing) RPCEncode(m *message) error {
+func (s *rpcGlobalStructEchoThing) RPCEncode(m *message) error {
 	m.WritePBString(1, s.v.Wee)
 	m.WritePBString(2, s.v.Woo)
 	return nil
 }
 
-func (s *rpcProtoEchoStructEchoThing) RPCDecode(m *message) error {
+func (s *rpcGlobalStructEchoThing) RPCDecode(m *message) error {
 	var (
 		err error
 		tag uint64
@@ -1685,7 +1685,7 @@ func (s *rpcReqProtoEchoMethodEcho) RPCEncode(m *message) error {
 	}
 	{
 		em := newEmbeddedMessage(messageCapacity)
-		var vs rpcProtoEchoStructEchoThing
+		var vs rpcGlobalStructEchoThing
 		vs.v = s.Something
 		if err := vs.RPCEncode(em); err != nil {
 			return err
@@ -1741,7 +1741,7 @@ func (s *rpcReqProtoEchoMethodEcho) RPCDecode(m *message) error {
 				break
 			}
 
-			var vs rpcProtoEchoStructEchoThing
+			var vs rpcGlobalStructEchoThing
 			if err = vs.RPCDecode(em); err == io.EOF {
 				err = nil
 			} else if err != nil {

@@ -212,18 +212,18 @@ func verifyProperties(p *Protocol, properties []Property, isStruct, isInput bool
 		if _, found := ids[prop.ID]; found {
 			panicf("the property id %v is already in use", prop.ID)
 		}
-		if prop.T.IsStruct() {
-			var found bool
-			for _, s := range p.structs {
-				if strings.Title(s.Name) == prop.T.GoType() {
-					found = true
-					break
-				}
-			}
-			if !found {
-				panicf("the struct %s has not been defined", prop.T.GoType())
-			}
-		}
+		// if prop.T.IsStruct() {
+		// 	var found bool
+		// 	for _, s := range p.structs {
+		// 		if strings.Title(s.Name) == prop.T.GoType() {
+		// 			found = true
+		// 			break
+		// 		}
+		// 	}
+		// 	if !found {
+		// 		panicf("the struct %s has not been defined", prop.T.GoType())
+		// 	}
+		// }
 
 		if isStruct {
 			if prop.Options != nil {
