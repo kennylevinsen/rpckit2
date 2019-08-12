@@ -57,7 +57,7 @@ func testRPC() {
 				"five":      map[string]int64{"five": 5, "fiftyfive": 55, "fivehundredandfiftyfive": 555},
 				"two":       map[string]int64{"two": 2, "twentytwo": 22, "twohundredandtwentytwo": 222},
 				"thirtysix": map[string]int64{"thirtysix": 36, "threethousandandthirtysix": 3636, "threehundredsixtythreethousandthirtysix": 363636},
-			}, EchoThing{Wee: "asdf"})
+			}, map[string]int64{"cpu": 12345}, EchoThing{Wee: "asdf", Stuff: map[string]int64{"cpu": 1234}})
 			if err != nil {
 				panic(err)
 			}
@@ -119,7 +119,7 @@ func testHTTP() {
 		"five":      map[string]int64{"five": 5, "fiftyfive": 55, "fivehundredandfiftyfive": 555},
 		"two":       map[string]int64{"two": 2, "twentytwo": 22, "twohundredandtwentytwo": 222},
 		"thirtysix": map[string]int64{"thirtysix": 36, "threethousandandthirtysix": 3636, "threehundredsixtythreethousandthirtysix": 363636},
-	}, EchoThing{Wee: "asdf"})
+	}, map[string]int64{"cpu": 12345}, EchoThing{Wee: "asdf", Stuff: map[string]int64{"cpu": 1234}})
 	if err != nil {
 		panic(err)
 	}
@@ -175,8 +175,8 @@ type echoServer struct {
 	authenticated bool
 }
 
-func (s *echoServer) Echo(ctx context.Context, input string, names []string, values map[string]map[string]int64, echoThing EchoThing) (string, error) {
-	fmt.Printf("VALUES: %#v, %#v\n", values, echoThing)
+func (s *echoServer) Echo(ctx context.Context, input string, names []string, values map[string]map[string]int64, values2 map[string]int64, echoThing EchoThing) (string, error) {
+	fmt.Printf("VALUES: %#v, %#v, %#v\n", values, values2, echoThing)
 	return input, nil
 }
 

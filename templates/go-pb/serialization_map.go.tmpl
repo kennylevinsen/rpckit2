@@ -29,7 +29,7 @@ func (s *{{ required $name }}) RPCDecode(m *message) error {
         switch tag {
         case uint64(1 << 3) | uint64({{ template "go-pb/property_to_wiretype.go.tmpl" .T.InnerKey.String}}):
             {{- template "go-pb/unmarshal.go.tmpl" dict "Field" .T.InnerKey "Accessor" "s.Key" "Message" "m" "ProtoName" .ProtoName -}}
-        case uint64(2 << 3) | uint64({{ if .T.IsArray }}{{ template "go-pb/property_to_wiretype.go.tmpl" .T.InnerValue.String}}{{ else }}{{ template "go-pb/property_to_wiretype.go.tmpl" .T.String}}{{ end }}):
+        case uint64(2 << 3) | uint64({{ template "go-pb/property_to_wiretype.go.tmpl" .T.InnerValue.String}}):
             {{- template "go-pb/unmarshal.go.tmpl" dict "Field" .T.InnerValue "Accessor" "s.Value" "Message" "m" "ProtoName" .ProtoName -}}
         default:
             if err != io.EOF {

@@ -449,6 +449,7 @@ type httpReqProtoEchoMethodEcho struct {
 	Input     string                      `json:"input"`
 	Names     []string                    `json:"names"`
 	Values    map[string]map[string]int64 `json:"values"`
+	Values2   map[string]int64            `json:"values2"`
 	Something EchoThing                   `json:"something"`
 }
 
@@ -457,7 +458,7 @@ type httpRespProtoEchoMethodEcho struct {
 }
 
 // Echo is yet another type test
-func (c *HTTPEchoClient) Echo(ctx context.Context, reqInput string, reqNames []string, reqValues map[string]map[string]int64, reqSomething EchoThing) (respOutput string, err error) {
+func (c *HTTPEchoClient) Echo(ctx context.Context, reqInput string, reqNames []string, reqValues map[string]map[string]int64, reqValues2 map[string]int64, reqSomething EchoThing) (respOutput string, err error) {
 	var (
 		b        []byte
 		req      *http.Request
@@ -470,6 +471,7 @@ func (c *HTTPEchoClient) Echo(ctx context.Context, reqInput string, reqNames []s
 		Input:     reqInput,
 		Names:     reqNames,
 		Values:    reqValues,
+		Values2:   reqValues2,
 		Something: reqSomething,
 	}
 
@@ -648,7 +650,7 @@ func (c *httpCallServerForEcho) RegisterToMux(m *http.ServeMux) {
 			return
 		}
 
-		respbody.Output, err = c.methods.Echo(r.Context(), reqbody.Input, reqbody.Names, reqbody.Values, reqbody.Something)
+		respbody.Output, err = c.methods.Echo(r.Context(), reqbody.Input, reqbody.Names, reqbody.Values, reqbody.Values2, reqbody.Something)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			errorbody := struct {

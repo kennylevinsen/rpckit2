@@ -10,6 +10,9 @@ type EchoThing struct {
 
 	// Woo describes the woo factor
 	Woo string `json:"woo"`
+
+	// Weee
+	Stuff map[string]int64 `json:"stuff"`
 }
 
 // The PingpongProtocol interface defines the pingpong protocol.
@@ -27,7 +30,7 @@ type PingpongProtocol interface {
 // The EchoProtocol interface defines the echo protocol.
 type EchoProtocol interface {
 	// Echo is yet another type test
-	Echo(ctx context.Context, reqInput string, reqNames []string, reqValues map[string]map[string]int64, reqSomething EchoThing) (respOutput string, err error)
+	Echo(ctx context.Context, reqInput string, reqNames []string, reqValues map[string]map[string]int64, reqValues2 map[string]int64, reqSomething EchoThing) (respOutput string, err error)
 
 	// Ping is a simple no-input test
 	Ping(ctx context.Context) (respOutput string, err error)
