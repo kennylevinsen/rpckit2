@@ -298,11 +298,16 @@ func (c *httpCallServerForPingpong) RegisterToMux(m *http.ServeMux) {
 
 		respbody.Success, err = c.methods.Authenticate(r.Context(), reqbody.Username, reqbody.Password)
 		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
+			if header, ok := err.(interface{ StatusCode() int }); ok {
+				w.WriteHeader(header.StatusCode())
+			} else {
+				w.WriteHeader(http.StatusInternalServerError)
+			}
+
 			errorbody := struct {
-				Error string `json:"error"`
+				Error interface{} `json:"error"`
 			}{
-				Error: err.Error(),
+				Error: err,
 			}
 			if b, err = json.Marshal(&errorbody); err != nil {
 				return
@@ -349,11 +354,16 @@ func (c *httpCallServerForPingpong) RegisterToMux(m *http.ServeMux) {
 
 		respbody.Greeting, err = c.methods.PingWithReply(r.Context(), reqbody.Name)
 		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
+			if header, ok := err.(interface{ StatusCode() int }); ok {
+				w.WriteHeader(header.StatusCode())
+			} else {
+				w.WriteHeader(http.StatusInternalServerError)
+			}
+
 			errorbody := struct {
-				Error string `json:"error"`
+				Error interface{} `json:"error"`
 			}{
-				Error: err.Error(),
+				Error: err,
 			}
 			if b, err = json.Marshal(&errorbody); err != nil {
 				return
@@ -400,11 +410,16 @@ func (c *httpCallServerForPingpong) RegisterToMux(m *http.ServeMux) {
 
 		respbody.Success, err = c.methods.TestMethod(r.Context(), reqbody.String, reqbody.Bool, reqbody.Int64, reqbody.Int, reqbody.Float, reqbody.Double)
 		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
+			if header, ok := err.(interface{ StatusCode() int }); ok {
+				w.WriteHeader(header.StatusCode())
+			} else {
+				w.WriteHeader(http.StatusInternalServerError)
+			}
+
 			errorbody := struct {
-				Error string `json:"error"`
+				Error interface{} `json:"error"`
 			}{
-				Error: err.Error(),
+				Error: err,
 			}
 			if b, err = json.Marshal(&errorbody); err != nil {
 				return
@@ -652,11 +667,16 @@ func (c *httpCallServerForEcho) RegisterToMux(m *http.ServeMux) {
 
 		respbody.Output, err = c.methods.Echo(r.Context(), reqbody.Input, reqbody.Names, reqbody.Values, reqbody.Values2, reqbody.Something)
 		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
+			if header, ok := err.(interface{ StatusCode() int }); ok {
+				w.WriteHeader(header.StatusCode())
+			} else {
+				w.WriteHeader(http.StatusInternalServerError)
+			}
+
 			errorbody := struct {
-				Error string `json:"error"`
+				Error interface{} `json:"error"`
 			}{
-				Error: err.Error(),
+				Error: err,
 			}
 			if b, err = json.Marshal(&errorbody); err != nil {
 				return
@@ -697,11 +717,16 @@ func (c *httpCallServerForEcho) RegisterToMux(m *http.ServeMux) {
 
 		respbody.Output, err = c.methods.Ping(r.Context())
 		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
+			if header, ok := err.(interface{ StatusCode() int }); ok {
+				w.WriteHeader(header.StatusCode())
+			} else {
+				w.WriteHeader(http.StatusInternalServerError)
+			}
+
 			errorbody := struct {
-				Error string `json:"error"`
+				Error interface{} `json:"error"`
 			}{
-				Error: err.Error(),
+				Error: err,
 			}
 			if b, err = json.Marshal(&errorbody); err != nil {
 				return
@@ -745,11 +770,16 @@ func (c *httpCallServerForEcho) RegisterToMux(m *http.ServeMux) {
 
 		respbody.Output, err = c.methods.ByteTest(r.Context(), reqbody.Input)
 		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
+			if header, ok := err.(interface{ StatusCode() int }); ok {
+				w.WriteHeader(header.StatusCode())
+			} else {
+				w.WriteHeader(http.StatusInternalServerError)
+			}
+
 			errorbody := struct {
-				Error string `json:"error"`
+				Error interface{} `json:"error"`
 			}{
-				Error: err.Error(),
+				Error: err,
 			}
 			if b, err = json.Marshal(&errorbody); err != nil {
 				return

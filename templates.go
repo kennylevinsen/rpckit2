@@ -111,7 +111,7 @@ func templatesGoRpckitGoTmpl() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "templates/go/rpckit.go.tmpl", size: 314, mode: os.FileMode(436), modTime: time.Unix(1560856823, 0)}
+	info := bindataFileInfo{name: "templates/go/rpckit.go.tmpl", size: 314, mode: os.FileMode(420), modTime: time.Unix(1567425956, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -131,7 +131,7 @@ func templatesGoServer_methodGoTmpl() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "templates/go/server_method.go.tmpl", size: 651, mode: os.FileMode(436), modTime: time.Unix(1560861318, 0)}
+	info := bindataFileInfo{name: "templates/go/server_method.go.tmpl", size: 651, mode: os.FileMode(420), modTime: time.Unix(1567425956, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -151,7 +151,7 @@ func templatesGoTypesGoTmpl() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "templates/go/types.go.tmpl", size: 847, mode: os.FileMode(436), modTime: time.Unix(1560861228, 0)}
+	info := bindataFileInfo{name: "templates/go/types.go.tmpl", size: 847, mode: os.FileMode(420), modTime: time.Unix(1567425956, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -171,7 +171,7 @@ func templatesGoHttpBoilerplateGoTmpl() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "templates/go-http/boilerplate.go.tmpl", size: 1100, mode: os.FileMode(436), modTime: time.Unix(1560855485, 0)}
+	info := bindataFileInfo{name: "templates/go-http/boilerplate.go.tmpl", size: 1100, mode: os.FileMode(420), modTime: time.Unix(1567425956, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -191,7 +191,7 @@ func templatesGoHttpClient_definitionGoTmpl() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "templates/go-http/client_definition.go.tmpl", size: 844, mode: os.FileMode(436), modTime: time.Unix(1560855595, 0)}
+	info := bindataFileInfo{name: "templates/go-http/client_definition.go.tmpl", size: 844, mode: os.FileMode(420), modTime: time.Unix(1567425956, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -211,7 +211,7 @@ func templatesGoHttpClient_methodGoTmpl() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "templates/go-http/client_method.go.tmpl", size: 2688, mode: os.FileMode(436), modTime: time.Unix(1560855779, 0)}
+	info := bindataFileInfo{name: "templates/go-http/client_method.go.tmpl", size: 2688, mode: os.FileMode(420), modTime: time.Unix(1567425956, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -231,7 +231,7 @@ func templatesGoHttpRpckitGoTmpl() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "templates/go-http/rpckit.go.tmpl", size: 776, mode: os.FileMode(436), modTime: time.Unix(1560855799, 0)}
+	info := bindataFileInfo{name: "templates/go-http/rpckit.go.tmpl", size: 776, mode: os.FileMode(420), modTime: time.Unix(1567425956, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -251,12 +251,12 @@ func templatesGoHttpSerializationGoTmpl() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "templates/go-http/serialization.go.tmpl", size: 319, mode: os.FileMode(436), modTime: time.Unix(1560855859, 0)}
+	info := bindataFileInfo{name: "templates/go-http/serialization.go.tmpl", size: 319, mode: os.FileMode(420), modTime: time.Unix(1567425956, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
 
-var _templatesGoHttpServer_methodGoTmpl = []byte("\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\xff\xbc\x55\xdf\x6f\xdb\x36\x10\x7e\xf7\x5f\x71\x11\x8a\x80\x1c\x1c\x3a\x7b\xf5\xe0\x01\x69\xb7\x2e\xc5\x90\x3a\x70\x3c\xec\x61\x18\x50\x4a\x3a\x27\x1a\x68\x52\xa6\xa8\x26\x99\xc7\xff\x7d\xa0\x48\xdb\x94\x2d\xc5\x99\xbb\x56\x80\x01\x8b\xba\x1f\xdf\xdd\x7d\xf7\x71\x34\x82\xeb\xf9\xfc\x76\xbd\x06\x8d\xab\xba\xd0\x98\x03\xbb\xd5\xca\xa8\x8f\x7c\x89\xf0\x0f\x64\xbc\x2c\x0c\x17\xc5\xdf\x08\xd6\xde\xa1\xfe\x8c\x1a\x32\x8d\xdc\x60\x05\x1c\x24\x3e\x36\xee\xe1\xc3\x42\x69\x30\x0f\x08\x3d\xd1\xac\x85\xd2\xbd\x64\x4a\xb0\xc1\xa2\x96\xd9\x7f\x4e\x4d\x96\x68\x1e\x54\x5e\xf5\x65\xd8\x73\xba\x0d\xd9\x68\x0c\x72\x3d\x00\x00\xd0\x68\x6a\x2d\xe1\xfc\xc1\x98\xf2\x1d\x17\xc2\x7f\x7c\xaf\xf4\xeb\x22\xaf\x03\x90\x31\x84\x3f\x76\x60\x07\x03\xf3\x5c\x22\x9c\x18\x11\x2a\xa3\xeb\xcc\x04\x78\xa7\xd5\xe9\x30\x34\x7d\x25\x19\x7c\x77\x22\x0e\x0a\x33\xbc\x2f\x2a\x83\x7a\xae\x6e\xea\x27\xb2\xf4\x91\x58\x13\xe6\xa6\x7e\xa2\x01\xe1\x7a\x7d\x01\x6f\xca\x6d\x94\xf1\xa4\x67\xe4\x5b\x63\xcd\xe5\x3d\x46\x46\x37\xa1\xc4\x60\xb2\x64\xd7\x5c\xe6\x02\xdf\xd7\x32\x23\xc9\x28\x06\x1b\xa5\xb1\xb6\xf5\x85\x85\x0a\x84\x7a\x44\x0d\xd6\x26\x43\x70\xf5\x93\xc7\x66\x0a\x6c\x86\x55\xa9\x64\x85\xbf\xeb\xc2\xa0\x1e\x82\x0e\xb5\xcc\x70\x55\x63\x65\x36\xa5\x6c\x10\x16\x0b\xb8\x37\x40\x04\x4a\x60\x1f\x64\x59\x1b\x0a\x97\x1b\x78\xee\x29\x16\xa0\x03\x6c\x38\x9b\x40\x72\x3b\xbd\x9b\x27\x51\x0c\xf7\x3c\xb2\x26\xd9\x35\xf2\x1c\x35\xf1\x9d\x33\xdc\xd4\x95\xf7\xfb\xa8\xcc\x95\x70\x68\x73\xda\x72\xf3\x74\xdc\x1e\xd9\x41\x04\x0c\x50\xe6\x70\x61\xa3\xb3\xcf\x5c\x03\x69\xf9\xa3\xd6\xee\xa7\x74\xeb\x34\x85\x3f\xfe\x4c\x9f\x0d\xb6\x0e\xd7\xeb\xbe\x42\x35\xae\x52\x95\x3f\x37\xbd\x9b\xe1\xaa\x99\x62\xcf\x1c\xf6\x48\xe3\x8b\xeb\x9a\x4c\x7b\x6b\x7c\x2d\x51\x4b\x3b\x00\x4d\x6b\x13\x21\xaa\xca\x08\x52\x55\x7e\x0b\x4c\x74\xd7\xe8\x74\xd8\x74\x76\x02\x85\xaa\x4d\x21\xd8\x0c\x79\x7e\x25\x04\xd1\xec\xad\xca\x9f\x69\xcc\x0c\x67\x77\x36\x01\x59\x88\xd7\x32\xe2\x2d\xcf\x37\x44\x7c\x35\x17\x8e\x93\xd4\x77\x93\xcb\x1c\x08\xae\xda\x76\xdf\x53\x7f\x56\xc8\x1c\x9f\xc2\x29\x5c\x52\x36\x67\xbf\xa8\xb9\x93\xae\xc4\xd3\x25\xa1\x71\xc0\xc0\x0a\x16\x77\xf2\x20\xc4\x41\x67\xad\x85\x09\xa4\x2d\x16\x8b\x0a\xf7\xb6\xc9\xf7\xf6\xaf\x4a\x49\xf6\x9b\x5c\x72\x5d\x3d\x70\x41\xd2\x21\x9c\x87\x9c\xf4\x87\xaf\xd9\xd6\x18\x5b\x9b\x01\xdd\x68\x05\x4a\x92\x52\xf8\x11\x2e\xbf\x01\x94\xd6\xcc\xdf\xf8\xeb\xe0\x50\x68\x63\x8d\x0d\xfe\x5e\x66\xc3\x16\x45\x2b\xc4\x8e\x6e\xc2\x70\x97\xde\x0f\x26\x63\xe1\x1a\x3a\xee\x4b\x34\x7b\xa7\xa4\xc1\x27\x43\xe8\x4e\xec\x03\x3f\x5c\xe8\x2e\x16\xf5\xec\xe3\x45\x00\xf1\x85\xeb\xf5\x41\x1a\xd4\x92\x87\xfb\xef\x67\x27\x8e\x74\x5f\x33\x95\x6e\xd4\x65\x3c\x69\xdf\xbe\xf1\xd3\x38\xba\xcf\x85\xbc\x87\x4f\x8e\xab\xe3\xa4\xf1\x4c\x3e\xb5\x6c\x6d\x8f\xeb\xd8\xe5\x61\xcd\x5f\x42\x87\x6d\x97\xd6\x5b\xb1\xd8\xc9\x4d\xb3\x12\x37\x61\x21\xce\xb7\x40\x5f\xda\x87\x0e\x5e\x41\x5b\x3d\x7c\xb7\x42\xa3\x28\xbb\x43\x43\x92\x66\x68\xd2\x5c\xb8\xf5\x4f\x86\x90\xf0\xb2\x14\x45\xc6\x4d\xa1\xe4\xc8\x81\x48\x68\x57\xb3\x49\x7a\xaa\x62\xc5\xe2\xfe\xa2\x64\x6d\x0c\xf7\x34\x2b\xd0\xfa\xa8\x68\xa5\xe0\xd6\xa4\x83\xf9\x87\x81\xba\x48\x78\x44\x09\x7a\xe6\xb4\x49\x78\x92\x6c\x1d\xa5\xeb\x68\x04\xf3\xe9\x4f\xd3\x31\x5c\xe5\xb9\xe7\xee\xd9\xff\xa8\x6f\xae\x61\xb2\x10\x2f\x29\xd1\x17\x70\xa7\xb7\xea\xe9\xaf\x07\x46\x1b\x72\x85\xfd\xdf\xe9\xc1\xc0\x0e\xfe\x0d\x00\x00\xff\xff\xe0\xb5\xd4\xee\xae\x0c\x00\x00")
+var _templatesGoHttpServer_methodGoTmpl = []byte("\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\xff\xbc\x55\xdf\x6f\xdb\x36\x10\x7e\x8e\xff\x8a\x8b\x50\x04\xe4\xe0\xd0\xd9\xab\x0b\x0f\x48\xb3\x75\x29\x86\x34\x81\xe3\x61\x0f\xc3\x80\xd2\xd2\x39\xe6\x2a\x93\x32\x45\x35\xc9\x34\xfe\xef\x03\x45\xda\xa6\x6c\x2b\xce\xbc\xb5\x02\x82\x58\xd4\xfd\xf8\xee\xee\xbb\x8f\x83\x01\x5c\x4f\x26\x77\x75\x0d\x1a\x97\x95\xd0\x98\x01\xbb\xd3\xca\xa8\x8f\x7c\x81\xf0\x37\xa4\xbc\x10\x86\xe7\xe2\x2f\x04\x6b\xef\x51\x7f\x41\x0d\xa9\x46\x6e\xb0\x04\x0e\x12\x1f\x1b\xf7\xf0\x61\xa6\x34\x98\x39\x42\x47\x34\x6b\xa1\x70\x2f\xa9\xca\x59\x6f\x56\xc9\xf4\x5f\xa7\x26\x0b\x34\x73\x95\x95\x5d\x19\xb6\x9c\xee\x42\x36\x1a\x83\xac\x7b\x00\x00\x1a\x4d\xa5\x25\x9c\xcd\x8d\x29\xae\x78\x9e\xfb\x8f\xef\x95\x7e\x5d\xe4\x3a\x00\x19\x42\xf8\x61\x7b\xb6\xd7\x33\xcf\x05\xc2\x91\x11\xa1\x34\xba\x4a\x4d\x80\x77\x5c\x9d\x0e\x43\xd3\x57\x92\xc2\x77\x47\xe2\xa0\x30\xc6\x07\x51\x1a\xd4\x13\x75\x53\x3d\x91\x85\x8f\xc4\x9a\x30\x37\xd5\x13\x0d\x08\xeb\xfa\x1c\xde\x14\xeb\x28\xc3\x51\xc7\xc8\xd7\xc6\x9a\xcb\x07\x8c\x8c\x6e\x42\x89\xc1\x64\xc1\xae\xb9\xcc\x72\x7c\x5f\xc9\x94\x24\x83\x18\x6c\x94\xc6\xda\xd6\x17\x16\x2a\xc8\xd5\x23\x6a\xb0\x36\xe9\x83\xab\x9f\x3c\x36\x53\x60\x63\x2c\x0b\x25\x4b\xfc\x4d\x0b\x83\xba\x0f\x3a\xd4\x32\xc6\x65\x85\xa5\x59\x95\xb2\x42\x28\x66\xf0\x60\x80\xe4\x28\x81\x7d\x90\x45\x65\x28\x5c\xac\xe0\xb9\x47\xcc\x40\x07\xd8\x70\x3a\x82\xe4\xee\xf6\x7e\x92\x44\x31\xdc\xf3\xc8\x9a\x64\xd7\xc8\x33\xd4\xc4\x77\xce\x70\x53\x95\xde\xef\xa3\x32\x97\xb9\x43\x9b\xd1\x96\x9b\xa7\xe3\xfa\xc8\xf6\x22\x60\x80\x32\x83\x73\x1b\x9d\x7d\xe1\x1a\x48\xcb\x1f\xb5\x76\x7f\x4a\xb7\x4e\xa7\xf0\xfb\x1f\xd3\x67\x83\xad\xc3\xba\xee\x2a\x54\xe3\x72\xaa\xb2\xe7\xa6\x77\x63\x5c\x36\x53\xec\x98\xc3\x16\x69\x7c\x71\xfb\x26\xd3\xde\x1a\x5f\x4b\xd4\xd2\x3d\x80\x6e\x2b\x13\x21\x2a\x8b\x08\x52\x59\x7c\x0b\x4c\x74\xd3\xe8\x69\xbf\xe9\xec\x08\x84\xaa\x8c\xc8\xd9\x18\x79\x76\x99\xe7\x44\xb3\x77\x2a\x7b\xa6\x31\x33\x9c\xdd\xe9\x08\xa4\xc8\x5f\xcb\x88\x77\x3c\x5b\x11\xf1\xd5\x5c\x38\x4c\x52\xdf\x4d\x2e\x33\x20\xb8\x6c\xdb\x7d\x4f\xfd\x99\x90\x19\x3e\x85\x53\xb8\xa0\x6c\xc2\x7e\x56\x13\x27\x5d\x89\xa7\x4b\x42\xe3\x80\x81\x15\x2c\xee\xe4\x4e\x88\x9d\xce\x5a\x0b\x23\x98\xb6\x58\x9c\x97\xb8\xb5\x4d\xbe\xb7\x7f\x96\x4a\xb2\x5f\xe5\x82\xeb\x72\xce\x73\x32\xed\xc3\x59\xc8\x49\xdf\x7e\xcd\xb6\xc6\xd8\xda\x0c\xd8\x8f\x36\x47\x49\xa6\x14\x7e\x80\x8b\x6f\x00\xa5\x35\xf3\x37\xfe\x3a\xd8\x15\xda\x58\x63\x83\xbf\x97\xd9\xb0\x45\xd1\x0a\xb1\x83\x9b\xd0\xdf\xa4\xf7\x83\x49\x59\xb8\x86\x0e\xfb\x12\xcd\xae\x94\x34\xf8\x64\x08\xdd\x88\x7d\xe0\x87\x0b\xbd\x8f\x45\x1d\xfb\x78\x1e\x40\x74\xaf\xd7\xc9\xc9\x89\x98\xc1\xbc\xe9\x77\x5f\x7d\x76\x3d\x41\xad\x19\x11\xd2\xa0\x9e\xf1\x14\x6b\xdf\xff\x2b\x95\x21\xa1\x20\xa4\xb1\xf4\x2d\xa8\xcf\xde\xf5\x64\x6b\x5e\xcd\x3f\x16\x7b\x50\x67\x66\x3d\x07\x5a\xa3\xde\xf1\xdd\xcc\xfa\x83\xcb\x2d\x79\xb8\x6e\x7f\x72\x5a\xec\xc3\xf4\xb6\x85\x5a\xe9\x46\xd2\x86\xa3\xf6\x95\x1f\x3f\x8d\x3b\xac\xcb\x81\xda\xc2\x27\xb7\x26\xc3\xa4\xf1\x4f\x3e\xb5\x3c\x6c\x47\x80\xa1\xcb\xd6\x6f\x9b\xb6\xde\xc4\x6c\xa3\x70\xcd\x16\xde\x84\x1d\x3c\x5b\xc3\x7c\x69\x05\xf7\x50\x19\xda\x82\x05\xcd\x76\x84\x66\x51\x76\x8f\x86\x24\x0d\x4f\xa4\x39\x77\x8a\x93\xf4\x21\xe1\x45\x91\x8b\x94\x1b\xa1\xe4\xc0\x81\x48\xe8\xbe\xe5\x22\xd3\x63\x45\x32\xbe\x4f\x5e\x54\xc9\x95\xe1\x96\x4c\x86\x4d\x3a\xa8\x93\x53\x70\x9b\xb9\x67\xd9\x76\x03\xed\xe3\xfd\x01\xf1\xe9\x98\xd3\x2a\xe1\x51\x4a\xb9\x97\xb2\xb1\xe7\x60\x00\x93\xdb\x1f\x6f\x87\x70\x99\x65\x9e\xb9\xa7\xff\xa3\xa4\xba\x86\x49\x91\xbf\x24\x7e\xff\x81\x3b\x9d\x55\xdf\xfe\xb2\x63\xb4\x22\x57\x90\x9c\x8d\x04\xf5\x6c\xef\x9f\x00\x00\x00\xff\xff\x17\x65\xce\xfb\x21\x0d\x00\x00")
 
 func templatesGoHttpServer_methodGoTmplBytes() ([]byte, error) {
 	return bindataRead(
@@ -271,7 +271,7 @@ func templatesGoHttpServer_methodGoTmpl() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "templates/go-http/server_method.go.tmpl", size: 3246, mode: os.FileMode(436), modTime: time.Unix(1560856000, 0)}
+	info := bindataFileInfo{name: "templates/go-http/server_method.go.tmpl", size: 3361, mode: os.FileMode(420), modTime: time.Unix(1571649693, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -291,7 +291,7 @@ func templatesGoPbBoilerplateGoTmpl() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "templates/go-pb/boilerplate.go.tmpl", size: 30069, mode: os.FileMode(436), modTime: time.Unix(1564651773, 0)}
+	info := bindataFileInfo{name: "templates/go-pb/boilerplate.go.tmpl", size: 30069, mode: os.FileMode(420), modTime: time.Unix(1567425956, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -311,7 +311,7 @@ func templatesGoPbClient_definitionsGoTmpl() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "templates/go-pb/client_definitions.go.tmpl", size: 519, mode: os.FileMode(436), modTime: time.Unix(1560857024, 0)}
+	info := bindataFileInfo{name: "templates/go-pb/client_definitions.go.tmpl", size: 519, mode: os.FileMode(420), modTime: time.Unix(1567425956, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -331,7 +331,7 @@ func templatesGoPbClient_methodsGoTmpl() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "templates/go-pb/client_methods.go.tmpl", size: 2505, mode: os.FileMode(436), modTime: time.Unix(1560857091, 0)}
+	info := bindataFileInfo{name: "templates/go-pb/client_methods.go.tmpl", size: 2505, mode: os.FileMode(420), modTime: time.Unix(1567425956, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -351,7 +351,7 @@ func templatesGoPbMarshalGoTmpl() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "templates/go-pb/marshal.go.tmpl", size: 304, mode: os.FileMode(436), modTime: time.Unix(1541069809, 0)}
+	info := bindataFileInfo{name: "templates/go-pb/marshal.go.tmpl", size: 304, mode: os.FileMode(420), modTime: time.Unix(1541070401, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -371,7 +371,7 @@ func templatesGoPbMarshal_arrayGoTmpl() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "templates/go-pb/marshal_array.go.tmpl", size: 169, mode: os.FileMode(436), modTime: time.Unix(1560857100, 0)}
+	info := bindataFileInfo{name: "templates/go-pb/marshal_array.go.tmpl", size: 169, mode: os.FileMode(420), modTime: time.Unix(1567425956, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -391,7 +391,7 @@ func templatesGoPbMarshal_mapGoTmpl() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "templates/go-pb/marshal_map.go.tmpl", size: 334, mode: os.FileMode(436), modTime: time.Unix(1560857112, 0)}
+	info := bindataFileInfo{name: "templates/go-pb/marshal_map.go.tmpl", size: 334, mode: os.FileMode(420), modTime: time.Unix(1567425956, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -411,7 +411,7 @@ func templatesGoPbMarshal_simpleGoTmpl() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "templates/go-pb/marshal_simple.go.tmpl", size: 84, mode: os.FileMode(436), modTime: time.Unix(1560857121, 0)}
+	info := bindataFileInfo{name: "templates/go-pb/marshal_simple.go.tmpl", size: 84, mode: os.FileMode(420), modTime: time.Unix(1567425956, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -431,7 +431,7 @@ func templatesGoPbMarshal_structGoTmpl() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "templates/go-pb/marshal_struct.go.tmpl", size: 253, mode: os.FileMode(436), modTime: time.Unix(1565082987, 0)}
+	info := bindataFileInfo{name: "templates/go-pb/marshal_struct.go.tmpl", size: 253, mode: os.FileMode(420), modTime: time.Unix(1567425956, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -451,7 +451,7 @@ func templatesGoPbPrepare_serializersGoTmpl() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "templates/go-pb/prepare_serializers.go.tmpl", size: 2004, mode: os.FileMode(436), modTime: time.Unix(1565083152, 0)}
+	info := bindataFileInfo{name: "templates/go-pb/prepare_serializers.go.tmpl", size: 2004, mode: os.FileMode(420), modTime: time.Unix(1567425956, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -471,7 +471,7 @@ func templatesGoPbProperty_to_wiretypeGoTmpl() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "templates/go-pb/property_to_wiretype.go.tmpl", size: 521, mode: os.FileMode(436), modTime: time.Unix(1541005380, 0)}
+	info := bindataFileInfo{name: "templates/go-pb/property_to_wiretype.go.tmpl", size: 521, mode: os.FileMode(420), modTime: time.Unix(1540189415, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -491,7 +491,7 @@ func templatesGoPbRpckitGoTmpl() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "templates/go-pb/rpckit.go.tmpl", size: 346, mode: os.FileMode(420), modTime: time.Unix(1541068728, 0)}
+	info := bindataFileInfo{name: "templates/go-pb/rpckit.go.tmpl", size: 346, mode: os.FileMode(420), modTime: time.Unix(1541070401, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -511,7 +511,7 @@ func templatesGoPbSerializationGoTmpl() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "templates/go-pb/serialization.go.tmpl", size: 1659, mode: os.FileMode(436), modTime: time.Unix(1564493886, 0)}
+	info := bindataFileInfo{name: "templates/go-pb/serialization.go.tmpl", size: 1659, mode: os.FileMode(420), modTime: time.Unix(1567425956, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -531,7 +531,7 @@ func templatesGoPbSerialization_mapGoTmpl() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "templates/go-pb/serialization_map.go.tmpl", size: 1933, mode: os.FileMode(436), modTime: time.Unix(1565611572, 0)}
+	info := bindataFileInfo{name: "templates/go-pb/serialization_map.go.tmpl", size: 1933, mode: os.FileMode(420), modTime: time.Unix(1571649425, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -551,7 +551,7 @@ func templatesGoPbSerialization_structGoTmpl() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "templates/go-pb/serialization_struct.go.tmpl", size: 1221, mode: os.FileMode(436), modTime: time.Unix(1564493929, 0)}
+	info := bindataFileInfo{name: "templates/go-pb/serialization_struct.go.tmpl", size: 1221, mode: os.FileMode(420), modTime: time.Unix(1567425956, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -571,7 +571,7 @@ func templatesGoPbSerializationsGoTmpl() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "templates/go-pb/serializations.go.tmpl", size: 708, mode: os.FileMode(436), modTime: time.Unix(1560859793, 0)}
+	info := bindataFileInfo{name: "templates/go-pb/serializations.go.tmpl", size: 708, mode: os.FileMode(420), modTime: time.Unix(1567425956, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -591,7 +591,7 @@ func templatesGoPbServer_definitionsGoTmpl() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "templates/go-pb/server_definitions.go.tmpl", size: 580, mode: os.FileMode(436), modTime: time.Unix(1560859821, 0)}
+	info := bindataFileInfo{name: "templates/go-pb/server_definitions.go.tmpl", size: 580, mode: os.FileMode(420), modTime: time.Unix(1567425956, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -611,7 +611,7 @@ func templatesGoPbServer_methodsGoTmpl() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "templates/go-pb/server_methods.go.tmpl", size: 1604, mode: os.FileMode(436), modTime: time.Unix(1560859861, 0)}
+	info := bindataFileInfo{name: "templates/go-pb/server_methods.go.tmpl", size: 1604, mode: os.FileMode(420), modTime: time.Unix(1567425956, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -631,7 +631,7 @@ func templatesGoPbUnmarshalGoTmpl() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "templates/go-pb/unmarshal.go.tmpl", size: 312, mode: os.FileMode(436), modTime: time.Unix(1541069818, 0)}
+	info := bindataFileInfo{name: "templates/go-pb/unmarshal.go.tmpl", size: 312, mode: os.FileMode(420), modTime: time.Unix(1541070401, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -651,7 +651,7 @@ func templatesGoPbUnmarshal_arrayGoTmpl() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "templates/go-pb/unmarshal_array.go.tmpl", size: 220, mode: os.FileMode(436), modTime: time.Unix(1560859875, 0)}
+	info := bindataFileInfo{name: "templates/go-pb/unmarshal_array.go.tmpl", size: 220, mode: os.FileMode(420), modTime: time.Unix(1567425956, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -671,7 +671,7 @@ func templatesGoPbUnmarshal_mapGoTmpl() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "templates/go-pb/unmarshal_map.go.tmpl", size: 429, mode: os.FileMode(436), modTime: time.Unix(1560859897, 0)}
+	info := bindataFileInfo{name: "templates/go-pb/unmarshal_map.go.tmpl", size: 429, mode: os.FileMode(420), modTime: time.Unix(1567425956, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -691,7 +691,7 @@ func templatesGoPbUnmarshal_simpleGoTmpl() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "templates/go-pb/unmarshal_simple.go.tmpl", size: 69, mode: os.FileMode(436), modTime: time.Unix(1560859903, 0)}
+	info := bindataFileInfo{name: "templates/go-pb/unmarshal_simple.go.tmpl", size: 69, mode: os.FileMode(420), modTime: time.Unix(1567425956, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -711,7 +711,7 @@ func templatesGoPbUnmarshal_structGoTmpl() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "templates/go-pb/unmarshal_struct.go.tmpl", size: 262, mode: os.FileMode(436), modTime: time.Unix(1565083034, 0)}
+	info := bindataFileInfo{name: "templates/go-pb/unmarshal_struct.go.tmpl", size: 262, mode: os.FileMode(420), modTime: time.Unix(1567425956, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
