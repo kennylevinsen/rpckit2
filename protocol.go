@@ -42,8 +42,8 @@ type Struct struct {
 	Fields      []Property
 }
 
-type MethodInputOptions struct {}
-type MethodOutputOptions struct {}
+type MethodInputOptions struct{}
+type MethodOutputOptions struct{}
 
 type StructFieldOptions struct {
 	Getter bool
@@ -67,6 +67,7 @@ type PropertyType interface {
 	IsArray() bool
 	IsMap() bool
 	IsStruct() bool
+	IsMarshalled() bool
 	InnerValue() PropertyType
 	InnerKey() PropertyType
 }
@@ -81,6 +82,7 @@ func (s *simpleType) GoType() string        { return s.golangType }
 func (simpleType) IsArray() bool            { return false }
 func (simpleType) IsMap() bool              { return false }
 func (simpleType) IsStruct() bool           { return false }
+func (simpleType) IsMarshalled() bool       { return false }
 func (simpleType) InnerValue() PropertyType { return nil }
 func (simpleType) InnerKey() PropertyType   { return nil }
 
@@ -91,13 +93,40 @@ func newSimpleType(rpckittype, golangtype string) *simpleType {
 	}
 }
 
-func String() PropertyType { return newSimpleType("String", "string") }
-func Bool() PropertyType   { return newSimpleType("Bool", "bool") }
-func Int64() PropertyType  { return newSimpleType("Int64", "int64") }
-func Int() PropertyType    { return newSimpleType("Int", "int64") }
-func Float() PropertyType  { return newSimpleType("Float", "float32") }
-func Double() PropertyType { return newSimpleType("Double", "float64") }
-func Bytes() PropertyType  { return newSimpleType("Bytes", "[]byte") }
+type marshalledType struct {
+	rpckitType string
+	golangType string
+}
+
+func (s *marshalledType) String() string        { return s.rpckitType }
+func (s *marshalledType) GoType() string        { return s.golangType }
+func (marshalledType) IsArray() bool            { return false }
+func (marshalledType) IsMap() bool              { return false }
+func (marshalledType) IsStruct() bool           { return false }
+func (marshalledType) IsMarshalled() bool       { return true }
+func (marshalledType) InnerValue() PropertyType { return nil }
+func (marshalledType) InnerKey() PropertyType   { return nil }
+func (marshalledType) Import() string           { return "time" }
+
+func newMarshalledType(rpckittype, golangtype string) *marshalledType {
+	return &marshalledType{
+		rpckitType: rpckittype,
+		golangType: golangtype,
+	}
+}
+
+func String() PropertyType   { return newSimpleType("String", "string") }
+func Bool() PropertyType     { return newSimpleType("Bool", "bool") }
+func Int64() PropertyType    { return newSimpleType("Int64", "int64") }
+func Int() PropertyType      { return newSimpleType("Int", "int64") }
+func Float() PropertyType    { return newSimpleType("Float", "float32") }
+func Double() PropertyType   { return newSimpleType("Double", "float64") }
+func Bytes() PropertyType    { return newSimpleType("Bytes", "[]byte") }
+func DateTime() PropertyType { return newMarshalledType("DateTime", "time.Time") }
+
+type MarshalledProperty interface {
+	Import() string
+}
 
 type arrayType struct {
 	inner PropertyType
@@ -109,6 +138,7 @@ func (t *arrayType) GoType() string           { return "[]" + t.inner.GoType() }
 func (arrayType) IsArray() bool               { return true }
 func (arrayType) IsMap() bool                 { return false }
 func (arrayType) IsStruct() bool              { return false }
+func (arrayType) IsMarshalled() bool          { return false }
 func (t *arrayType) InnerValue() PropertyType { return t.inner }
 func (arrayType) InnerKey() PropertyType      { return nil }
 
@@ -122,6 +152,7 @@ func (mapType) String() string              { return "Map" }
 func (mapType) IsArray() bool               { return false }
 func (mapType) IsMap() bool                 { return true }
 func (mapType) IsStruct() bool              { return false }
+func (mapType) IsMarshalled() bool          { return false }
 func (t *mapType) InnerValue() PropertyType { return t.value }
 func (t *mapType) InnerKey() PropertyType   { return t.key }
 func (t *mapType) GoType() string {
@@ -144,6 +175,7 @@ func (structType) String() string           { return "Struct" }
 func (structType) IsArray() bool            { return false }
 func (structType) IsMap() bool              { return false }
 func (structType) IsStruct() bool           { return true }
+func (structType) IsMarshalled() bool       { return false }
 func (structType) InnerValue() PropertyType { return nil }
 func (structType) InnerKey() PropertyType   { return nil }
 func (t *structType) GoType() string {
@@ -155,7 +187,7 @@ type Property struct {
 	ID          int64
 	Name        string
 	Description string
-	Options 	interface{}
+	Options     interface{}
 }
 
 func panicf(msg string, args ...interface{}) {

@@ -24,11 +24,13 @@ var template_deps = []string{
 	"go-pb/marshal_array.go.tmpl",
 	"go-pb/marshal_map.go.tmpl",
 	"go-pb/marshal_struct.go.tmpl",
+	"go-pb/marshal_marshalled.go.tmpl",
 	"go-pb/marshal.go.tmpl",
 	"go-pb/unmarshal_simple.go.tmpl",
 	"go-pb/unmarshal_array.go.tmpl",
 	"go-pb/unmarshal_map.go.tmpl",
 	"go-pb/unmarshal_struct.go.tmpl",
+	"go-pb/unmarshal_marshalled.go.tmpl",
 	"go-pb/unmarshal.go.tmpl",
 	"go-pb/prepare_serializers.go.tmpl",
 	"go-pb/serializations.go.tmpl",
@@ -40,6 +42,7 @@ var template_deps = []string{
 	"go-pb/server_definitions.go.tmpl",
 	"go-pb/server_methods.go.tmpl",
 	"go-pb/rpckit.go.tmpl",
+	"go-pb/marshalled_funcs.go.tmpl",
 
 	"go-http/boilerplate.go.tmpl",
 	"go-http/serialization.go.tmpl",
@@ -68,6 +71,7 @@ type TemplateProtocol struct {
 type TemplateContext struct {
 	PackageName string
 	Protocols   []TemplateProtocol
+	Imports     map[string]struct{}
 }
 
 func (g GoGenerator) Generate(p string) error {
@@ -148,7 +152,7 @@ func (g GoGenerator) Generate(p string) error {
 			var b strings.Builder
 			b.Grow(len(s))
 			for idx, r := range s {
-				if idx == 0 || idx < upperCase - 1 {
+				if idx == 0 || idx < upperCase-1 {
 					b.WriteRune(unicode.ToLower(r))
 					continue
 				}
@@ -190,6 +194,7 @@ func (g GoGenerator) Generate(p string) error {
 
 	ctx := TemplateContext{
 		PackageName: g.PackageName,
+		Imports:     make(map[string]struct{}),
 	}
 
 	for _, v := range g.Protocols {
@@ -199,6 +204,25 @@ func (g GoGenerator) Generate(p string) error {
 			Methods: v.methods,
 			Structs: v.structs,
 		})
+		for _, s := range v.structs {
+			for _, f := range s.Fields {
+				if p, ok := f.T.(MarshalledProperty); ok {
+					ctx.Imports[p.Import()] = struct{}{}
+				}
+			}
+		}
+		for _, m := range v.methods {
+			for _, f := range m.Input {
+				if p, ok := f.T.(MarshalledProperty); ok {
+					ctx.Imports[p.Import()] = struct{}{}
+				}
+			}
+			for _, f := range m.Output {
+				if p, ok := f.T.(MarshalledProperty); ok {
+					ctx.Imports[p.Import()] = struct{}{}
+				}
+			}
+		}
 	}
 
 	for _, v := range []string{"pb", "http", ""} {

@@ -1,6 +1,9 @@
 package main
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 // Echo thing
 type EchoThing struct {
@@ -13,6 +16,12 @@ type EchoThing struct {
 
 	// Weee
 	Stuff map[string]int64 `json:"stuff"`
+
+	// My wao time
+	Anothertime time.Time `json:"anothertime"`
+
+	// Datetime mapsimap
+	Mydatetimemap map[time.Time]time.Time `json:"mydatetimemap"`
 }
 
 // The PingpongProtocol interface defines the pingpong protocol.
@@ -24,13 +33,13 @@ type PingpongProtocol interface {
 	PingWithReply(ctx context.Context, reqName string) (respGreeting string, err error)
 
 	// TestMethod is a simple type test
-	TestMethod(ctx context.Context, reqString string, reqBool bool, reqInt64 int64, reqInt int64, reqFloat float32, reqDouble float64) (respSuccess bool, err error)
+	TestMethod(ctx context.Context, reqString string, reqBool bool, reqInt64 int64, reqInt int64, reqFloat float32, reqDouble float64, reqDatetime time.Time) (respSuccess bool, err error)
 }
 
 // The EchoProtocol interface defines the echo protocol.
 type EchoProtocol interface {
 	// Echo is yet another type test
-	Echo(ctx context.Context, reqInput string, reqNames []string, reqValues map[string]map[string]int64, reqValues2 map[string]int64, reqSomething EchoThing) (respOutput string, err error)
+	Echo(ctx context.Context, reqInput string, reqNames []string, reqValues map[string]map[string]int64, reqValues2 map[string]int64, reqSomething EchoThing, reqMytime time.Time) (respOutput string, err error)
 
 	// Ping is a simple no-input test
 	Ping(ctx context.Context) (respOutput string, err error)

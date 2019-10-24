@@ -1,6 +1,9 @@
 package {{ required .PackageName }}
 
 import "context"
+{{ range $key, $val := .Imports }}
+import "{{$key}}"
+{{ end }}
 
 {{ range required .Protocols }}
 {{ range required .Structs }}

@@ -44,21 +44,23 @@ func main() {
 			rpckit2.Property{ID: 4, T: rpckit2.Int(), Name: "int"},
 			rpckit2.Property{ID: 5, T: rpckit2.Float(), Name: "float"},
 			rpckit2.Property{ID: 6, T: rpckit2.Double(), Name: "double"},
+			rpckit2.Property{ID: 7, T: rpckit2.DateTime(), Name: "datetime"},
 		},
 		Output: []rpckit2.Property{
 			rpckit2.Property{ID: 1, T: rpckit2.Bool(), Name: "success"},
 		},
 	})
 
-
 	server2 := rpckit2.NewProtocol("echo", 2)
 	server2.AddStruct(rpckit2.Struct{
-		Name: "echoThing",
+		Name:        "echoThing",
 		Description: "Echo thing",
 		Fields: []rpckit2.Property{
 			rpckit2.Property{ID: 1, T: rpckit2.String(), Name: "wee", Description: "WAAAAH"},
 			rpckit2.Property{ID: 2, T: rpckit2.String(), Name: "woo", Description: "woo describes the woo factor"},
 			rpckit2.Property{ID: 3, T: rpckit2.Map(rpckit2.String(), rpckit2.Int()), Name: "stuff", Description: "weee"},
+			rpckit2.Property{ID: 4, T: rpckit2.DateTime(), Name: "anothertime", Description: "My wao time"},
+			rpckit2.Property{ID: 5, T: rpckit2.Map(rpckit2.DateTime(), rpckit2.DateTime()), Name: "mydatetimemap", Description: "datetime mapsimap"},
 		},
 	})
 
@@ -71,6 +73,7 @@ func main() {
 			rpckit2.Property{ID: 3, T: rpckit2.Map(rpckit2.String(), rpckit2.Map(rpckit2.String(), rpckit2.Int())), Name: "values"},
 			rpckit2.Property{ID: 4, T: rpckit2.Map(rpckit2.String(), rpckit2.Int()), Name: "values2"},
 			rpckit2.Property{ID: 5, T: rpckit2.StructName("echoThing"), Name: "something"},
+			rpckit2.Property{ID: 6, T: rpckit2.DateTime(), Name: "mytime", Description: "My wao time"},
 		},
 		Output: []rpckit2.Property{
 			rpckit2.Property{ID: 1, T: rpckit2.String(), Name: "output"},
@@ -87,7 +90,7 @@ func main() {
 	server2.AddMethod(rpckit2.Method{
 		ID: 3, Name: "ByteTest",
 		Description: "ByteTest is a byte test",
-		Input:       []rpckit2.Property{
+		Input: []rpckit2.Property{
 			rpckit2.Property{ID: 1, T: rpckit2.Bytes(), Name: "input"},
 		},
 		Output: []rpckit2.Property{

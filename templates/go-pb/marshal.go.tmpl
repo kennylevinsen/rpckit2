@@ -1,5 +1,6 @@
 {{- if .Field.IsStruct -}}{{- template "go-pb/marshal_struct.go.tmpl" . -}}
 {{- else if .Field.IsMap -}}{{- template "go-pb/marshal_map.go.tmpl" . -}}
 {{- else if .Field.IsArray -}}{{- template "go-pb/marshal_array.go.tmpl" . -}}
+{{- else if .Field.IsMarshalled -}}{{- template "go-pb/marshal_marshalled.go.tmpl" . -}}
 {{- else -}}{{- template "go-pb/marshal_simple.go.tmpl" . -}}
 {{- end -}}

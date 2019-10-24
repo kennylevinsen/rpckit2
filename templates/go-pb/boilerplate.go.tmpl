@@ -1242,3 +1242,5 @@ func (c *RPCConnection) handlePrivateResponse(resultType uint64, msg *message) (
 	}
 	return nil, false
 }
+
+{{ template "go-pb/marshalled_funcs.go.tmpl" }}

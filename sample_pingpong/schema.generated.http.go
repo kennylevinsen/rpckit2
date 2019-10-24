@@ -11,6 +11,8 @@ import (
 	"net/http/cookiejar"
 
 	"golang.org/x/net/publicsuffix"
+
+	"time"
 )
 
 // HTTPClient wraps a http client configured for use with protocol wrappers.
@@ -191,12 +193,13 @@ func (c *HTTPPingpongClient) PingWithReply(ctx context.Context, reqName string) 
 }
 
 type httpReqProtoPingpongMethodTestMethod struct {
-	String string  `json:"string"`
-	Bool   bool    `json:"bool"`
-	Int64  int64   `json:"int64"`
-	Int    int64   `json:"int"`
-	Float  float32 `json:"float"`
-	Double float64 `json:"double"`
+	String   string    `json:"string"`
+	Bool     bool      `json:"bool"`
+	Int64    int64     `json:"int64"`
+	Int      int64     `json:"int"`
+	Float    float32   `json:"float"`
+	Double   float64   `json:"double"`
+	Datetime time.Time `json:"datetime"`
 }
 
 type httpRespProtoPingpongMethodTestMethod struct {
@@ -204,7 +207,7 @@ type httpRespProtoPingpongMethodTestMethod struct {
 }
 
 // TestMethod is a simple type test
-func (c *HTTPPingpongClient) TestMethod(ctx context.Context, reqString string, reqBool bool, reqInt64 int64, reqInt int64, reqFloat float32, reqDouble float64) (respSuccess bool, err error) {
+func (c *HTTPPingpongClient) TestMethod(ctx context.Context, reqString string, reqBool bool, reqInt64 int64, reqInt int64, reqFloat float32, reqDouble float64, reqDatetime time.Time) (respSuccess bool, err error) {
 	var (
 		b        []byte
 		req      *http.Request
@@ -214,12 +217,13 @@ func (c *HTTPPingpongClient) TestMethod(ctx context.Context, reqString string, r
 	)
 
 	reqbody = httpReqProtoPingpongMethodTestMethod{
-		String: reqString,
-		Bool:   reqBool,
-		Int64:  reqInt64,
-		Int:    reqInt,
-		Float:  reqFloat,
-		Double: reqDouble,
+		String:   reqString,
+		Bool:     reqBool,
+		Int64:    reqInt64,
+		Int:      reqInt,
+		Float:    reqFloat,
+		Double:   reqDouble,
+		Datetime: reqDatetime,
 	}
 
 	if b, err = json.Marshal(&reqbody); err != nil {
@@ -408,7 +412,7 @@ func (c *httpCallServerForPingpong) RegisterToMux(m *http.ServeMux) {
 			return
 		}
 
-		respbody.Success, err = c.methods.TestMethod(r.Context(), reqbody.String, reqbody.Bool, reqbody.Int64, reqbody.Int, reqbody.Float, reqbody.Double)
+		respbody.Success, err = c.methods.TestMethod(r.Context(), reqbody.String, reqbody.Bool, reqbody.Int64, reqbody.Int, reqbody.Float, reqbody.Double, reqbody.Datetime)
 		if err != nil {
 			if header, ok := err.(interface{ StatusCode() int }); ok {
 				w.WriteHeader(header.StatusCode())
@@ -466,6 +470,7 @@ type httpReqProtoEchoMethodEcho struct {
 	Values    map[string]map[string]int64 `json:"values"`
 	Values2   map[string]int64            `json:"values2"`
 	Something EchoThing                   `json:"something"`
+	Mytime    time.Time                   `json:"mytime"`
 }
 
 type httpRespProtoEchoMethodEcho struct {
@@ -473,7 +478,7 @@ type httpRespProtoEchoMethodEcho struct {
 }
 
 // Echo is yet another type test
-func (c *HTTPEchoClient) Echo(ctx context.Context, reqInput string, reqNames []string, reqValues map[string]map[string]int64, reqValues2 map[string]int64, reqSomething EchoThing) (respOutput string, err error) {
+func (c *HTTPEchoClient) Echo(ctx context.Context, reqInput string, reqNames []string, reqValues map[string]map[string]int64, reqValues2 map[string]int64, reqSomething EchoThing, reqMytime time.Time) (respOutput string, err error) {
 	var (
 		b        []byte
 		req      *http.Request
@@ -488,6 +493,7 @@ func (c *HTTPEchoClient) Echo(ctx context.Context, reqInput string, reqNames []s
 		Values:    reqValues,
 		Values2:   reqValues2,
 		Something: reqSomething,
+		Mytime:    reqMytime,
 	}
 
 	if b, err = json.Marshal(&reqbody); err != nil {
@@ -665,7 +671,7 @@ func (c *httpCallServerForEcho) RegisterToMux(m *http.ServeMux) {
 			return
 		}
 
-		respbody.Output, err = c.methods.Echo(r.Context(), reqbody.Input, reqbody.Names, reqbody.Values, reqbody.Values2, reqbody.Something)
+		respbody.Output, err = c.methods.Echo(r.Context(), reqbody.Input, reqbody.Names, reqbody.Values, reqbody.Values2, reqbody.Something, reqbody.Mytime)
 		if err != nil {
 			if header, ok := err.(interface{ StatusCode() int }); ok {
 				w.WriteHeader(header.StatusCode())

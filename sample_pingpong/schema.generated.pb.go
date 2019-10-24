@@ -1238,6 +1238,14 @@ func (c *RPCConnection) handlePrivateResponse(resultType uint64, msg *message) (
 	return nil, false
 }
 
+func marshalDateTime(t time.Time) string {
+	return t.Format(time.RFC3339Nano)
+}
+
+func unmarshalDateTime(s string) (time.Time, error) {
+	return time.Parse(time.RFC3339Nano, s)
+}
+
 type protoPingpongMethod uint64
 type protoEchoMethod uint64
 
@@ -1314,6 +1322,53 @@ func (s *rpcMap0) RPCDecode(m *message) error {
 	return err
 }
 
+type rpcMap1 struct {
+	Key   time.Time
+	Value time.Time
+}
+
+func (s *rpcMap1) RPCEncode(m *message) error {
+	m.WritePBString(1, marshalDateTime(s.Key))
+	m.WritePBString(2, marshalDateTime(s.Value))
+	return nil
+}
+
+func (s *rpcMap1) RPCDecode(m *message) error {
+	var (
+		err error
+		tag uint64
+	)
+	for err == nil {
+		tag, err = m.ReadVarint()
+		switch tag {
+		case uint64(1<<3) | uint64(wireTypeLengthDelimited):
+			{
+				var x string
+				x, err = m.ReadString()
+				if err == nil {
+					s.Key, err = unmarshalDateTime(x)
+				}
+			}
+		case uint64(2<<3) | uint64(wireTypeLengthDelimited):
+			{
+				var x string
+				x, err = m.ReadString()
+				if err == nil {
+					s.Value, err = unmarshalDateTime(x)
+				}
+			}
+		default:
+			if err != io.EOF {
+				err = m.ReadPBSkip(tag)
+			}
+		}
+	}
+	if err == io.EOF {
+		return nil
+	}
+	return err
+}
+
 type rpcGlobalStructEchoThing struct {
 	v EchoThing
 }
@@ -1331,6 +1386,18 @@ func (s *rpcGlobalStructEchoThing) RPCEncode(m *message) error {
 			return err
 		}
 		m.WritePBMessage(3, em)
+	}
+	m.WritePBString(4, marshalDateTime(s.v.Anothertime))
+	for k, v := range s.v.Mydatetimemap {
+		em := newEmbeddedMessage(messageCapacity)
+		vv := rpcMap1{
+			Key:   k,
+			Value: v,
+		}
+		if err := vv.RPCEncode(em); err != nil {
+			return err
+		}
+		m.WritePBMessage(5, em)
 	}
 	return nil
 }
@@ -1371,6 +1438,37 @@ func (s *rpcGlobalStructEchoThing) RPCDecode(m *message) error {
 
 			outer[v.Key] = v.Value
 
+		case uint64(4<<3) | uint64(wireTypeLengthDelimited):
+			{
+				var x string
+				x, err = m.ReadString()
+				if err == nil {
+					s.v.Anothertime, err = unmarshalDateTime(x)
+				}
+			}
+
+		case uint64(5<<3) | uint64(wireTypeLengthDelimited):
+			var em *message
+			if s.v.Mydatetimemap == nil {
+				s.v.Mydatetimemap = make(map[time.Time]time.Time)
+			}
+
+			outer := s.v.Mydatetimemap
+
+			var v rpcMap1
+
+			if em, err = m.ReadEmbeddedMessageNoCopy(); err != nil {
+				break
+			}
+
+			if err = v.RPCDecode(em); err == io.EOF {
+				err = nil
+			} else if err != nil {
+				break
+			}
+
+			outer[v.Key] = v.Value
+
 		default:
 			if err != io.EOF {
 				err = m.ReadPBSkip(tag)
@@ -1383,12 +1481,12 @@ func (s *rpcGlobalStructEchoThing) RPCDecode(m *message) error {
 	return err
 }
 
-type rpcMap1 struct {
+type rpcMap2 struct {
 	Key   string
 	Value map[string]int64
 }
 
-func (s *rpcMap1) RPCEncode(m *message) error {
+func (s *rpcMap2) RPCEncode(m *message) error {
 	m.WritePBString(1, s.Key)
 	for k, v := range s.Value {
 		em := newEmbeddedMessage(messageCapacity)
@@ -1404,7 +1502,7 @@ func (s *rpcMap1) RPCEncode(m *message) error {
 	return nil
 }
 
-func (s *rpcMap1) RPCDecode(m *message) error {
+func (s *rpcMap2) RPCDecode(m *message) error {
 	var (
 		err error
 		tag uint64
@@ -1597,12 +1695,13 @@ func (s *rpcRespProtoPingpongMethodPingWithReply) RPCID() uint64 {
 }
 
 type rpcReqProtoPingpongMethodTestMethod struct {
-	String string
-	Bool   bool
-	Int64  int64
-	Int    int64
-	Float  float32
-	Double float64
+	String   string
+	Bool     bool
+	Int64    int64
+	Int      int64
+	Float    float32
+	Double   float64
+	Datetime time.Time
 }
 
 func (s *rpcReqProtoPingpongMethodTestMethod) RPCEncode(m *message) error {
@@ -1612,6 +1711,7 @@ func (s *rpcReqProtoPingpongMethodTestMethod) RPCEncode(m *message) error {
 	m.WritePBInt(4, s.Int)
 	m.WritePBFloat(5, s.Float)
 	m.WritePBDouble(6, s.Double)
+	m.WritePBString(7, marshalDateTime(s.Datetime))
 	return nil
 }
 
@@ -1640,6 +1740,15 @@ func (s *rpcReqProtoPingpongMethodTestMethod) RPCDecode(m *message) error {
 
 		case uint64(6<<3) | uint64(wireType64bit):
 			s.Double, err = m.ReadDouble()
+
+		case uint64(7<<3) | uint64(wireTypeLengthDelimited):
+			{
+				var x string
+				x, err = m.ReadString()
+				if err == nil {
+					s.Datetime, err = unmarshalDateTime(x)
+				}
+			}
 
 		default:
 			if err != io.EOF {
@@ -1699,6 +1808,7 @@ type rpcReqProtoEchoMethodEcho struct {
 	Values    map[string]map[string]int64
 	Values2   map[string]int64
 	Something EchoThing
+	Mytime    time.Time
 }
 
 func (s *rpcReqProtoEchoMethodEcho) RPCEncode(m *message) error {
@@ -1708,7 +1818,7 @@ func (s *rpcReqProtoEchoMethodEcho) RPCEncode(m *message) error {
 	}
 	for k, v := range s.Values {
 		em := newEmbeddedMessage(messageCapacity)
-		vv := rpcMap1{
+		vv := rpcMap2{
 			Key:   k,
 			Value: v,
 		}
@@ -1737,6 +1847,7 @@ func (s *rpcReqProtoEchoMethodEcho) RPCEncode(m *message) error {
 		}
 		m.WritePBMessage(5, em)
 	}
+	m.WritePBString(6, marshalDateTime(s.Mytime))
 	return nil
 }
 
@@ -1764,7 +1875,7 @@ func (s *rpcReqProtoEchoMethodEcho) RPCDecode(m *message) error {
 
 			outer := s.Values
 
-			var v rpcMap1
+			var v rpcMap2
 
 			if em, err = m.ReadEmbeddedMessageNoCopy(); err != nil {
 				break
@@ -1816,6 +1927,15 @@ func (s *rpcReqProtoEchoMethodEcho) RPCDecode(m *message) error {
 			}
 
 			s.Something = vs.v
+
+		case uint64(6<<3) | uint64(wireTypeLengthDelimited):
+			{
+				var x string
+				x, err = m.ReadString()
+				if err == nil {
+					s.Mytime, err = unmarshalDateTime(x)
+				}
+			}
 
 		default:
 			if err != io.EOF {
@@ -2036,7 +2156,7 @@ func (args *rpcReqProtoPingpongMethodPingWithReply) call(ctx context.Context, s 
 }
 
 func (args *rpcReqProtoPingpongMethodTestMethod) call(ctx context.Context, s rpcCallServer) (resp rpcMessage) {
-	success, err := s.(*rpcCallServerForPingpong).methods.TestMethod(ctx, args.String, args.Bool, args.Int64, args.Int, args.Float, args.Double)
+	success, err := s.(*rpcCallServerForPingpong).methods.TestMethod(ctx, args.String, args.Bool, args.Int64, args.Int, args.Float, args.Double, args.Datetime)
 	if err != nil {
 		if rpcMsg, ok := err.(rpcMessage); ok {
 			return rpcMsg
@@ -2074,7 +2194,7 @@ func (s *rpcCallServerForPingpong) handle(ctx context.Context, methodID uint64, 
 }
 
 func (args *rpcReqProtoEchoMethodEcho) call(ctx context.Context, s rpcCallServer) (resp rpcMessage) {
-	output, err := s.(*rpcCallServerForEcho).methods.Echo(ctx, args.Input, args.Names, args.Values, args.Values2, args.Something)
+	output, err := s.(*rpcCallServerForEcho).methods.Echo(ctx, args.Input, args.Names, args.Values, args.Values2, args.Something, args.Mytime)
 	if err != nil {
 		if rpcMsg, ok := err.(rpcMessage); ok {
 			return rpcMsg
@@ -2243,7 +2363,7 @@ func (c *RPCPingpongClient) PingWithReply(ctx context.Context, reqName string) (
 }
 
 // TestMethod is a simple type test
-func (c *RPCPingpongClient) TestMethod(ctx context.Context, reqString string, reqBool bool, reqInt64 int64, reqInt int64, reqFloat float32, reqDouble float64) (respSuccess bool, err error) {
+func (c *RPCPingpongClient) TestMethod(ctx context.Context, reqString string, reqBool bool, reqInt64 int64, reqInt int64, reqFloat float32, reqDouble float64, reqDatetime time.Time) (respSuccess bool, err error) {
 
 	var decoderErr error
 	decoder := func(msg *message) error {
@@ -2274,12 +2394,13 @@ func (c *RPCPingpongClient) TestMethod(ctx context.Context, reqString string, re
 	}
 
 	err = c.c.call(ctx, decoder, true, 1, uint64(protoPingpongMethodTestMethod), &rpcReqProtoPingpongMethodTestMethod{
-		String: reqString,
-		Bool:   reqBool,
-		Int64:  reqInt64,
-		Int:    reqInt,
-		Float:  reqFloat,
-		Double: reqDouble,
+		String:   reqString,
+		Bool:     reqBool,
+		Int64:    reqInt64,
+		Int:      reqInt,
+		Float:    reqFloat,
+		Double:   reqDouble,
+		Datetime: reqDatetime,
 	})
 
 	if decoderErr != nil {
@@ -2290,7 +2411,7 @@ func (c *RPCPingpongClient) TestMethod(ctx context.Context, reqString string, re
 }
 
 // Echo is yet another type test
-func (c *RPCEchoClient) Echo(ctx context.Context, reqInput string, reqNames []string, reqValues map[string]map[string]int64, reqValues2 map[string]int64, reqSomething EchoThing) (respOutput string, err error) {
+func (c *RPCEchoClient) Echo(ctx context.Context, reqInput string, reqNames []string, reqValues map[string]map[string]int64, reqValues2 map[string]int64, reqSomething EchoThing, reqMytime time.Time) (respOutput string, err error) {
 
 	var decoderErr error
 	decoder := func(msg *message) error {
@@ -2326,6 +2447,7 @@ func (c *RPCEchoClient) Echo(ctx context.Context, reqInput string, reqNames []st
 		Values:    reqValues,
 		Values2:   reqValues2,
 		Something: reqSomething,
+		Mytime:    reqMytime,
 	})
 
 	if decoderErr != nil {

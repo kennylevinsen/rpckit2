@@ -1,0 +1,7 @@
+func marshalDateTime(t time.Time) string {
+	return t.Format(time.RFC3339Nano)
+}
+
+func unmarshalDateTime(s string) (time.Time,error){
+	return time.Parse(time.RFC3339Nano, s)
+}

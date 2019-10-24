@@ -5,7 +5,10 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"time"
 )
+
+var now = time.Now()
 
 func testRPC() {
 	// listen for network connections
@@ -53,11 +56,22 @@ func testRPC() {
 			if greeting != "hello Oliver" {
 				panic("incorrect greeting")
 			}
-			greeting2, err := echoClient.Echo(ctx, "weee", []string{"Hello", ", ", "World", "!"}, map[string]map[string]int64{
-				"five":      map[string]int64{"five": 5, "fiftyfive": 55, "fivehundredandfiftyfive": 555},
-				"two":       map[string]int64{"two": 2, "twentytwo": 22, "twohundredandtwentytwo": 222},
-				"thirtysix": map[string]int64{"thirtysix": 36, "threethousandandthirtysix": 3636, "threehundredsixtythreethousandthirtysix": 363636},
-			}, map[string]int64{"cpu": 12345}, EchoThing{Wee: "asdf", Stuff: map[string]int64{"cpu": 1234}})
+			greeting2, err := echoClient.Echo(ctx,
+				"weee",
+				[]string{"Hello", ", ", "World", "!"},
+				map[string]map[string]int64{
+					"five":      map[string]int64{"five": 5, "fiftyfive": 55, "fivehundredandfiftyfive": 555},
+					"two":       map[string]int64{"two": 2, "twentytwo": 22, "twohundredandtwentytwo": 222},
+					"thirtysix": map[string]int64{"thirtysix": 36, "threethousandandthirtysix": 3636, "threehundredsixtythreethousandthirtysix": 363636},
+				},
+				map[string]int64{"cpu": 12345},
+				EchoThing{
+					Wee:         "asdf",
+					Stuff:       map[string]int64{"cpu": 1234},
+					Anothertime: now,
+				},
+				now,
+			)
 			if err != nil {
 				panic(err)
 			}
@@ -65,7 +79,7 @@ func testRPC() {
 				panic("incorrect greeting 2")
 			}
 
-			_, err = serverClient.TestMethod(ctx, "hello", true, 1234, 654, 3.454, 3.14)
+			_, err = serverClient.TestMethod(ctx, "hello", true, 1234, 654, 3.454, 3.14, now)
 			if err != nil {
 				panic(err)
 			}
@@ -119,7 +133,7 @@ func testHTTP() {
 		"five":      map[string]int64{"five": 5, "fiftyfive": 55, "fivehundredandfiftyfive": 555},
 		"two":       map[string]int64{"two": 2, "twentytwo": 22, "twohundredandtwentytwo": 222},
 		"thirtysix": map[string]int64{"thirtysix": 36, "threethousandandthirtysix": 3636, "threehundredsixtythreethousandthirtysix": 363636},
-	}, map[string]int64{"cpu": 12345}, EchoThing{Wee: "asdf", Stuff: map[string]int64{"cpu": 1234}})
+	}, map[string]int64{"cpu": 12345}, EchoThing{Wee: "asdf", Stuff: map[string]int64{"cpu": 1234}}, now)
 	if err != nil {
 		panic(err)
 	}
@@ -127,7 +141,7 @@ func testHTTP() {
 		panic("incorrect greeting 2")
 	}
 
-	_, err = serverClient.TestMethod(ctx, "hello", true, 1234, 654, 3.454, 3.14)
+	_, err = serverClient.TestMethod(ctx, "hello", true, 1234, 654, 3.454, 3.14, now)
 	if err != nil {
 		panic(err)
 	}
@@ -166,8 +180,8 @@ func (s *server) PingWithReply(ctx context.Context, name string) (greeting strin
 	return "hello " + name, nil
 }
 
-func (s *server) TestMethod(ctx context.Context, a string, b bool, c int64, d int64, e float32, f float64) (success bool, err error) {
-	return a == "hello" && b && c == 1234 && d == 654 && e == 3.454 && f == 3.14, nil
+func (s *server) TestMethod(ctx context.Context, a string, b bool, c int64, d int64, e float32, f float64, t time.Time) (success bool, err error) {
+	return a == "hello" && b && c == 1234 && d == 654 && e == 3.454 && f == 3.14 && t == now, nil
 }
 
 type echoServer struct {
@@ -175,8 +189,8 @@ type echoServer struct {
 	authenticated bool
 }
 
-func (s *echoServer) Echo(ctx context.Context, input string, names []string, values map[string]map[string]int64, values2 map[string]int64, echoThing EchoThing) (string, error) {
-	fmt.Printf("VALUES: %#v, %#v, %#v\n", values, values2, echoThing)
+func (s *echoServer) Echo(ctx context.Context, input string, names []string, values map[string]map[string]int64, values2 map[string]int64, echoThing EchoThing, atime time.Time) (string, error) {
+	fmt.Printf("VALUES: %#v, %#v, %#v, %v\n", values, values2, echoThing, atime)
 	return input, nil
 }
 

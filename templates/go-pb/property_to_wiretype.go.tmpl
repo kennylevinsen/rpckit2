@@ -8,5 +8,5 @@
 {{- else if eq . "Array" }}wireTypeLengthDelimited
 {{- else if eq . "Map" }}wireTypeLengthDelimited
 {{- else if eq . "Struct" }}wireTypeLengthDelimited
-{{- else -}}{{ error "unknown property type" }}
+{{- else -}}{{ error . }}
 {{- end -}}
