@@ -1954,11 +1954,13 @@ func (s *rpcReqProtoEchoMethodEcho) RPCID() uint64 {
 }
 
 type rpcRespProtoEchoMethodEcho struct {
-	Output string
+	Output    string
+	OuputTime time.Time
 }
 
 func (s *rpcRespProtoEchoMethodEcho) RPCEncode(m *message) error {
 	m.WritePBString(1, s.Output)
+	m.WritePBString(2, marshalDateTime(s.OuputTime))
 	return nil
 }
 
@@ -1972,6 +1974,15 @@ func (s *rpcRespProtoEchoMethodEcho) RPCDecode(m *message) error {
 		switch tag {
 		case uint64(1<<3) | uint64(wireTypeLengthDelimited):
 			s.Output, err = m.ReadString()
+
+		case uint64(2<<3) | uint64(wireTypeLengthDelimited):
+			{
+				var x string
+				x, err = m.ReadString()
+				if err == nil {
+					s.OuputTime, err = unmarshalDateTime(x)
+				}
+			}
 
 		default:
 			if err != io.EOF {
@@ -2194,7 +2205,7 @@ func (s *rpcCallServerForPingpong) handle(ctx context.Context, methodID uint64, 
 }
 
 func (args *rpcReqProtoEchoMethodEcho) call(ctx context.Context, s rpcCallServer) (resp rpcMessage) {
-	output, err := s.(*rpcCallServerForEcho).methods.Echo(ctx, args.Input, args.Names, args.Values, args.Values2, args.Something, args.Mytime)
+	output, ouputTime, err := s.(*rpcCallServerForEcho).methods.Echo(ctx, args.Input, args.Names, args.Values, args.Values2, args.Something, args.Mytime)
 	if err != nil {
 		if rpcMsg, ok := err.(rpcMessage); ok {
 			return rpcMsg
@@ -2202,7 +2213,8 @@ func (args *rpcReqProtoEchoMethodEcho) call(ctx context.Context, s rpcCallServer
 		return &rpcError{id: ApplicationError, error: err.Error()}
 	}
 	return &rpcRespProtoEchoMethodEcho{
-		Output: output,
+		Output:    output,
+		OuputTime: ouputTime,
 	}
 }
 
@@ -2411,7 +2423,7 @@ func (c *RPCPingpongClient) TestMethod(ctx context.Context, reqString string, re
 }
 
 // Echo is yet another type test
-func (c *RPCEchoClient) Echo(ctx context.Context, reqInput string, reqNames []string, reqValues map[string]map[string]int64, reqValues2 map[string]int64, reqSomething EchoThing, reqMytime time.Time) (respOutput string, err error) {
+func (c *RPCEchoClient) Echo(ctx context.Context, reqInput string, reqNames []string, reqValues map[string]map[string]int64, reqValues2 map[string]int64, reqSomething EchoThing, reqMytime time.Time) (respOutput string, respOuputTime time.Time, err error) {
 
 	var decoderErr error
 	decoder := func(msg *message) error {
@@ -2428,6 +2440,7 @@ func (c *RPCEchoClient) Echo(ctx context.Context, reqInput string, reqNames []st
 				return decoderErr
 			}
 			respOutput = r.Output
+			respOuputTime = r.OuputTime
 			return nil
 		default:
 			var isPrivate bool

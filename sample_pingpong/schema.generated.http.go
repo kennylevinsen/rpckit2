@@ -474,11 +474,12 @@ type httpReqProtoEchoMethodEcho struct {
 }
 
 type httpRespProtoEchoMethodEcho struct {
-	Output string `json:"output"`
+	Output    string    `json:"output"`
+	OuputTime time.Time `json:"ouputTime,omitempty"`
 }
 
 // Echo is yet another type test
-func (c *HTTPEchoClient) Echo(ctx context.Context, reqInput string, reqNames []string, reqValues map[string]map[string]int64, reqValues2 map[string]int64, reqSomething EchoThing, reqMytime time.Time) (respOutput string, err error) {
+func (c *HTTPEchoClient) Echo(ctx context.Context, reqInput string, reqNames []string, reqValues map[string]map[string]int64, reqValues2 map[string]int64, reqSomething EchoThing, reqMytime time.Time) (respOutput string, respOuputTime time.Time, err error) {
 	var (
 		b        []byte
 		req      *http.Request
@@ -532,6 +533,7 @@ func (c *HTTPEchoClient) Echo(ctx context.Context, reqInput string, reqNames []s
 		return
 	}
 	respOutput = respbody.Output
+	respOuputTime = respbody.OuputTime
 
 	return
 }
@@ -671,7 +673,7 @@ func (c *httpCallServerForEcho) RegisterToMux(m *http.ServeMux) {
 			return
 		}
 
-		respbody.Output, err = c.methods.Echo(r.Context(), reqbody.Input, reqbody.Names, reqbody.Values, reqbody.Values2, reqbody.Something, reqbody.Mytime)
+		respbody.Output, respbody.OuputTime, err = c.methods.Echo(r.Context(), reqbody.Input, reqbody.Names, reqbody.Values, reqbody.Values2, reqbody.Something, reqbody.Mytime)
 		if err != nil {
 			if header, ok := err.(interface{ StatusCode() int }); ok {
 				w.WriteHeader(header.StatusCode())

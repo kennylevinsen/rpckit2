@@ -189,9 +189,9 @@ type echoServer struct {
 	authenticated bool
 }
 
-func (s *echoServer) Echo(ctx context.Context, input string, names []string, values map[string]map[string]int64, values2 map[string]int64, echoThing EchoThing, atime time.Time) (string, error) {
+func (s *echoServer) Echo(ctx context.Context, input string, names []string, values map[string]map[string]int64, values2 map[string]int64, echoThing EchoThing, atime time.Time) (string, time.Time, error) {
 	fmt.Printf("VALUES: %#v, %#v, %#v, %v\n", values, values2, echoThing, atime)
-	return input, nil
+	return input, time.Time{}, nil
 }
 
 func (s *echoServer) Ping(ctx context.Context) (string, error) {

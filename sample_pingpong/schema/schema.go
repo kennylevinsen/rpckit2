@@ -77,6 +77,7 @@ func main() {
 		},
 		Output: []rpckit2.Property{
 			rpckit2.Property{ID: 1, T: rpckit2.String(), Name: "output"},
+			rpckit2.Property{ID: 2, T: rpckit2.DateTime(), Name: "ouputTime", Options: rpckit2.MethodOutputOptions{OmitEmpty: true}},
 		},
 	})
 	server2.AddMethod(rpckit2.Method{
