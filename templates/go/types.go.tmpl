@@ -4,7 +4,8 @@ type {{ required .Name | capitalize }} struct {
     {{ if .Description }}
     // {{ required .Description | capitalize }}
     {{ end -}}
-    {{ required .Name | capitalize }} {{ .T.GoType }} `json:{{ required .Name | camelize | doublequote }}`
+	{{- $opts := "" }}{{ if .Options }} {{ if .Options.OmitEmpty }}{{ $opts = ",omitempty" }}{{ end}}{{ end -}}
+    {{ required .Name | capitalize }} {{ .T.GoType }} `json:{{ required (format "%v%v" .Name $opts) | camelize | doublequote }}`
 {{ end }}
 }
 {{- range required .Fields }}{{- if .Options }}{{ if .Options.Getter }}

@@ -46,8 +46,9 @@ type MethodInputOptions struct{}
 type MethodOutputOptions struct{}
 
 type StructFieldOptions struct {
-	Getter bool
-	Setter bool
+	Getter    bool
+	Setter    bool
+	OmitEmpty bool // TODO: json encoding flag and only supported on http.
 }
 
 //

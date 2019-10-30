@@ -18,10 +18,15 @@ type EchoThing struct {
 	Stuff map[string]int64 `json:"stuff"`
 
 	// My wao time
-	Anothertime time.Time `json:"anothertime"`
+	Anothertime time.Time `json:"anothertime,omitempty"`
 
 	// Datetime mapsimap
 	Mydatetimemap map[time.Time]time.Time `json:"mydatetimemap"`
+}
+
+func (s *EchoThing) GetAnothertime() time.Time { return s.Anothertime }
+func (s *EchoThing) SetAnothertime(v time.Time) {
+	s.Anothertime = v
 }
 
 // The PingpongProtocol interface defines the pingpong protocol.

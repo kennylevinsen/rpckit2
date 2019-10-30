@@ -59,7 +59,7 @@ func main() {
 			rpckit2.Property{ID: 1, T: rpckit2.String(), Name: "wee", Description: "WAAAAH"},
 			rpckit2.Property{ID: 2, T: rpckit2.String(), Name: "woo", Description: "woo describes the woo factor"},
 			rpckit2.Property{ID: 3, T: rpckit2.Map(rpckit2.String(), rpckit2.Int()), Name: "stuff", Description: "weee"},
-			rpckit2.Property{ID: 4, T: rpckit2.DateTime(), Name: "anothertime", Description: "My wao time"},
+			rpckit2.Property{ID: 4, T: rpckit2.DateTime(), Name: "anothertime", Description: "My wao time", Options: rpckit2.StructFieldOptions{Getter: true, Setter: true, OmitEmpty: true}},
 			rpckit2.Property{ID: 5, T: rpckit2.Map(rpckit2.DateTime(), rpckit2.DateTime()), Name: "mydatetimemap", Description: "datetime mapsimap"},
 		},
 	})

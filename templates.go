@@ -114,7 +114,7 @@ func templatesGoRpckitGoTmpl() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "templates/go/rpckit.go.tmpl", size: 377, mode: os.FileMode(420), modTime: time.Unix(1571838987, 0)}
+	info := bindataFileInfo{name: "templates/go/rpckit.go.tmpl", size: 377, mode: os.FileMode(420), modTime: time.Unix(1571900284, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -139,7 +139,7 @@ func templatesGoServer_methodGoTmpl() (*asset, error) {
 	return a, nil
 }
 
-var _templatesGoTypesGoTmpl = []byte("\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\xff\xa4\x90\xb1\x4e\xc3\x30\x10\x86\x67\xfc\x14\xff\xc0\xd0\x20\x35\xdd\x91\xd8\x10\xd9\x60\x68\x1f\xa0\x21\xb9\x22\xa3\xd4\x49\xed\x73\x25\x70\xef\xdd\x91\x9b\x0c\x0e\x4a\x95\x42\x37\xeb\x7c\xf7\xdf\x7d\xdf\x6a\x85\x10\x60\xe9\xe0\xb5\xa5\x1a\xf9\x33\xb9\xca\xea\x8e\x75\x6b\x70\x42\x55\x76\x9a\xcb\x46\x7f\x13\x44\x14\x7f\x75\x34\xee\x7e\x2d\xf7\xf4\xbb\x0d\x8e\xad\xaf\x18\x41\xc5\xd6\xd2\x7c\x50\x32\xf0\xa2\xa9\xa9\x1d\x96\x22\x0a\x40\x0c\xd3\xbb\xf1\xd2\xe1\xe7\x2f\x77\x0d\x49\x64\xea\x34\x78\xe6\xca\x10\x90\x6f\xf2\xa2\xdd\x44\x28\x11\x6c\x3f\x5d\x6b\x1e\xa7\xe7\xf6\x74\x9e\x3a\xa1\x6e\xfd\x7b\x43\x07\xdf\x72\x9c\xd9\xaa\x61\xab\x88\x12\x15\xc2\xf2\x12\xae\x48\xfc\x8c\xa4\x6f\x67\x82\xbe\x92\x16\xf2\x82\x98\xc9\xc6\xa4\x9d\x37\x15\x16\x0e\x0f\xe9\x2d\xf7\x93\x10\x19\x0a\xe2\x59\xd4\x45\x36\xd6\x91\x52\xc7\x3a\x7b\x6b\xe0\xf2\x79\x65\x3d\x63\x0f\x3c\xf5\x52\x37\x3a\x58\xff\xcf\xc1\xfa\x1a\x07\xc7\x8b\x0e\x32\x04\x75\x77\x0d\xfe\x13\x8e\x6a\x4e\xc1\x4f\x00\x00\x00\xff\xff\x78\xa3\x1a\xd3\x4f\x03\x00\x00")
+var _templatesGoTypesGoTmpl = []byte("\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\xff\xa4\x90\xc1\x6e\xe2\x30\x14\x45\xd7\xf8\x2b\xae\x22\x90\xc8\x68\x08\x7b\x24\x76\x33\xc3\x6e\x58\xc0\x07\x90\x26\x8f\xca\x15\xb1\x83\xfd\x12\x89\x1a\xff\x7b\xe5\x24\x95\x12\x04\x0a\x6d\x57\x89\xec\xf7\x8e\xef\x3d\xcb\x25\x9c\x83\xa1\x73\x25\x0d\xe5\x48\xfe\x90\xcd\x8c\x2c\x59\x6a\x85\x2b\xb2\xb4\x94\x9c\x9e\xe4\x3b\xc1\x7b\xc1\x97\x92\x86\xd3\xff\xd3\x82\x6e\xc7\x60\xd9\x54\x19\xc3\x89\x30\x9a\xaa\x57\xea\x2d\xfc\x93\x74\xca\x2d\x16\xde\x0b\x00\x01\x26\x8f\xc3\x47\xbb\x9b\xaf\xe4\xea\x48\xa4\xf2\x06\x3c\x71\x6e\x81\xa9\x2e\xd9\x62\xb5\x46\x14\xc1\xfb\xee\x9d\x6d\xb3\x6f\x43\xc8\xe1\x49\xb2\x2d\x24\xff\x2d\x4a\xbe\xb4\xc3\xed\xf6\x1a\xd1\x6f\x5d\x48\xa6\x70\xd1\x61\x48\xe5\x9f\xdf\x7e\x8b\x11\x25\xce\x21\xd9\x27\x1b\xbd\x0f\x06\xbd\xc7\xe1\xcd\x6a\xb5\xea\xef\xcd\x8f\xda\x14\x29\x23\x9a\xd5\xb3\x3a\xea\x30\x4d\x8c\xb8\xa1\x15\xd4\xb0\xae\xc8\x75\xf5\x72\xa2\x73\xa5\x39\x90\x0e\xa2\xcb\xe2\xbd\xf0\x22\x14\x7f\x60\x3c\x84\x5e\xdc\x48\xb8\x71\xb0\x21\x66\x32\x81\x74\xac\x54\x86\xb9\xc5\xaf\x7e\xc2\xe9\xdd\x6a\x31\x36\xc4\xa3\x02\xe6\xf1\x50\x52\xdf\x45\x38\xe7\xca\x28\xd8\x64\x5c\x64\xdb\xb1\x2d\x7c\xef\x4f\xfc\xd0\xc1\xee\x7b\x0e\x76\xcf\x38\xa8\x1f\x3a\x88\xe1\xc4\xe4\x99\xfa\x6b\xd4\x62\x54\xc1\x47\x00\x00\x00\xff\xff\x8f\x2f\x74\x16\xd3\x03\x00\x00")
 
 func templatesGoTypesGoTmplBytes() ([]byte, error) {
 	return bindataRead(
@@ -154,7 +154,7 @@ func templatesGoTypesGoTmpl() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "templates/go/types.go.tmpl", size: 847, mode: os.FileMode(420), modTime: time.Unix(1567425956, 0)}
+	info := bindataFileInfo{name: "templates/go/types.go.tmpl", size: 979, mode: os.FileMode(420), modTime: time.Unix(1572440189, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -174,7 +174,7 @@ func templatesGoHttpBoilerplateGoTmpl() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "templates/go-http/boilerplate.go.tmpl", size: 1159, mode: os.FileMode(420), modTime: time.Unix(1571839258, 0)}
+	info := bindataFileInfo{name: "templates/go-http/boilerplate.go.tmpl", size: 1159, mode: os.FileMode(420), modTime: time.Unix(1571900284, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -239,7 +239,7 @@ func templatesGoHttpRpckitGoTmpl() (*asset, error) {
 	return a, nil
 }
 
-var _templatesGoHttpSerializationGoTmpl = []byte("\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\xff\x84\x8f\x41\x4e\x86\x30\x10\x85\xf7\x9c\xe2\x2d\x75\x01\x71\xed\x01\x74\xa5\x61\xc1\x01\xa8\x74\xd0\x9a\xd2\x81\x32\x4d\xd4\x32\x77\x37\xc5\x0d\x18\x92\x7f\x39\x99\xf7\xbd\xf9\x26\xe7\x1a\x6e\x44\x20\xdc\x79\x0a\x68\x9e\x1c\x79\xbb\xde\xe3\x01\xb5\x6a\x25\xdf\x33\x21\x67\x44\x5a\x92\x8b\x64\xd1\xb4\x91\x46\xf7\x05\xd5\x36\xb2\xf0\xbf\x15\x0b\xbf\x9a\x89\xb0\x61\x30\xb3\x13\xe3\xdd\x0f\x41\xf5\x85\xe4\x83\xed\x29\x7b\x15\xc3\x2a\x31\x0d\x82\x5c\x15\xa9\x68\xc2\x3b\x1d\x88\x3f\x31\xa8\x56\x00\x70\xbb\xec\x94\xe8\x9a\x67\xee\xca\x2f\xaa\xe8\x3f\x57\x0e\x8f\xd7\x05\x13\xed\xf8\x06\xcb\xe9\xcd\xd3\x92\x58\x0a\xd3\xef\x46\x14\x6c\x39\xaf\xc7\xe1\x37\x00\x00\xff\xff\x92\x96\xd7\x62\x3f\x01\x00\x00")
+var _templatesGoHttpSerializationGoTmpl = []byte("\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\xff\x84\x90\xcd\x4e\xeb\x30\x10\x85\xd7\x37\x4f\x71\x14\xdd\x4a\xad\x44\x23\xd6\x95\xba\x04\x56\x40\x17\x7d\x80\x86\x66\x02\x46\xb1\xc7\xb5\x27\x15\xc5\x9d\x77\x47\x4e\x2a\x91\x22\x24\x76\xf6\x9c\x1f\x7d\x33\x29\x2d\x61\x5a\x38\xc2\xbc\x23\x87\xea\xde\x50\xd7\xc4\x05\x6e\xb1\x54\x2d\xe4\xe4\x09\x29\x21\xd0\xa1\x37\x81\x1a\x54\x9b\x40\xad\xf9\x80\xea\x26\xb0\xf0\x0f\x89\x85\x9f\x6a\x4b\x38\x63\x5f\x7b\x23\x75\x67\x3e\x09\xaa\x8f\x24\x6f\xdc\x5c\x79\x7f\xb3\x21\x4a\xe8\xf7\x82\x54\x64\xa8\x50\xbb\x57\x9a\x24\x46\x30\xa8\x16\xff\x52\xc2\x7f\xf6\x12\xb1\x5a\xa3\x2c\xa1\x9a\x52\xde\xa1\x7a\xf6\x62\xd8\xc5\xc9\xc0\x1a\xb9\xb3\x5e\x4e\xe3\x68\x0c\xad\x51\xde\xb0\x35\x42\x59\xb8\xa4\xc9\x35\xdf\x8f\xbc\x38\x00\xfc\x0d\x7c\xe5\xd8\x56\x0f\xbc\xcd\xf7\x52\xc5\xee\x3d\xb2\x5b\x4d\xe5\x79\xcb\xc1\xd6\x82\x72\x76\x9c\x1d\xcb\x4b\xdf\x00\xb4\x18\x6a\x2d\x0d\xa5\x67\x34\xdc\xbf\x74\x74\xe8\x59\x72\xd3\x6e\xb8\xc5\x88\x57\xe8\xf4\xf3\x15\x00\x00\xff\xff\x62\x0d\x23\x0e\xb9\x01\x00\x00")
 
 func templatesGoHttpSerializationGoTmplBytes() ([]byte, error) {
 	return bindataRead(
@@ -254,7 +254,7 @@ func templatesGoHttpSerializationGoTmpl() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "templates/go-http/serialization.go.tmpl", size: 319, mode: os.FileMode(420), modTime: time.Unix(1567425956, 0)}
+	info := bindataFileInfo{name: "templates/go-http/serialization.go.tmpl", size: 441, mode: os.FileMode(420), modTime: time.Unix(1572440240, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -294,7 +294,7 @@ func templatesGoPbBoilerplateGoTmpl() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "templates/go-pb/boilerplate.go.tmpl", size: 30118, mode: os.FileMode(420), modTime: time.Unix(1571839599, 0)}
+	info := bindataFileInfo{name: "templates/go-pb/boilerplate.go.tmpl", size: 30118, mode: os.FileMode(420), modTime: time.Unix(1571900284, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -354,7 +354,7 @@ func templatesGoPbMarshalGoTmpl() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "templates/go-pb/marshal.go.tmpl", size: 393, mode: os.FileMode(420), modTime: time.Unix(1571835111, 0)}
+	info := bindataFileInfo{name: "templates/go-pb/marshal.go.tmpl", size: 393, mode: os.FileMode(420), modTime: time.Unix(1571900284, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -414,7 +414,7 @@ func templatesGoPbMarshal_marshalledGoTmpl() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "templates/go-pb/marshal_marshalled.go.tmpl", size: 99, mode: os.FileMode(420), modTime: time.Unix(1571837470, 0)}
+	info := bindataFileInfo{name: "templates/go-pb/marshal_marshalled.go.tmpl", size: 99, mode: os.FileMode(420), modTime: time.Unix(1571900284, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -474,7 +474,7 @@ func templatesGoPbMarshalled_funcsGoTmpl() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "templates/go-pb/marshalled_funcs.go.tmpl", size: 175, mode: os.FileMode(420), modTime: time.Unix(1571840079, 0)}
+	info := bindataFileInfo{name: "templates/go-pb/marshalled_funcs.go.tmpl", size: 175, mode: os.FileMode(420), modTime: time.Unix(1571900284, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -514,7 +514,7 @@ func templatesGoPbProperty_to_wiretypeGoTmpl() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "templates/go-pb/property_to_wiretype.go.tmpl", size: 499, mode: os.FileMode(420), modTime: time.Unix(1571841407, 0)}
+	info := bindataFileInfo{name: "templates/go-pb/property_to_wiretype.go.tmpl", size: 499, mode: os.FileMode(420), modTime: time.Unix(1571900284, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -554,7 +554,7 @@ func templatesGoPbSerializationGoTmpl() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "templates/go-pb/serialization.go.tmpl", size: 1746, mode: os.FileMode(420), modTime: time.Unix(1571837062, 0)}
+	info := bindataFileInfo{name: "templates/go-pb/serialization.go.tmpl", size: 1746, mode: os.FileMode(420), modTime: time.Unix(1571900284, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -574,7 +574,7 @@ func templatesGoPbSerialization_mapGoTmpl() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "templates/go-pb/serialization_map.go.tmpl", size: 2146, mode: os.FileMode(420), modTime: time.Unix(1571843012, 0)}
+	info := bindataFileInfo{name: "templates/go-pb/serialization_map.go.tmpl", size: 2146, mode: os.FileMode(420), modTime: time.Unix(1571900284, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -594,7 +594,7 @@ func templatesGoPbSerialization_structGoTmpl() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "templates/go-pb/serialization_struct.go.tmpl", size: 1308, mode: os.FileMode(420), modTime: time.Unix(1571841690, 0)}
+	info := bindataFileInfo{name: "templates/go-pb/serialization_struct.go.tmpl", size: 1308, mode: os.FileMode(420), modTime: time.Unix(1571900284, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -674,7 +674,7 @@ func templatesGoPbUnmarshalGoTmpl() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "templates/go-pb/unmarshal.go.tmpl", size: 403, mode: os.FileMode(420), modTime: time.Unix(1571834698, 0)}
+	info := bindataFileInfo{name: "templates/go-pb/unmarshal.go.tmpl", size: 403, mode: os.FileMode(420), modTime: time.Unix(1571900284, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -734,7 +734,7 @@ func templatesGoPbUnmarshal_marshalledGoTmpl() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "templates/go-pb/unmarshal_marshalled.go.tmpl", size: 136, mode: os.FileMode(420), modTime: time.Unix(1571837466, 0)}
+	info := bindataFileInfo{name: "templates/go-pb/unmarshal_marshalled.go.tmpl", size: 136, mode: os.FileMode(420), modTime: time.Unix(1571900284, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
