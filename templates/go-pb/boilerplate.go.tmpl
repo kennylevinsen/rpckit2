@@ -13,6 +13,11 @@ import (
 	"strconv"
 	"sync"
 	"time"
+
+
+	{{ range $key, $val := .Imports }}{{ if ne $key "time" }}
+	"{{$key}}"
+	{{- end }}{{ end }}
 )
 
 
@@ -274,7 +279,7 @@ func embeddedMessageFromBytes(msg []byte) *message {
 	return m
 }
 
-func (m *message) Clone() *message { 
+func (m *message) Clone() *message {
 	b := make([]byte, m.len-m.pos)
 	copy(b, m.buf[m.pos:])
 	return &message{

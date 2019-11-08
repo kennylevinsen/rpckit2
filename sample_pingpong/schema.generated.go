@@ -2,7 +2,10 @@ package main
 
 import (
 	"context"
+
 	"time"
+
+	"github.com/satori/go.uuid"
 )
 
 // Echo thing
@@ -22,6 +25,9 @@ type EchoThing struct {
 
 	// Datetime mapsimap
 	Mydatetimemap map[time.Time]time.Time `json:"mydatetimemap"`
+
+	// Wuut
+	Id uuid.UUID `json:"id"`
 }
 
 func (s *EchoThing) GetAnothertime() time.Time { return s.Anothertime }
@@ -44,7 +50,7 @@ type PingpongProtocol interface {
 // The EchoProtocol interface defines the echo protocol.
 type EchoProtocol interface {
 	// Echo is yet another type test
-	Echo(ctx context.Context, reqInput string, reqNames []string, reqValues map[string]map[string]int64, reqValues2 map[string]int64, reqSomething EchoThing, reqMytime time.Time) (respOutput string, respOuputTime time.Time, err error)
+	Echo(ctx context.Context, reqInput string, reqNames []string, reqValues map[string]map[string]int64, reqValues2 map[string]int64, reqSomething EchoThing, reqMytime time.Time, reqId uuid.UUID) (respOutput string, respOuputTime time.Time, err error)
 
 	// Ping is a simple no-input test
 	Ping(ctx context.Context) (respOutput string, err error)

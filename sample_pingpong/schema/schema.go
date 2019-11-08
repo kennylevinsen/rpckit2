@@ -61,6 +61,7 @@ func main() {
 			rpckit2.Property{ID: 3, T: rpckit2.Map(rpckit2.String(), rpckit2.Int()), Name: "stuff", Description: "weee"},
 			rpckit2.Property{ID: 4, T: rpckit2.DateTime(), Name: "anothertime", Description: "My wao time", Options: rpckit2.StructFieldOptions{Getter: true, Setter: true, OmitEmpty: true}},
 			rpckit2.Property{ID: 5, T: rpckit2.Map(rpckit2.DateTime(), rpckit2.DateTime()), Name: "mydatetimemap", Description: "datetime mapsimap"},
+			rpckit2.Property{ID: 6, T: rpckit2.UUID(), Name: "id", Description: "Wuut"},
 		},
 	})
 
@@ -74,6 +75,7 @@ func main() {
 			rpckit2.Property{ID: 4, T: rpckit2.Map(rpckit2.String(), rpckit2.Int()), Name: "values2"},
 			rpckit2.Property{ID: 5, T: rpckit2.StructName("echoThing"), Name: "something"},
 			rpckit2.Property{ID: 6, T: rpckit2.DateTime(), Name: "mytime", Description: "My wao time"},
+			rpckit2.Property{ID: 7, T: rpckit2.UUID(), Name: "id", Description: "Wuut"},
 		},
 		Output: []rpckit2.Property{
 			rpckit2.Property{ID: 1, T: rpckit2.String(), Name: "output"},

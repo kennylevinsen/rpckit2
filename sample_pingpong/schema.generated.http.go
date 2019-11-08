@@ -13,6 +13,8 @@ import (
 	"golang.org/x/net/publicsuffix"
 
 	"time"
+
+	"github.com/satori/go.uuid"
 )
 
 // HTTPClient wraps a http client configured for use with protocol wrappers.
@@ -471,6 +473,7 @@ type httpReqProtoEchoMethodEcho struct {
 	Values2   map[string]int64            `json:"values2"`
 	Something EchoThing                   `json:"something"`
 	Mytime    time.Time                   `json:"mytime"`
+	Id        uuid.UUID                   `json:"id"`
 }
 
 type httpRespProtoEchoMethodEcho struct {
@@ -479,7 +482,7 @@ type httpRespProtoEchoMethodEcho struct {
 }
 
 // Echo is yet another type test
-func (c *HTTPEchoClient) Echo(ctx context.Context, reqInput string, reqNames []string, reqValues map[string]map[string]int64, reqValues2 map[string]int64, reqSomething EchoThing, reqMytime time.Time) (respOutput string, respOuputTime time.Time, err error) {
+func (c *HTTPEchoClient) Echo(ctx context.Context, reqInput string, reqNames []string, reqValues map[string]map[string]int64, reqValues2 map[string]int64, reqSomething EchoThing, reqMytime time.Time, reqId uuid.UUID) (respOutput string, respOuputTime time.Time, err error) {
 	var (
 		b        []byte
 		req      *http.Request
@@ -495,6 +498,7 @@ func (c *HTTPEchoClient) Echo(ctx context.Context, reqInput string, reqNames []s
 		Values2:   reqValues2,
 		Something: reqSomething,
 		Mytime:    reqMytime,
+		Id:        reqId,
 	}
 
 	if b, err = json.Marshal(&reqbody); err != nil {
@@ -673,7 +677,7 @@ func (c *httpCallServerForEcho) RegisterToMux(m *http.ServeMux) {
 			return
 		}
 
-		respbody.Output, respbody.OuputTime, err = c.methods.Echo(r.Context(), reqbody.Input, reqbody.Names, reqbody.Values, reqbody.Values2, reqbody.Something, reqbody.Mytime)
+		respbody.Output, respbody.OuputTime, err = c.methods.Echo(r.Context(), reqbody.Input, reqbody.Names, reqbody.Values, reqbody.Values2, reqbody.Something, reqbody.Mytime, reqbody.Id)
 		if err != nil {
 			if header, ok := err.(interface{ StatusCode() int }); ok {
 				w.WriteHeader(header.StatusCode())

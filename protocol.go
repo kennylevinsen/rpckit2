@@ -99,22 +99,24 @@ func newSimpleType(rpckittype, golangtype string) *simpleType {
 type marshalledType struct {
 	rpckitType string
 	golangType string
+	_import    string
 }
 
 func (s *marshalledType) String() string        { return s.rpckitType }
 func (s *marshalledType) GoType() string        { return s.golangType }
+func (s *marshalledType) Import() string        { return s._import }
 func (marshalledType) IsArray() bool            { return false }
 func (marshalledType) IsMap() bool              { return false }
 func (marshalledType) IsStruct() bool           { return false }
 func (marshalledType) IsMarshalled() bool       { return true }
 func (marshalledType) InnerValue() PropertyType { return nil }
 func (marshalledType) InnerKey() PropertyType   { return nil }
-func (marshalledType) Import() string           { return "time" }
 
-func newMarshalledType(rpckittype, golangtype string) *marshalledType {
+func newMarshalledType(rpckittype, golangtype, _import string) *marshalledType {
 	return &marshalledType{
 		rpckitType: rpckittype,
 		golangType: golangtype,
+		_import:    _import,
 	}
 }
 
@@ -125,7 +127,8 @@ func Int() PropertyType      { return newSimpleType("Int", "int64") }
 func Float() PropertyType    { return newSimpleType("Float", "float32") }
 func Double() PropertyType   { return newSimpleType("Double", "float64") }
 func Bytes() PropertyType    { return newSimpleType("Bytes", "[]byte") }
-func DateTime() PropertyType { return newMarshalledType("DateTime", "time.Time") }
+func DateTime() PropertyType { return newMarshalledType("DateTime", "time.Time", "time") }
+func UUID() PropertyType     { return newMarshalledType("UUID", "uuid.UUID", "github.com/satori/go.uuid") }
 
 type MarshalledProperty interface {
 	Import() string

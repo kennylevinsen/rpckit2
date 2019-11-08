@@ -13,7 +13,7 @@ import (
     "golang.org/x/net/publicsuffix"
 	{{ range $key, $val := .Imports }}
 	"{{$key}}"
-	{{ end }}
+	{{- end }}
 )
 
 // HTTPClient wraps a http client configured for use with protocol wrappers.
