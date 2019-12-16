@@ -294,10 +294,15 @@ func (m *message) Bytes() []byte {
 
 func (m *message) grow(needed int) {
 	if m.len+needed > len(m.buf) {
-		// Not enough space anywhere, we need to allocate.
-		buf := makeSlice(2*cap(m.buf) + needed)
-		copy(buf, m.buf[0:m.len])
-		m.buf = buf
+		if m.len+needed <= cap(m.buf) {
+			// We have plenty of pointlessly unused capacity, so use that.
+			m.buf = m.buf[0:cap(m.buf)]
+		} else {
+			// Not enough space anywhere, we need to allocate.
+			buf := makeSlice(2*cap(m.buf) + needed)
+			copy(buf, m.buf[0:m.len])
+			m.buf = buf
+		}
 	}
 }
 
