@@ -1,7 +1,0 @@
-{
-	var x string
-	x, err = m.ReadString()
-	if err == nil {
-		{{required .Accessor }}, err = unmarshal{{ required .Field.String}}(x)
-	}
-}

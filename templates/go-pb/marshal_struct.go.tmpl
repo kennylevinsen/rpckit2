@@ -1,9 +1,0 @@
-{
-    em := newEmbeddedMessage(messageCapacity)
-    var vs rpcGlobalStruct{{ required .Field.GoType }}
-	vs.v = {{ required .Accessor }}
-    if err := vs.RPCEncode(em); err != nil {
-        return err
-    }
-    m.WritePBMessage({{ required .ID }}, em)
-}

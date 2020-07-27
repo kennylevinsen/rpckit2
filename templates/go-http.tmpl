@@ -1,0 +1,211 @@
+package {{ required .PackageName }}
+
+import (
+    "bytes"
+    "context"
+    "encoding/json"
+    "io"
+    "io/ioutil"
+    "net/http"
+    "net/http/cookiejar"
+    "errors"
+
+    "golang.org/x/net/publicsuffix"
+	{{ range $key, $val := .Imports }}
+	"{{$key}}"
+	{{- end }}
+)
+
+// HTTPClient wraps a http client configured for use with protocol wrappers.
+type HTTPClient struct {
+    client *http.Client
+    baseURL string
+}
+
+// NewHTTPClient creates a new HTTPClient.
+func NewHTTPClient(baseURL string) (*HTTPClient, error) {
+    jar, err := cookiejar.New(&cookiejar.Options{PublicSuffixList: publicsuffix.List})
+    if err != nil {
+        return nil, err
+    }
+    return &HTTPClient{
+        client: &http.Client{
+            Transport: http.DefaultClient.Transport,
+            Jar: jar,
+        },
+        baseURL: baseURL,
+    }, nil
+}
+
+func (c *HTTPClient) newRequest(method, url string, body io.Reader) (*http.Request, error) {
+    return http.NewRequest(method, c.baseURL + "/" + url, body)
+}
+
+func (c *HTTPClient) do(req *http.Request) (*http.Response, error) {
+    return c.client.Do(req)
+}
+
+type HTTPServer interface {
+    RegisterToMux(*http.ServeMux)
+}
+
+{{/*                    */}}
+{{/* End of boilerplate */}}
+{{/*                    */}}
+
+{{/*               */}}
+{{/* Serialization */}}
+{{/*               */}}
+
+{{ define "go-http/serialization" -}}
+	{{- if ne (len .Fields) 0 -}}
+		type {{ required .Prefix }}Proto{{ required .ProtoName | capitalize }}Method{{ required .Name | capitalize }} struct {
+		{{- range required .Fields }}
+			{{ $opts := "" }}{{ if .Options }}{{ if .Options.OmitEmpty }}{{ $opts = ",omitempty" }}{{ end }}{{ end -}}
+		    {{ required .Name | capitalize }} {{ required .T.GoType }} `json:{{ required (format "%v%v" .Name $opts) | camelize | doublequote }}`
+		{{- end }}
+		}
+	{{- end }}
+{{ end }}
+
+{{ range required .Protocols }}
+	{{- $protoName := required .Name -}}
+	{{- $protoID := required .ID -}}
+
+	// The HTTP{{ required .Name | capitalize }}Client type is a HTTP client for the {{ required .Name }} protocol.
+	type HTTP{{ required .Name | capitalize }}Client struct {
+	    client *HTTPClient
+	    baseURL string
+	}
+
+	// NewHTTP{{ required .Name | capitalize }}Client(c *HTTPClient) creates a new HTTP client for the {{ required .Name }} protocol.
+	func NewHTTP{{ required .Name | capitalize }}Client(c *HTTPClient) *HTTP{{ required .Name | capitalize }}Client {
+	    return &HTTP{{- required .Name | capitalize }}Client{
+	        client: c,
+	        baseURL: {{ required .Name | doublequote }},
+	    }
+	}
+
+	func (c *HTTP{{ required .Name | capitalize }}Client) newRequest(method, url string, body io.Reader) (*http.Request, error) {
+	    return c.client.newRequest(method, c.baseURL + "/" + url, body)
+	}
+
+	{{ range .Methods }}
+		{{ template "go-http/serialization" dict "Prefix" "httpReq" "Name" .Name "Fields" .Input "ProtoName" $protoName }}
+		{{ template "go-http/serialization" dict "Prefix" "httpResp" "Name" .Name "Fields" .Output "ProtoName" $protoName }}
+
+		// The HTTP{{ required .Name | capitalize }}Client type is a HTTP client for the {{ required .Name }} protocol.
+		type HTTP{{ required .Name | capitalize }}Client struct {
+		    client *HTTPClient
+		    baseURL string
+		}
+
+		// NewHTTP{{ required .Name | capitalize }}Client(c *HTTPClient) creates a new HTTP client for the {{ required .Name }} protocol.
+		func NewHTTP{{ required .Name | capitalize }}Client(c *HTTPClient) *HTTP{{ required .Name | capitalize }}Client {
+		    return &HTTP{{- required .Name | capitalize }}Client{
+		        client: c,
+		        baseURL: {{ required .Name | doublequote }},
+		    }
+		}
+
+		func (c *HTTP{{ required .Name | capitalize }}Client) newRequest(method, url string, body io.Reader) (*http.Request, error) {
+		    return c.client.newRequest(method, c.baseURL + "/" + url, body)
+		}
+
+	{{ end }}
+
+	// HTTP{{ required .Name | capitalize }}Server creates a new HTTPServer for the {{ required .Name }} protocol.
+	func HTTP{{ required .Name | capitalize }}Server(methods {{ required .Name | capitalize }}Protocol) HTTPServer {
+	    return &httpCallServerFor{{ required .Name | capitalize }}{methods: methods}
+	}
+
+	type httpCallServerFor{{ required .Name | capitalize }} struct {
+	    methods {{ required .Name | capitalize }}Protocol
+	}
+
+	func (c *httpCallServerFor{{ required .Name | capitalize }}) RegisterToMux(m *http.ServeMux) {
+	    {{- $protoName := required .Name }}
+	    {{- range required .Methods }}
+	    m.HandleFunc("/{{ required $protoName }}/{{ required .Name | lower }}", func(w http.ResponseWriter, r *http.Request) {
+	        {{- if gt (len .Input) 0 }}
+	        if r.Method != "POST" {
+	            w.WriteHeader(http.StatusMethodNotAllowed)
+	            return
+	        }
+
+	        {{ end -}}
+
+	        var (
+	            err error
+	            b []byte
+	            {{ if gt (len .Input) 0 }}reqbody httpReqProto{{ required $protoName | capitalize }}Method{{ required .Name | capitalize }}{{ end }}
+	            {{ if gt (len .Output) 0 }}respbody httpRespProto{{ required $protoName | capitalize }}Method{{ required .Name | capitalize }}{{ end }}
+	        )
+
+	        b, err = ioutil.ReadAll(r.Body)
+	        if err != nil {
+	            w.WriteHeader(http.StatusBadRequest)
+	            return
+	        }
+
+	        {{- if gt (len .Input) 0 }}
+	        {{ if and (eq (len .Input) 1) (eq (index .Input 0).T.GoType "[]byte") }}
+	        reqbody.{{ required (index .Input 0).Name | capitalize}} = b
+	        {{ else }}
+	        if err = json.Unmarshal(b, &reqbody); err != nil {
+	            w.WriteHeader(http.StatusBadRequest)
+	            return
+	        }
+	        {{ end }}
+	        {{ else }}
+	        if len(b) > 0 {
+	            w.WriteHeader(http.StatusBadRequest)
+	            return
+	        }
+	        {{ end }}
+
+	        {{- $methodName := required .Name }}
+	        {{ range .Output }}respbody.{{ required .Name | capitalize }}, {{ end }}err = c.methods.{{ required .Name | capitalize }}(r.Context(){{- range .Input }}, reqbody.{{ required .Name | capitalize }}{{- end }})
+	        if err != nil {
+				if header,ok := err.(interface{StatusCode() int}); ok {
+					w.WriteHeader(header.StatusCode())
+				} else {
+	           		w.WriteHeader(http.StatusInternalServerError)
+				}
+
+	            errorbody := struct {
+	                Error interface {} `json:"error"`
+	            }{
+	                Error: err,
+	            }
+	            if b, err = json.Marshal(&errorbody); err != nil {
+	                return
+	            }
+
+	            w.Header().Set("Content-Type", "application/json")
+	            w.Write(b)
+	            return
+	        }
+
+	        {{- if gt (len .Output) 0 }}
+	        {{ if and (eq (len .Output) 1) (eq (index .Output 0).T.GoType "[]byte") }}
+	        b = respbody.{{ required (index .Output 0).Name | capitalize }}
+	        {{ else }}
+	        if b, err = json.Marshal(&respbody); err != nil {
+	            w.WriteHeader(http.StatusInternalServerError)
+	            // TODO: Add error!
+	            return
+	        }
+	        {{ end }}
+	        {{ else }}
+	        b = nil
+	        {{ end }}
+
+	        w.Header().Set("Content-Type", "application/json")
+	        w.WriteHeader(http.StatusOK)
+	        w.Write(b)
+	    })
+	    {{- end }}
+	}
+
+{{ end }}

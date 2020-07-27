@@ -1,6 +1,0 @@
-{{- if .Field.IsMap -}}{{- template "go-pb/unmarshal_map.go.tmpl" . -}}
-{{- else if .Field.IsArray -}}{{- template "go-pb/unmarshal_array.go.tmpl" . -}}
-{{- else if .Field.IsStruct -}}{{- template "go-pb/unmarshal_struct.go.tmpl" . -}}
-{{- else if .Field.IsMarshalled -}}{{- template "go-pb/unmarshal_marshalled.go.tmpl" . -}}
-{{- else -}}{{- template "go-pb/unmarshal_simple.go.tmpl" . -}}
-{{- end -}}

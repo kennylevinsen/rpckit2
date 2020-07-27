@@ -1,3 +1,27 @@
+{{/*             */}}
+{{/* Utilitities */}}
+{{/*             */}}
+
+{{ define "go-pb/property-to-wiretype" -}}
+{{- /* Internal rpckit to writetype constant converter */ -}}
+{{- if eq . "String" -}}wireTypeLengthDelimited
+{{- else if eq . "Bool" -}}wireTypeVarint
+{{- else if eq . "Int64" -}}wireType64bit
+{{- else if eq . "Int" -}}wireTypeVarint
+{{- else if eq . "Float" -}}wireType32bit
+{{- else if eq . "Double" -}}wireType64bit
+{{- else if eq . "Bytes" }}wireTypeLengthDelimited
+{{- else if eq . "Array" }}wireTypeLengthDelimited
+{{- else if eq . "Map" }}wireTypeLengthDelimited
+{{- else if eq . "Struct" }}wireTypeLengthDelimited
+{{- else -}}{{ error . }}
+{{- end -}}
+{{ end }}
+
+{{/*                         */}}
+{{/* Protocol implementation */}}
+{{/*                         */}}
+
 package {{ required .PackageName }}
 
 import (
@@ -156,11 +180,11 @@ func (e *rpcError) RPCDecode(m *message) error {
     for err == nil {
         tag, err = m.ReadVarint()
 		switch tag {
-		case uint64(1 << 3) | uint64({{ template "go-pb/property_to_wiretype.go.tmpl" "Int" }}):
+		case uint64(1 << 3) | uint64({{ template "go-pb/property-to-wiretype" "Int" }}):
 			var id int64
 			id, err = m.ReadInt()
 			e.id = RPCErrorID(id)
-		case uint64(2 << 3) | uint64({{ template "go-pb/property_to_wiretype.go.tmpl" "String" }}):
+		case uint64(2 << 3) | uint64({{ template "go-pb/property-to-wiretype" "String" }}):
 			e.error, err = m.ReadString()
         default:
             if err != io.EOF {
@@ -1253,4 +1277,519 @@ func (c *RPCConnection) handlePrivateResponse(resultType uint64, msg *message) (
 	return nil, false
 }
 
-{{ template "go-pb/marshalled_funcs.go.tmpl" }}
+
+{{/*                    */}}
+{{/* End of boilerplate */}}
+{{/*                    */}}
+
+
+{{- /* These are the pre-defined marshalling functions */ -}}
+func marshalDateTime(t time.Time) string {
+	return t.Format(time.RFC3339Nano)
+}
+
+func unmarshalDateTime(s string) (time.Time, error) {
+	return time.Parse(time.RFC3339Nano, s)
+}
+
+func marshalUUID(u uuid.UUID) string {
+	return string(u[:])
+}
+
+func unmarshalUUID(s string) (uuid.UUID, error) {
+	return uuid.FromBytes([]byte(s))
+}
+
+{{/*                  */}}
+{{/* Type marshalling */}}
+{{/*                  */}}
+
+{{ define "go-pb/marshal-simple" -}}
+	{{- /* Marshal simple values, such as string, int and bool */ -}}
+	m.WritePB{{ required .Field.String }}({{ required .ID }}, {{ required .Accessor }})
+{{ end }}
+
+{{ define "go-pb/marshal-array" -}}
+	{{- /* Marshal array by calling marshal for each type */ -}}
+	for _, v := range {{ required .Accessor }} {
+	    {{ template "go-pb/marshal" dict "ID" .ID "Accessor" "v" "Field" .Field.InnerValue "ProtoName" .ProtoName -}}
+	}
+{{ end }}
+
+{{ define "go-pb/marshal-map" -}}
+	{{- /* Marshal map, using a custom encoder */ -}}
+	{{- $vname := retrieve (format "rpcMap-%s" .Field.GoType) -}}
+	for k, v := range {{ required .Accessor }} {
+	    em := newEmbeddedMessage(messageCapacity)
+	    vv := {{ $vname }}{
+	        Key: k,
+	        Value: v,
+	    }
+	    if err := vv.RPCEncode(em); err != nil {
+	        return err
+	    }
+	    m.WritePBMessage({{ required .ID }}, em)
+	}
+{{ end }}
+
+{{ define "go-pb/marshal-struct" -}}
+	{{- /* Marshal struct, using custom encoder */ -}}
+	{
+	    em := newEmbeddedMessage(messageCapacity)
+	    var vs rpcGlobalStruct{{ required .Field.GoType }}
+		vs.v = {{ required .Accessor }}
+	    if err := vs.RPCEncode(em); err != nil {
+	        return err
+	    }
+	    m.WritePBMessage({{ required .ID }}, em)
+	}
+{{ end }}
+
+{{ define "go-pb/marshal-marshalled" -}}
+	{{- /* Marshal "marshalled" type by calling custom marshalling function */ -}}
+	m.WritePBString({{ required .ID }}, marshal{{ required .Field.String }}({{ required .Accessor }}))
+{{ end }}
+
+{{ define "go-pb/marshal" -}}
+	{{- /* Switch to check the type of the current field and dispatch to the proper marshaller */ -}}
+	{{- if .Field.IsStruct -}}{{- template "go-pb/marshal-struct" . -}}
+	{{- else if .Field.IsMap -}}{{- template "go-pb/marshal-map" . -}}
+	{{- else if .Field.IsArray -}}{{- template "go-pb/marshal-array" . -}}
+	{{- else if .Field.IsMarshalled -}}{{- template "go-pb/marshal-marshalled" . -}}
+	{{- else -}}{{- template "go-pb/marshal-simple" . -}}
+	{{- end -}}
+{{ end }}
+
+
+{{/*                    */}}
+{{/* Type unmarshalling */}}
+{{/*                    */}}
+
+{{ define "go-pb/unmarshal-simple" -}}
+	{{- /* Simple unmarshaller, handling types such as string, int and bool */ -}}
+	{{ required .Accessor }}, err = m.Read{{ required .Field.String }}()
+{{ end }}
+
+{{ define "go-pb/unmarshal-array" -}}
+	{{- /* Array of types unmarshaller, calling unmarshal for each value */ -}}
+	var v {{ required .Field.InnerValue.GoType }}
+	{{ template "go-pb/unmarshal" dict "Field" .Field.InnerValue "Accessor" "v" "ProtoName" .ProtoName -}}
+	{{ required .Accessor }} = append({{ required .Accessor }}, v)
+{{ end }}
+
+{{ define "go-pb/unmarshal-map" -}}
+	{{- /* Map<Type, Type>, handled by a custom struct decoder */ -}}
+	var em *message
+	if {{ required .Accessor }} == nil {
+	    {{ required .Accessor }} = make({{ required .Field.GoType}})
+	}
+
+	outer := {{ required .Accessor }}
+	{{ $vname := retrieve (format "rpcMap-%s" .Field.GoType) }}
+	var v {{ required $vname }}
+
+	if em, err = m.ReadEmbeddedMessageNoCopy(); err != nil {
+	    break
+	}
+
+	if err = v.RPCDecode(em); err == io.EOF {
+	    err = nil
+	} else if err != nil {
+	    break
+	}
+
+	outer[v.Key] = v.Value
+{{ end }}
+
+{{ define "go-pb/unmarshal-struct" -}}
+	{{- /* Global struct, handled by a custom decoder */ -}}
+	var em *message
+
+	em, err = m.ReadEmbeddedMessageNoCopy()
+	if err != nil {
+	    break
+	}
+
+	var vs rpcGlobalStruct{{ required .Field.GoType }}
+	if err = vs.RPCDecode(em); err == io.EOF {
+	    err = nil
+	} else if err != nil {
+	    break
+	}
+
+	{{ required .Accessor }} = vs.v
+{{ end }}
+
+{{ define "go-pb/unmarshal-marshalled" -}}
+	{{- /* "Marshalled" value, handled by a provided unmarshalling function*/ -}}
+	{
+		var x string
+		x, err = m.ReadString()
+		if err == nil {
+			{{required .Accessor }}, err = unmarshal{{ required .Field.String}}(x)
+		}
+	}
+{{ end }}
+
+{{ define "go-pb/unmarshal" -}}
+	{{- /* Switch to check the type of the current field and dispatch to the proper unmarshaller */ -}}
+	{{- if .Field.IsMap -}}{{- template "go-pb/unmarshal-map" . -}}
+	{{- else if .Field.IsArray -}}{{- template "go-pb/unmarshal-array" . -}}
+	{{- else if .Field.IsStruct -}}{{- template "go-pb/unmarshal-struct" . -}}
+	{{- else if .Field.IsMarshalled -}}{{- template "go-pb/unmarshal-marshalled" . -}}
+	{{- else -}}{{- template "go-pb/unmarshal-simple" . -}}
+	{{- end -}}
+{{ end }}
+
+
+{{/*                            */}}
+{{/* Prepare custom serializers */}}
+{{/*                            */}}
+
+{{ define "go-pb/serialization-map" -}}
+	{{- /* Custom (de)serializer for maps */ -}}
+	{{- if .T.IsArray }}
+		{{ template "go-pb/serialization-map" dict "T" .T.InnerValue "ProtoName" .ProtoName }}
+	{{- else if .T.IsMap }}
+		{{ template "go-pb/serialization-map" dict "T" .T.InnerKey "ProtoName" .ProtoName }}
+		{{ template "go-pb/serialization-map" dict "T" .T.InnerValue "ProtoName" .ProtoName }}
+		{{ $name := format "rpcMapKey%sValue%s" .T.InnerKey .T.InnerValue }}
+		{{ if ifnotexists (format "rpcMap%s" .T.GoType) }}
+			{{ $mapcnt := counter "rpcMap" }}
+			{{ $name := format "rpcMap%d" $mapcnt }}
+			{{ store (format "rpcMap-%s" .T.GoType) $name }}
+			type {{ required $name }} struct {
+			    Key {{ required .T.InnerKey.GoType}}
+			    Value {{ required .T.InnerValue.GoType }}
+			}
+
+			func (s *{{ required $name }}) RPCEncode(m *message) error {
+			    {{ template "go-pb/marshal" dict "Field" .T.InnerKey "Accessor" "s.Key" "ID" 1 "Message" "m" "ProtoName" .ProtoName -}}
+			    {{ template "go-pb/marshal" dict "Field" .T.InnerValue "Accessor" "s.Value" "ID" 2 "Message" "m" "ProtoName" .ProtoName -}}
+			    return nil
+			}
+
+			func (s *{{ required $name }}) RPCDecode(m *message) error {
+			    var (
+			        err error
+			        tag uint64
+			    )
+			    for err == nil {
+			        tag, err = m.ReadVarint()
+			        switch tag {
+			        case uint64(1 << 3) | uint64({{ if .T.InnerKey.IsMarshalled}}{{ template "go-pb/property-to-wiretype" "String"}}{{else}}{{ template "go-pb/property-to-wiretype" .T.InnerKey.String}}{{end}}):
+			            {{- template "go-pb/unmarshal" dict "Field" .T.InnerKey "Accessor" "s.Key" "Message" "m" "ProtoName" .ProtoName -}}
+			        case uint64(2 << 3) | uint64({{if .T.InnerValue.IsMarshalled}}{{ template "go-pb/property-to-wiretype" "String"}}{{else}}{{ template "go-pb/property-to-wiretype" .T.InnerValue.String}}{{end}}):
+			            {{- template "go-pb/unmarshal" dict "Field" .T.InnerValue "Accessor" "s.Value" "Message" "m" "ProtoName" .ProtoName -}}
+			        default:
+			            if err != io.EOF {
+			                err = m.ReadPBSkip(tag)
+			            }
+			        }
+			    }
+			    if err == io.EOF {
+			        return nil
+			    }
+			    return err
+			}
+		{{ end }}
+	{{ end }}
+{{ end }}
+
+{{ define "go-pb/serialization-struct" -}}
+	{{- /* Custom (de)serializer for structs */ -}}
+	type {{ required .TypeName }} struct {
+	    v {{ required .Name | capitalize }}
+	}
+
+	func (s *{{ required .TypeName }}) RPCEncode(m *message) error {
+	    {{- range required .Fields }}
+	    {{- $accessor := format "s.v.%s" (capitalize .Name) -}}
+	    {{ template "go-pb/marshal" dict "Field" .T "Accessor" $accessor "ID" .ID "Message" "m" "ProtoName" $.ProtoName }}
+	    {{- end -}}
+	    return nil
+	}
+
+	func (s *{{ required .TypeName }}) RPCDecode(m *message) error {
+	    var (
+	        err error
+	        tag uint64
+	    )
+	    for err == nil {
+	        tag, err = m.ReadVarint()
+	        switch tag {
+	        {{- range required .Fields }}
+	        case uint64({{ .ID }} << 3) | uint64({{ if .T.IsArray }}{{ template "go-pb/property-to-wiretype" .T.InnerValue.String}}{{ else if .T.IsMarshalled}}{{ template "go-pb/property-to-wiretype" "String"}}{{ else }}{{ template "go-pb/property-to-wiretype" .T.String}}{{ end }}):
+	            {{- template "go-pb/unmarshal" dict "Field" .T "Accessor" (format "s.v.%s" (required .Name | capitalize)) "Message" "m" "ProtoName" $.ProtoName -}}
+	        {{- end }}
+	        default:
+	            if err != io.EOF {
+	                err = m.ReadPBSkip(tag)
+	            }
+	        }
+	    }
+	    if err == io.EOF {
+	        return nil
+	    }
+	    return err
+	}
+{{ end }}
+
+{{ range required .Protocols }}
+type proto{{ required .Name | capitalize }}Method uint64
+{{- end }}
+
+const (
+{{ range required .Protocols }}
+    {{- $protoName := required .Name -}}
+    {{- $protoID := required .ID -}}
+    {{ range required .Methods }}
+        {{- $typeID := format "proto%sMethod%s" (required $protoName | capitalize) (required .Name | capitalize) -}}
+        {{ required $typeID }} proto{{ required $protoName | capitalize }}Method = {{ required .ID }}
+    {{ end }}
+{{ end }}
+)
+
+type protoDescriptor struct {
+    name string
+    methods map[uint64]methodDescriptor
+}
+
+type methodDescriptor struct {
+    name string
+}
+
+var protoMap = map[uint64]protoDescriptor{
+{{- range required .Protocols }}
+    {{ required .ID }}: protoDescriptor{
+        name: {{ required .Name | doublequote }},
+        methods: map[uint64]methodDescriptor{
+            {{- range required .Methods }}
+            {{ required .ID }}: methodDescriptor{name: {{ required .Name | doublequote }}},
+            {{- end }}
+        },
+    },
+{{- end }}
+}
+
+{{ range required .Protocols }}
+    {{- $protoName := required .Name -}}
+    {{- $protoID := required .ID -}}
+    {{ range required .Structs }}
+        {{ if ifnotexists (format "rpcGlobalStruct%s" (required .Name | capitalize)) -}}
+        {{ range required .Fields }}
+            {{ template "go-pb/serialization-map" dict "T" .T "ProtoName" $protoName }}
+        {{ end }}
+        {{ template "go-pb/serialization-struct" dict "TypeName" (format "rpcGlobalStruct%s" (required .Name | capitalize)) "Name" .Name "Fields" .Fields "ProtoName" $protoName }}
+        {{- end }}
+    {{ end }}
+    {{ range required .Methods }}
+        {{ range required .Input }}
+            {{ template "go-pb/serialization-map" dict "T" .T "ProtoName" $protoName }}
+        {{ end }}
+        {{ range required .Output }}
+            {{ template "go-pb/serialization-map" dict "T" .T "ProtoName" $protoName }}
+        {{ end }}
+    {{ end }}
+{{ end }}
+
+{{/*                            */}}
+{{/* Prepare method serializers */}}
+{{/*                            */}}
+
+{{ define "go-pb/serialization" -}}
+	{{- /* (De-)Serialization of a method */ -}}
+	{{ $typeName := required .TypeName }}
+	{{- if eq (len .Fields) 0 -}}
+		type {{ $typeName }} struct {}
+
+		func (s *{{ required .TypeName }}) RPCEncode(m *message) error { return nil }
+		func (s *{{ required .TypeName }}) RPCDecode(m *message) error { return nil }
+	{{- else -}}
+		type {{ required .TypeName }} struct {
+		{{- range required .Fields }}
+		    {{ required .Name | capitalize }} {{ .T.GoType }}
+		{{- end }}
+		}
+
+		func (s *{{ required .TypeName }}) RPCEncode(m *message) error {
+		    {{- range required .Fields }}
+		    {{- $accessor := format "s.%s" (required .Name | capitalize) -}}
+		    {{ template "go-pb/marshal" dict "Field" .T "Accessor" $accessor "ID" .ID "ProtoName" $.ProtoName }}
+		    {{- end -}}
+		    return nil
+		}
+
+		func (s *{{ required .TypeName }}) RPCDecode(m *message) error {
+		    var (
+		        err error
+		        tag uint64
+		    )
+		    for err == nil {
+		        tag, err = m.ReadVarint()
+		        switch tag {
+		        {{- range .Fields }}
+		        case uint64({{ required .ID }} << 3) | uint64({{ if .T.IsArray }}{{ template "go-pb/property-to-wiretype" .T.InnerValue.String}}{{ else if .T.IsMarshalled}}{{ template "go-pb/property-to-wiretype" "String"}}{{ else }}{{ template "go-pb/property-to-wiretype" .T.String}}{{ end }}):
+		            {{- template "go-pb/unmarshal" dict "Field" .T "Accessor" (format "s.%s" (required .Name | capitalize)) "ProtoName" $.ProtoName -}}
+		        {{- end }}
+		        default:
+		            if err != io.EOF {
+		                err = m.ReadPBSkip(tag)
+		            }
+		        }
+		    }
+		    if err == io.EOF {
+		        return nil
+		    }
+		    return err
+		}
+	{{ end }}
+	{{ if .TypeID -}}
+		func (s *{{ required .TypeName }}) RPCID() uint64 {
+		    return uint64({{ required .TypeID }})
+		}
+	{{- end }}
+{{ end }}
+
+{{ range required .Protocols }}
+    {{- $protoName := required .Name -}}
+    {{- $protoID := required .ID -}}
+    {{ range required .Methods }}
+        {{- $typeID := format "proto%sMethod%s" (capitalize $protoName) (capitalize .Name)}}
+        {{ template "go-pb/serialization" dict "TypeName" (format "rpcReqProto%sMethod%s" (required $protoName | capitalize) (required .Name | capitalize)) "TypeID" $typeID "Fields" .Input "ProtoName" $protoName }}
+        {{ template "go-pb/serialization" dict "TypeName" (format "rpcRespProto%sMethod%s" (required $protoName | capitalize) (required .Name | capitalize)) "TypeID" $typeID "Fields" .Output "ProtoName" $protoName }}
+    {{ end }}
+{{ end }}
+
+{{/*                    */}}
+{{/* Server definitions */}}
+{{/*                    */}}
+
+{{ range required .Protocols }}
+	type rpcCallServerFor{{ required .Name | capitalize }} struct {
+	    methods {{ required .Name | capitalize }}Protocol
+	}
+{{ end }}
+{{ range required .Protocols }}
+	// RPC{{ required .Name | capitalize }}Server creates a new RPCServer for the {{ required .Name }} protocol.
+	func RPC{{ required .Name | capitalize }}Server(methods {{ required .Name | capitalize }}Protocol) RPCServer {
+	    return &rpcServer{
+	        ProtocolID: {{ required .ID }},
+	        Server: &rpcCallServerFor{{ required .Name | capitalize }}{methods: methods},
+	    }
+	}
+{{ end }}
+
+{{/*                */}}
+{{/* Server methods */}}
+{{/*                */}}
+
+{{ range required .Protocols }}
+	{{ $protoName := required .Name -}}
+	{{ range required .Methods }}
+		func (args *rpcReqProto{{ required $protoName | capitalize }}Method{{ required .Name | capitalize }}) call(ctx context.Context, s rpcCallServer) (resp rpcMessage) {
+		    {{ range .Output }}{{ .Name }}, {{ end }}err := s.(*rpcCallServerFor{{ required $protoName | capitalize }}).methods.{{ required .Name | capitalize }}(ctx{{- range .Input }}, args.{{ required .Name | capitalize }}{{- end }})
+		    if err != nil {
+		        if rpcMsg, ok := err.(rpcMessage); ok {
+		            return rpcMsg
+		        }
+		        return &rpcError{id: ApplicationError, error: err.Error()}
+		    }
+		    return &rpcRespProto{{ required $protoName | capitalize }}Method{{ required .Name | capitalize }}{
+		        {{- range required .Output }}
+		        {{ required .Name | capitalize }}: {{ required .Name }},
+		        {{- end }}
+		    }
+		}
+	{{ end }}
+
+	func (s *rpcCallServerFor{{ required .Name | capitalize }}) handle(ctx context.Context, methodID uint64, m *message) (callable rpcCallable, err error) {
+	    switch methodID {
+	    {{- range required .Methods }}
+	    case uint64(proto{{ required $protoName | capitalize }}Method{{ required .Name | capitalize }}):
+	        args := rpcReqProto{{ required $protoName | capitalize }}Method{{ required .Name | capitalize }}{}
+	        if err := args.RPCDecode(m); err != nil {
+	            return nil, fmt.Errorf("unable to decode method call: %v", err)
+	        }
+	        return &args, nil
+	    {{- end }}
+	    default:
+	        return nil, fmt.Errorf("unknown method ID: %d", methodID)
+	    }
+	}
+{{ end }}
+
+{{/*                    */}}
+{{/* Client definitions */}}
+{{/*                    */}}
+
+{{ range required .Protocols }}
+	// The RPC{{ required .Name | capitalize }}Client type is a RPC client for the {{ required .Name }} protocol.
+	type RPC{{ required .Name | capitalize }}Client struct {
+		c *RPCConnection
+	}
+
+	// NewRPC{{ required .Name | capitalize }}Client creates a new RPC client for the {{ required .Name }} protocol.
+	func NewRPC{{ required .Name | capitalize }}Client(c *RPCConnection) *RPC{{ required .Name | capitalize }}Client {
+		return &RPC{{- required .Name | capitalize }}Client{c: c}
+	}
+{{ end }}
+
+{{/*                */}}
+{{/* Client methods */}}
+{{/*                */}}
+
+{{ range required .Protocols }}
+	{{- $protoName := required .Name -}}
+	{{- $protoID := required .ID -}}
+	{{ range required .Methods }}
+		// {{ required .Description | capitalize }}
+		func (c *RPC{{ required $protoName | capitalize }}Client) {{ required .Name | capitalize }}(ctx context.Context,
+		    {{- $input := required .Input }}
+		    {{- range $idx, $v := required .Input }} req{{ required $v.Name | capitalize }} {{ required $v.T.GoType }}{{- if ne (len $input) $idx }},{{ end }}{{ end }}) (
+		    {{- range required .Output }}resp{{ required .Name | capitalize }} {{ required .T.GoType }}, {{ end }}err error) {
+
+		    var decoderErr error
+		    decoder := func(msg *message) error {
+		        resultTypeID, err := msg.ReadVarint()
+				if err != nil {
+		            decoderErr = &rpcError{id: GenericError, error: fmt.Sprintf("error while decoding message type: %v", err)}
+		            return decoderErr
+				}
+		        switch resultTypeID {
+		        case uint64(proto{{ required $protoName | capitalize }}Method{{ required .Name | capitalize }}):
+		            var r rpcRespProto{{ required $protoName | capitalize }}Method{{ required .Name | capitalize }}
+		            if err := r.RPCDecode(msg); err != nil {
+		                decoderErr = &rpcError{id: GenericError, error: fmt.Sprintf("could not decode result: %v", err)}
+		                return decoderErr
+		            }
+		            {{- range required .Output }}
+		            resp{{ required .Name | capitalize }} = r.{{ required .Name | capitalize }}
+		            {{- end}}
+		            return nil
+		        default:
+		            var isPrivate bool
+		            err, isPrivate = c.c.handlePrivateResponse(resultTypeID, msg)
+		            if !isPrivate {
+		                decoderErr = &rpcError{id: ProtocolError, error: fmt.Sprintf("unexpected return type for call type %d: %d", uint64(proto{{ required $protoName | capitalize }}Method{{ required .Name | capitalize }}), resultTypeID)}
+		                return decoderErr
+		            }
+		            decoderErr = err
+		            return nil
+		        }
+		    }
+
+		    err = c.c.call(ctx,decoder, true, {{ required $protoID }}, uint64(proto{{ required $protoName | capitalize }}Method{{ required .Name | capitalize }}), &rpcReqProto{{ required $protoName | capitalize }}Method{{ required .Name | capitalize }}{
+		        {{- range required .Input }}
+		        {{ required .Name | capitalize }}: req{{ required .Name | capitalize }},
+		        {{- end }}
+		    })
+
+		    if decoderErr != nil {
+		        err = decoderErr
+		    }
+
+		    return
+		}
+	{{ end }}
+{{ end }}

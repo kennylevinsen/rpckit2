@@ -77,59 +77,22 @@ type httpRespProtoPingpongMethodAuthenticate struct {
 	Success bool `json:"success"`
 }
 
-// Authenticate using username and password
-func (c *HTTPPingpongClient) Authenticate(ctx context.Context, reqUsername string, reqPassword string) (respSuccess bool, err error) {
-	var (
-		b        []byte
-		req      *http.Request
-		resp     *http.Response
-		reqbody  httpReqProtoPingpongMethodAuthenticate
-		respbody httpRespProtoPingpongMethodAuthenticate
-	)
+// The HTTPAuthenticateClient type is a HTTP client for the Authenticate protocol.
+type HTTPAuthenticateClient struct {
+	client  *HTTPClient
+	baseURL string
+}
 
-	reqbody = httpReqProtoPingpongMethodAuthenticate{
-		Username: reqUsername,
-		Password: reqPassword,
+// NewHTTPAuthenticateClient(c *HTTPClient) creates a new HTTP client for the Authenticate protocol.
+func NewHTTPAuthenticateClient(c *HTTPClient) *HTTPAuthenticateClient {
+	return &HTTPAuthenticateClient{
+		client:  c,
+		baseURL: "Authenticate",
 	}
+}
 
-	if b, err = json.Marshal(&reqbody); err != nil {
-		return
-	}
-
-	if req, err = c.newRequest("POST", "authenticate", bytes.NewReader(b)); err != nil {
-		return
-	}
-
-	req = req.WithContext(ctx)
-	if resp, err = c.client.do(req); err != nil {
-		return
-	}
-
-	b, err = ioutil.ReadAll(resp.Body)
-	resp.Body.Close()
-	if err != nil {
-		return
-	}
-
-	if !(resp.StatusCode >= 200 && resp.StatusCode < 300) {
-		var errorbody struct {
-			Error string `json:"error"`
-		}
-
-		if err = json.Unmarshal(b, &errorbody); err != nil {
-			return
-		}
-
-		err = errors.New(errorbody.Error)
-		return
-	}
-
-	if err = json.Unmarshal(b, &respbody); err != nil {
-		return
-	}
-	respSuccess = respbody.Success
-
-	return
+func (c *HTTPAuthenticateClient) newRequest(method, url string, body io.Reader) (*http.Request, error) {
+	return c.client.newRequest(method, c.baseURL+"/"+url, body)
 }
 
 type httpReqProtoPingpongMethodPingWithReply struct {
@@ -140,58 +103,22 @@ type httpRespProtoPingpongMethodPingWithReply struct {
 	Greeting string `json:"greeting"`
 }
 
-// PingWithReply replies with a greeting based on the provided name
-func (c *HTTPPingpongClient) PingWithReply(ctx context.Context, reqName string) (respGreeting string, err error) {
-	var (
-		b        []byte
-		req      *http.Request
-		resp     *http.Response
-		reqbody  httpReqProtoPingpongMethodPingWithReply
-		respbody httpRespProtoPingpongMethodPingWithReply
-	)
+// The HTTPPingWithReplyClient type is a HTTP client for the PingWithReply protocol.
+type HTTPPingWithReplyClient struct {
+	client  *HTTPClient
+	baseURL string
+}
 
-	reqbody = httpReqProtoPingpongMethodPingWithReply{
-		Name: reqName,
+// NewHTTPPingWithReplyClient(c *HTTPClient) creates a new HTTP client for the PingWithReply protocol.
+func NewHTTPPingWithReplyClient(c *HTTPClient) *HTTPPingWithReplyClient {
+	return &HTTPPingWithReplyClient{
+		client:  c,
+		baseURL: "PingWithReply",
 	}
+}
 
-	if b, err = json.Marshal(&reqbody); err != nil {
-		return
-	}
-
-	if req, err = c.newRequest("POST", "pingwithreply", bytes.NewReader(b)); err != nil {
-		return
-	}
-
-	req = req.WithContext(ctx)
-	if resp, err = c.client.do(req); err != nil {
-		return
-	}
-
-	b, err = ioutil.ReadAll(resp.Body)
-	resp.Body.Close()
-	if err != nil {
-		return
-	}
-
-	if !(resp.StatusCode >= 200 && resp.StatusCode < 300) {
-		var errorbody struct {
-			Error string `json:"error"`
-		}
-
-		if err = json.Unmarshal(b, &errorbody); err != nil {
-			return
-		}
-
-		err = errors.New(errorbody.Error)
-		return
-	}
-
-	if err = json.Unmarshal(b, &respbody); err != nil {
-		return
-	}
-	respGreeting = respbody.Greeting
-
-	return
+func (c *HTTPPingWithReplyClient) newRequest(method, url string, body io.Reader) (*http.Request, error) {
+	return c.client.newRequest(method, c.baseURL+"/"+url, body)
 }
 
 type httpReqProtoPingpongMethodTestMethod struct {
@@ -208,64 +135,22 @@ type httpRespProtoPingpongMethodTestMethod struct {
 	Success bool `json:"success"`
 }
 
-// TestMethod is a simple type test
-func (c *HTTPPingpongClient) TestMethod(ctx context.Context, reqString string, reqBool bool, reqInt64 int64, reqInt int64, reqFloat float32, reqDouble float64, reqDatetime time.Time) (respSuccess bool, err error) {
-	var (
-		b        []byte
-		req      *http.Request
-		resp     *http.Response
-		reqbody  httpReqProtoPingpongMethodTestMethod
-		respbody httpRespProtoPingpongMethodTestMethod
-	)
+// The HTTPTestMethodClient type is a HTTP client for the TestMethod protocol.
+type HTTPTestMethodClient struct {
+	client  *HTTPClient
+	baseURL string
+}
 
-	reqbody = httpReqProtoPingpongMethodTestMethod{
-		String:   reqString,
-		Bool:     reqBool,
-		Int64:    reqInt64,
-		Int:      reqInt,
-		Float:    reqFloat,
-		Double:   reqDouble,
-		Datetime: reqDatetime,
+// NewHTTPTestMethodClient(c *HTTPClient) creates a new HTTP client for the TestMethod protocol.
+func NewHTTPTestMethodClient(c *HTTPClient) *HTTPTestMethodClient {
+	return &HTTPTestMethodClient{
+		client:  c,
+		baseURL: "TestMethod",
 	}
+}
 
-	if b, err = json.Marshal(&reqbody); err != nil {
-		return
-	}
-
-	if req, err = c.newRequest("POST", "testmethod", bytes.NewReader(b)); err != nil {
-		return
-	}
-
-	req = req.WithContext(ctx)
-	if resp, err = c.client.do(req); err != nil {
-		return
-	}
-
-	b, err = ioutil.ReadAll(resp.Body)
-	resp.Body.Close()
-	if err != nil {
-		return
-	}
-
-	if !(resp.StatusCode >= 200 && resp.StatusCode < 300) {
-		var errorbody struct {
-			Error string `json:"error"`
-		}
-
-		if err = json.Unmarshal(b, &errorbody); err != nil {
-			return
-		}
-
-		err = errors.New(errorbody.Error)
-		return
-	}
-
-	if err = json.Unmarshal(b, &respbody); err != nil {
-		return
-	}
-	respSuccess = respbody.Success
-
-	return
+func (c *HTTPTestMethodClient) newRequest(method, url string, body io.Reader) (*http.Request, error) {
+	return c.client.newRequest(method, c.baseURL+"/"+url, body)
 }
 
 // HTTPPingpongServer creates a new HTTPServer for the pingpong protocol.
@@ -481,115 +366,44 @@ type httpRespProtoEchoMethodEcho struct {
 	OuputTime time.Time `json:"ouputTime,omitempty"`
 }
 
-// Echo is yet another type test
-func (c *HTTPEchoClient) Echo(ctx context.Context, reqInput string, reqNames []string, reqValues map[string]map[string]int64, reqValues2 map[string]int64, reqSomething EchoThing, reqMytime time.Time, reqId uuid.UUID) (respOutput string, respOuputTime time.Time, err error) {
-	var (
-		b        []byte
-		req      *http.Request
-		resp     *http.Response
-		reqbody  httpReqProtoEchoMethodEcho
-		respbody httpRespProtoEchoMethodEcho
-	)
+// The HTTPEchoClient type is a HTTP client for the Echo protocol.
+type HTTPEchoClient struct {
+	client  *HTTPClient
+	baseURL string
+}
 
-	reqbody = httpReqProtoEchoMethodEcho{
-		Input:     reqInput,
-		Names:     reqNames,
-		Values:    reqValues,
-		Values2:   reqValues2,
-		Something: reqSomething,
-		Mytime:    reqMytime,
-		Id:        reqId,
+// NewHTTPEchoClient(c *HTTPClient) creates a new HTTP client for the Echo protocol.
+func NewHTTPEchoClient(c *HTTPClient) *HTTPEchoClient {
+	return &HTTPEchoClient{
+		client:  c,
+		baseURL: "Echo",
 	}
+}
 
-	if b, err = json.Marshal(&reqbody); err != nil {
-		return
-	}
-
-	if req, err = c.newRequest("POST", "echo", bytes.NewReader(b)); err != nil {
-		return
-	}
-
-	req = req.WithContext(ctx)
-	if resp, err = c.client.do(req); err != nil {
-		return
-	}
-
-	b, err = ioutil.ReadAll(resp.Body)
-	resp.Body.Close()
-	if err != nil {
-		return
-	}
-
-	if !(resp.StatusCode >= 200 && resp.StatusCode < 300) {
-		var errorbody struct {
-			Error string `json:"error"`
-		}
-
-		if err = json.Unmarshal(b, &errorbody); err != nil {
-			return
-		}
-
-		err = errors.New(errorbody.Error)
-		return
-	}
-
-	if err = json.Unmarshal(b, &respbody); err != nil {
-		return
-	}
-	respOutput = respbody.Output
-	respOuputTime = respbody.OuputTime
-
-	return
+func (c *HTTPEchoClient) newRequest(method, url string, body io.Reader) (*http.Request, error) {
+	return c.client.newRequest(method, c.baseURL+"/"+url, body)
 }
 
 type httpRespProtoEchoMethodPing struct {
 	Output string `json:"output"`
 }
 
-// Ping is a simple no-input test
-func (c *HTTPEchoClient) Ping(ctx context.Context) (respOutput string, err error) {
-	var (
-		b    []byte
-		req  *http.Request
-		resp *http.Response
+// The HTTPPingClient type is a HTTP client for the Ping protocol.
+type HTTPPingClient struct {
+	client  *HTTPClient
+	baseURL string
+}
 
-		respbody httpRespProtoEchoMethodPing
-	)
-
-	if req, err = c.newRequest("GET", "ping", bytes.NewReader(b)); err != nil {
-		return
+// NewHTTPPingClient(c *HTTPClient) creates a new HTTP client for the Ping protocol.
+func NewHTTPPingClient(c *HTTPClient) *HTTPPingClient {
+	return &HTTPPingClient{
+		client:  c,
+		baseURL: "Ping",
 	}
+}
 
-	req = req.WithContext(ctx)
-	if resp, err = c.client.do(req); err != nil {
-		return
-	}
-
-	b, err = ioutil.ReadAll(resp.Body)
-	resp.Body.Close()
-	if err != nil {
-		return
-	}
-
-	if !(resp.StatusCode >= 200 && resp.StatusCode < 300) {
-		var errorbody struct {
-			Error string `json:"error"`
-		}
-
-		if err = json.Unmarshal(b, &errorbody); err != nil {
-			return
-		}
-
-		err = errors.New(errorbody.Error)
-		return
-	}
-
-	if err = json.Unmarshal(b, &respbody); err != nil {
-		return
-	}
-	respOutput = respbody.Output
-
-	return
+func (c *HTTPPingClient) newRequest(method, url string, body io.Reader) (*http.Request, error) {
+	return c.client.newRequest(method, c.baseURL+"/"+url, body)
 }
 
 type httpReqProtoEchoMethodByteTest struct {
@@ -600,47 +414,22 @@ type httpRespProtoEchoMethodByteTest struct {
 	Output []byte `json:"output"`
 }
 
-// ByteTest is a byte test
-func (c *HTTPEchoClient) ByteTest(ctx context.Context, reqInput []byte) (respOutput []byte, err error) {
-	var (
-		b    []byte
-		req  *http.Request
-		resp *http.Response
-	)
+// The HTTPByteTestClient type is a HTTP client for the ByteTest protocol.
+type HTTPByteTestClient struct {
+	client  *HTTPClient
+	baseURL string
+}
 
-	b = reqInput
-
-	if req, err = c.newRequest("POST", "bytetest", bytes.NewReader(b)); err != nil {
-		return
+// NewHTTPByteTestClient(c *HTTPClient) creates a new HTTP client for the ByteTest protocol.
+func NewHTTPByteTestClient(c *HTTPClient) *HTTPByteTestClient {
+	return &HTTPByteTestClient{
+		client:  c,
+		baseURL: "ByteTest",
 	}
+}
 
-	req = req.WithContext(ctx)
-	if resp, err = c.client.do(req); err != nil {
-		return
-	}
-
-	b, err = ioutil.ReadAll(resp.Body)
-	resp.Body.Close()
-	if err != nil {
-		return
-	}
-
-	if !(resp.StatusCode >= 200 && resp.StatusCode < 300) {
-		var errorbody struct {
-			Error string `json:"error"`
-		}
-
-		if err = json.Unmarshal(b, &errorbody); err != nil {
-			return
-		}
-
-		err = errors.New(errorbody.Error)
-		return
-	}
-
-	respOutput = b
-
-	return
+func (c *HTTPByteTestClient) newRequest(method, url string, body io.Reader) (*http.Request, error) {
+	return c.client.newRequest(method, c.baseURL+"/"+url, body)
 }
 
 // HTTPEchoServer creates a new HTTPServer for the echo protocol.

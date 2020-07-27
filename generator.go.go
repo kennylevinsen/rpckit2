@@ -18,42 +18,9 @@ import (
 //go:generate go-bindata --pkg rpckit2 -o templates.go templates/...
 
 var template_deps = []string{
-	"go-pb/boilerplate.go.tmpl",
-	"go-pb/property_to_wiretype.go.tmpl",
-	"go-pb/marshal_simple.go.tmpl",
-	"go-pb/marshal_array.go.tmpl",
-	"go-pb/marshal_map.go.tmpl",
-	"go-pb/marshal_struct.go.tmpl",
-	"go-pb/marshal_marshalled.go.tmpl",
-	"go-pb/marshal.go.tmpl",
-	"go-pb/unmarshal_simple.go.tmpl",
-	"go-pb/unmarshal_array.go.tmpl",
-	"go-pb/unmarshal_map.go.tmpl",
-	"go-pb/unmarshal_struct.go.tmpl",
-	"go-pb/unmarshal_marshalled.go.tmpl",
-	"go-pb/unmarshal.go.tmpl",
-	"go-pb/prepare_serializers.go.tmpl",
-	"go-pb/serializations.go.tmpl",
-	"go-pb/serialization.go.tmpl",
-	"go-pb/serialization_map.go.tmpl",
-	"go-pb/serialization_struct.go.tmpl",
-	"go-pb/client_definitions.go.tmpl",
-	"go-pb/client_methods.go.tmpl",
-	"go-pb/server_definitions.go.tmpl",
-	"go-pb/server_methods.go.tmpl",
-	"go-pb/rpckit.go.tmpl",
-	"go-pb/marshalled_funcs.go.tmpl",
-
-	"go-http/boilerplate.go.tmpl",
-	"go-http/serialization.go.tmpl",
-	"go-http/client_definition.go.tmpl",
-	"go-http/client_method.go.tmpl",
-	"go-http/server_method.go.tmpl",
-	"go-http/rpckit.go.tmpl",
-
-	"go/types.go.tmpl",
-	"go/server_method.go.tmpl",
-	"go/rpckit.go.tmpl",
+	"go-pb.tmpl",
+	"go-http.tmpl",
+	"go.tmpl",
 }
 
 type GoGenerator struct {
@@ -227,13 +194,13 @@ func (g GoGenerator) Generate(p string) error {
 
 	for _, v := range []string{"pb", "http", ""} {
 		filepath := p
-		templatepath := "/rpckit.go.tmpl"
+		var templatepath string
 		if v == "" {
 			filepath += ".go"
-			templatepath = "go" + templatepath
+			templatepath = "go.tmpl"
 		} else {
 			filepath += "." + v + ".go"
-			templatepath = "go-" + v + templatepath
+			templatepath = "go-" + v + ".tmpl"
 		}
 
 		var buf bytes.Buffer

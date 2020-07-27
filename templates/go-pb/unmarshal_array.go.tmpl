@@ -1,3 +1,0 @@
-var v {{ required .Field.InnerValue.GoType }}
-{{ template "go-pb/unmarshal.go.tmpl" dict "Field" .Field.InnerValue "Accessor" "v" "ProtoName" .ProtoName -}}
-{{ required .Accessor }} = append({{ required .Accessor }}, v)

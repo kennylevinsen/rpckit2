@@ -1,0 +1,46 @@
+package {{ required .PackageName }}
+
+import (
+	"context"
+	{{ range $key, $val := .Imports }}
+	"{{$key}}"
+	{{- end }}
+)
+
+{{ range required .Protocols }}
+{{ range required .Structs }}
+	{{ $struct_name := .Name }}
+	// {{ required .Description | capitalize }}
+	type {{ required .Name | capitalize }} struct {
+	{{ range required .Fields -}}
+	    {{ if .Description }}
+	    // {{ required .Description | capitalize }}
+	    {{ end -}}
+		{{- $opts := "" }}{{ if .Options }} {{ if .Options.OmitEmpty }}{{ $opts = ",omitempty" }}{{ end}}{{ end -}}
+	    {{ required .Name | capitalize }} {{ .T.GoType }} `json:{{ required (format "%v%v" .Name $opts) | camelize | doublequote }}`
+	{{ end }}
+	}
+	{{- range required .Fields }}{{- if .Options }}{{ if .Options.Getter }}
+	func (s *{{ required $struct_name | capitalize }}) Get{{ required .Name | capitalize }}() {{ required .T.GoType }} { return s.{{ required .Name | capitalize }} }
+	{{- end }}{{- end }}{{- end }}
+
+	{{- range required .Fields }}{{- if .Options }}{{ if .Options.Setter }}
+	func (s *{{ required $struct_name | capitalize }}) Set{{ required .Name | capitalize }}(v {{ required .T.GoType }}) {
+		s.{{ required .Name | capitalize }} = v
+	}
+	{{- end }}{{- end }}{{- end }}
+{{ end }}
+{{ end }}
+
+{{ range required .Protocols }}
+	// The {{ required .Name | capitalize }}Protocol interface defines the {{ required .Name }} protocol.
+	type {{ required .Name | capitalize }}Protocol interface {
+	    {{- range required .Methods }}
+	    // {{ required .Description | capitalize }}
+	    {{ required .Name | capitalize }}(ctx context.Context,
+	    {{- $input := required .Input }}
+	    {{- range $idx, $v := required .Input }} req{{ required $v.Name | capitalize }} {{ required $v.T.GoType }}{{- if ne (len $input) $idx }},{{ end }}{{ end }}) (
+	    {{- range required .Output }}resp{{ required .Name | capitalize }} {{ required .T.GoType }}, {{ end }}err error)
+	    {{ end }}
+	}
+{{ end }}

@@ -1,8 +1,0 @@
-{{- if ne (len .Fields) 0 -}}
-type {{ required .Prefix }}Proto{{ required .ProtoName | capitalize }}Method{{ required .Name | capitalize }} struct {
-{{- range required .Fields }}
-	{{ $opts := "" }}{{ if .Options }}{{ if .Options.OmitEmpty }}{{ $opts = ",omitempty" }}{{ end }}{{ end -}}
-    {{ required .Name | capitalize }} {{ required .T.GoType }} `json:{{ required (format "%v%v" .Name $opts) | camelize | doublequote }}`
-{{- end }}
-}
-{{- end }}
