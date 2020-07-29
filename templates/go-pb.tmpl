@@ -465,7 +465,7 @@ func (m *message) ReadPBSkip(tag uint64) error {
 	case wireType64bit:
 		_, err = m.Read64Bit()
 	case wireTypeLengthDelimited:
-		_, err = m.ReadString()
+		_, err = m.ReadBytesNoCopy()
 	case wireType32bit:
 		_, err = m.Read32Bit()
 	}
@@ -662,8 +662,8 @@ func (c *connection) acquireCallSlot(f func(m *message) error) (uint64, *callSlo
 		waiter: make(chan struct{}, 0),
 		decoder: f,
 	}
-	c.waitingCalls[uint64(n)] = cs
-	return uint64(n), cs
+	c.waitingCalls[n] = cs
+	return n, cs
 }
 
 // findAndReleaseCallSlot finds a waitingCalls call slot, returns the
@@ -1156,7 +1156,7 @@ func (c *RPCConnection) call(ctx context.Context, decoder func(m *message) error
 			return toRPCError(ctx.Err())
 		}
 	} else {
-		// Wait chekc forcontext cancellation.
+		// Wait check for context cancellation.
 		select {
 		case <-ctx.Done():
 			return toRPCError(ctx.Err())
