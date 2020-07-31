@@ -11,42 +11,41 @@ import (
 	"strings"
 	"text/template"
 	"unicode"
-
-	"golang.org/x/tools/imports"
 )
 
 //go:generate go-bindata --pkg rpckit2 -o templates.go templates/...
 
-var go_template_deps = []string{
-	"go-pb.tmpl",
-	"go-http.tmpl",
-	"go.tmpl",
+var swift_template_deps = []string{
+	"swift-pb.tmpl",
 }
 
-type GoGenerator struct {
+type SwiftGenerator struct {
 	PackageName string
 	Protocols   []*Protocol
 }
 
-type GoTemplateProtocol struct {
+type SwiftTemplateProtocol struct {
 	Name    string
 	ID      uint64
 	Methods []Method
 	Structs []Struct
 }
 
-type GoTemplateContext struct {
+type SwiftTemplateContext struct {
 	PackageName string
-	Protocols   []GoTemplateProtocol
+	Protocols   []SwiftTemplateProtocol
 	Imports     map[string]struct{}
 }
 
-func (g GoGenerator) Generate(p string) error {
+func (g SwiftGenerator) Generate(p string) error {
 	exists := make(map[string]bool)
 	counter := make(map[string]int)
 	store := make(map[string]interface{})
 
 	funcs := template.FuncMap{
+		"add": func(a, b int) int {
+			return a + b
+		},
 		"log": func(formatter string, v ...interface{}) string {
 			log.Printf(formatter, v...)
 			return ""
@@ -147,7 +146,7 @@ func (g GoGenerator) Generate(p string) error {
 	}
 
 	tmpl := template.New("").Funcs(funcs)
-	for _, name := range go_template_deps {
+	for _, name := range swift_template_deps {
 		b, err := Asset(path.Join("templates", name))
 		if err != nil {
 			return fmt.Errorf("template reading failed: %+v\n", err)
@@ -159,13 +158,13 @@ func (g GoGenerator) Generate(p string) error {
 		}
 	}
 
-	ctx := GoTemplateContext{
+	ctx := SwiftTemplateContext{
 		PackageName: g.PackageName,
 		Imports:     make(map[string]struct{}),
 	}
 
 	for _, v := range g.Protocols {
-		ctx.Protocols = append(ctx.Protocols, GoTemplateProtocol{
+		ctx.Protocols = append(ctx.Protocols, SwiftTemplateProtocol{
 			Name:    v.name,
 			ID:      v.id,
 			Methods: v.methods,
@@ -192,15 +191,15 @@ func (g GoGenerator) Generate(p string) error {
 		}
 	}
 
-	for _, v := range []string{"pb", "http", ""} {
+	for _, v := range []string{"pb"} {
 		filepath := p
 		var templatepath string
 		if v == "" {
-			filepath += ".go"
-			templatepath = "go.tmpl"
+			filepath += ".swift"
+			templatepath = "swift.tmpl"
 		} else {
-			filepath += "." + v + ".go"
-			templatepath = "go-" + v + ".tmpl"
+			filepath += "." + v + ".swift"
+			templatepath = "swift-" + v + ".tmpl"
 		}
 
 		var buf bytes.Buffer
@@ -208,14 +207,7 @@ func (g GoGenerator) Generate(p string) error {
 			return fmt.Errorf("%s template execution failed: %+v", v, err)
 		}
 
-		final, err := imports.Process(filepath, buf.Bytes(), &imports.Options{Comments: true, FormatOnly: true})
-		if err != nil {
-			fmt.Printf("%s template prettification failed: %+v\n", v, err)
-			// return fmt.Errorf("%s template prettification failed: %+v", v, err)
-			final = buf.Bytes()
-		}
-
-		if err := ioutil.WriteFile(filepath, final, 0644); err != nil {
+		if err := ioutil.WriteFile(filepath, buf.Bytes(), 0644); err != nil {
 			return fmt.Errorf("file write failed: %+v", err)
 		}
 	}
