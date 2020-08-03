@@ -140,7 +140,7 @@ func Int64() PropertyType    { return newSimpleType("Int64", "int64", "Int64", "
 func Int() PropertyType      { return newSimpleType("Int", "int64", "Int64", "0") }
 func Float() PropertyType    { return newSimpleType("Float", "float32", "Float", "0.0") }
 func Double() PropertyType   { return newSimpleType("Double", "float64", "Double", "0.0") }
-func Bytes() PropertyType    { return newSimpleType("Bytes", "[]byte", "[UInt8]", "[]") }
+func Bytes() PropertyType    { return newSimpleType("Bytes", "[]byte", "ArraySlice<UInt8>", "[]") }
 func DateTime() PropertyType { return newMarshalledType("DateTime", "time.Time", "", "","time") }
 func UUID() PropertyType     { return newMarshalledType("UUID", "uuid.UUID", "", "", "github.com/satori/go.uuid") }
 

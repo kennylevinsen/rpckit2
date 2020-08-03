@@ -129,6 +129,26 @@ func (g SwiftGenerator) Generate(p string) error {
 		"upper":       strings.ToUpper,
 		"lower":       strings.ToLower,
 		"doublequote": strconv.Quote,
+		"indenttab": func(count int, s string) string {
+			if len(s) == 0 {
+				return ""
+			}
+			if count == 0 {
+				return s
+			}
+			var tabBuilder strings.Builder
+			for cnt := 0; cnt < count; cnt++ {
+				tabBuilder.WriteRune('\t')
+			}
+			prefix := tabBuilder.String()
+			lines := strings.Split(s, "\n")
+			var b strings.Builder
+			for _, line := range lines {
+				b.WriteString(prefix)
+				b.WriteString(line)
+			}
+			return b.String()
+		},
 		"dict": func(values ...interface{}) (map[string]interface{}, error) {
 			if len(values)%2 != 0 {
 				return nil, errors.New("invalid dict call")
