@@ -38,10 +38,10 @@ import (
 	"sync"
 	"time"
 
-
-	{{ range $key, $val := .Imports }}{{ if ne $key "time" }}
+	"github.com/satori/go.uuid"
+	{{ range $key, $val := .Imports }}{{ if ne $key "time" }}{{ if ne $key "github.com/satori/go.uuid" }}
 	"{{$key}}"
-	{{- end }}{{ end }}
+	{{- end }}{{- end }}{{ end }}
 )
 
 
