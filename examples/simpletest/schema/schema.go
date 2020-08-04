@@ -58,10 +58,12 @@ func main() {
 			rpckit2.Property{ID: 7, T: rpckit2.Array(rpckit2.Bytes()), Name: "vbytes"},
 		},
 	})
+	server2 := rpckit2.NewProtocol("wowo", 2)
 
 	if err := (rpckit2.SwiftGenerator{
 		Protocols: []*rpckit2.Protocol{
 			server1,
+			server2,
 		},
 		PackageName: "main",
 	}.Generate("../schema.generated")); err != nil {
