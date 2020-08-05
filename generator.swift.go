@@ -46,6 +46,9 @@ func (g SwiftGenerator) Generate(p string) error {
 		"add": func(a, b int) int {
 			return a + b
 		},
+		"add64": func(a, b int64) int64 {
+			return a + b
+		},
 		"log": func(formatter string, v ...interface{}) string {
 			log.Printf(formatter, v...)
 			return ""

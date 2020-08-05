@@ -592,7 +592,7 @@ class RPCConnection: NSObject, StreamDelegate {
 				self.readPos = 0
 				self.readNeeds = 4
 				self.readState = .readingHeader
-				if case .failure(let error) = self.gotMessage(msg: message) {
+				if case .failure(_) = self.gotMessage(msg: message) {
 					self.disconnect()
 				}
 				break
@@ -789,9 +789,8 @@ class rpcError : RPCMessage {
 		self.errorType = .generic
 	}
 
-	init(_ error: String, _ errorType: RPCErrorType) {
-		self.error = error
-		self.errorType = errorType
+	init(_ args: (String, RPCErrorType)) {
+		(self.error, self.errorType) = args
 	}
 
 	func id() -> UInt64 {
@@ -830,7 +829,7 @@ class rpcError : RPCMessage {
 		} catch {
 			return .failure(RPCError.protocolError)
 		}
-		return .success(rpcError(error, errorType))
+		return .success(rpcError((error, errorType)))
 	}
 }
 
@@ -850,7 +849,7 @@ protocol {{ required .Name | capitalize }}Server {
 		{{- $input := required .Input -}}
 		{{- range $idx, $v := required .Input }}{{ required $v.Name }}: {{ required $v.T.SwiftType }}{{- if ne (add (len $input) -1) $idx }}, {{ end }}{{- end }}) -> Result<(
 		{{- $output := required .Output -}}
-		{{- range $idx, $v := required .Output }}{{ required $v.T.SwiftType }}{{- if ne (add (len $input) -1) $idx }}, {{ end }}{{- end }}), RPCError>
+		{{- range $idx, $v := required .Output }}{{ required $v.T.SwiftType }}{{- if ne (add (len $output) -1) $idx }}, {{ end }}{{- end }}), RPCError>
 {{ end }}
 }
 
@@ -909,17 +908,7 @@ class RPC{{ required .Name | capitalize }}Server : RPCCallServer {
 		switch res {
 		case .success({{ if ne (len .Output) 0 }}let res{{ end }}):
 			// Construct the return message
-			{{- if ne (len .Output) 0 }}
-			let ({{ $input := required .Input -}}
-				{{- range $idx, $val := required .Input -}}
-				{{ $val.Name }}{{- if ne (add (len $input) -1) $idx }}, {{ end }}
-				{{- end -}}) = res
-			{{- end }}
-			let retarg = {{ format "%sMethod%sReturn" (required $protoName) (required .Name | capitalize) }}(
-					{{- $input := required .Output -}}
-					{{- range $idx, $val := required .Output -}}
-					{{ $val.Name }}{{- if ne (add (len $input) -1) $idx }}, {{ end }}
-					{{- end }})
+			let retarg = {{ format "%sMethod%sReturn" (required $protoName) (required .Name | capitalize) }}({{ if ne (len .Output) 0 }}res{{ end }})
 			return .success(retarg)
 		case .failure(let error):
 			return .failure(error)
@@ -998,11 +987,11 @@ class RPC{{ required .Name | capitalize }}Client {
 		__rpckit2_wmsg.writeVarUInt(value: protocol{{ required $protoName | capitalize }}Method.{{ required .Name }}.rawValue)
 		{{- if ne (len .Input) 0 }}
 
-		let __rpckit2_callarg = {{ format "%sMethod%sCall" (required $protoName) (required .Name | capitalize) }}(
+		let __rpckit2_callarg = {{ format "%sMethod%sCall" (required $protoName) (required .Name | capitalize) }}((
 					{{- $input := required .Input -}}
 					{{- range $idx, $val := required .Input -}}
 					{{ $val.Name }}{{- if ne (add (len $input) -1) $idx }}, {{ end }}
-					{{- end }})
+					{{- end }}))
 		if case .failure(let error) = __rpckit2_callarg.encode(__rpckit2_wmsg) {
 			return .failure(error)
 		}
@@ -1014,9 +1003,10 @@ class RPC{{ required .Name | capitalize }}Client {
 		return .success(())
 	}
 
-{{ end -}}
+{{ end }}
 }
-{{- end }}
+{{ end }}
+
 
 
 {{- define "swift-pb/serialization" -}}
@@ -1048,15 +1038,11 @@ fileprivate class {{ required $typeName }} : RPCMessage {
 		{{- end }}
 	}
 
-	init(
+	init(_ args: (
 		{{- $fields := required .Fields -}}
-		{{- range $idx, $v := required .Fields }}_ {{ required $v.Name }}: {{ required $v.T.SwiftType }}{{- if ne (add (len $fields) -1) $idx }}, {{ end }}{{- end -}}
-	) {
-		{{- range required .Fields }}
-	    self.{{ required .Name }} = {{ required .Name }}
-		{{- end }}
+		{{- range $idx, $v := required .Fields }}{{ required $v.T.SwiftType }}{{- if ne (add (len $fields) -1) $idx }}, {{ end }}{{- end -}})) {
+		({{- $fields := required .Fields}}{{- range $idx, $v := required .Fields }}self.{{ required $v.Name }}{{- if ne (add (len $fields) -1) $idx }}, {{ end }}{{ end }}) = args
 	}
-
 
 	{{ if .TypeID -}}
 	func id() -> UInt64 {
@@ -1074,30 +1060,43 @@ fileprivate class {{ required $typeName }} : RPCMessage {
 	}
 
 	static func decode(_ __rpckit2_rmsg: readableMessage) -> Result<RPCMessage, RPCError> {
-		{{- range required .Fields }}
-		var {{ required .Name }}: {{ .T.SwiftType }} = {{ .T.SwiftDefault }}
+		{{ if eq (len .Fields) 1 -}}{{ range required .Fields }}var args: {{ .T.SwiftType }} = {{ .T.SwiftDefault }}{{ end }}
+		{{- else -}}
+		var args: ({{- $fields := required .Fields}}{{- range $idx, $v := required .Fields }}{{ required $v.T.SwiftType }}{{- if ne (add (len $fields) -1) $idx }}, {{ end }}{{ end }}) = ({{- $fields := required .Fields}}{{- range $idx, $v := required .Fields }}{{ required $v.T.SwiftDefault }}{{- if ne (add (len $fields) -1) $idx }}, {{ end }}{{ end }})
 		{{- end }}
 		do {
 			while true {
+				{{- if eq (len .Fields) 1 -}}
+				{{- $accessor := "args" }}
+				{{- range .Fields }}
+				if (try __rpckit2_rmsg.readVarUInt().get() == {{ required .ID }} << 3 | {{ if .T.IsArray }}{{ template "swift-pb/property-to-wiretype" .T.InnerValue.String}}{{ else if .T.IsMarshalled}}{{ template "swift-pb/property-to-wiretype" "String"}}{{ else }}{{ template "swift-pb/property-to-wiretype" .T.String}}{{ end }}.rawValue) {
+{{ template "swift-pb/unmarshal" dict "Field" .T "Accessor" $accessor "Message" "__rpckit2_rmsg" "ProtoName" $.ProtoName }}
+				} else {
+					return .failure(RPCError.protocolError)
+				}
+				{{- end }}
+				{{- else }}
 				let tag = try __rpckit2_rmsg.readVarUInt().get()
 				switch tag {
 				{{- range .Fields }}
-				{{- $accessor := format "%s" (required .Name) }}
+				{{- $accessor := format "args.%d" (add64 (required .ID) -1) }}
 				case ({{ required .ID }} << 3 | {{ if .T.IsArray }}{{ template "swift-pb/property-to-wiretype" .T.InnerValue.String}}{{ else if .T.IsMarshalled}}{{ template "swift-pb/property-to-wiretype" "String"}}{{ else }}{{ template "swift-pb/property-to-wiretype" .T.String}}{{ end }}.rawValue):
 {{ template "swift-pb/unmarshal" dict "Field" .T "Accessor" $accessor "Message" "__rpckit2_rmsg" "ProtoName" $.ProtoName }}
 					break
 				{{- end }}
 				default:
-					break
+					return .failure(RPCError.protocolError)
 				}
+				{{- end }}
 			}
 		} catch RPCError.eof {
+			// Not a problem
 		} catch let error as RPCError {
 			return .failure(error)
 		} catch {
 			return .failure(RPCError.protocolError)
 		}
-		return .success({{ required $typeName }}({{ $fields := required .Fields -}}{{ range $idx, $v := required .Fields }}{{ required $v.Name }}{{- if ne (add (len $fields) -1) $idx }}, {{ end }}{{ end }}))
+		return .success({{ required $typeName }}(args))
 	}
 }
 {{- end -}}
