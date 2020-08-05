@@ -21,19 +21,17 @@ func main() {
 			panic(err)
 		}
 
-		NewRPCConnection(&RPCOptions{
+		c := NewRPCConnection(&RPCOptions{
 			Conn: conn,
 			Servers: []RPCServer{
 				RPCPingpongServer(&server{}),
 			},
-			ConnectHook: func(ctx context.Context, c *RPCConnection) error {
-				fmt.Printf("Stuff\n")
-				client := NewRPCPingpongClient(c)
-				integer, int64, float, double, bool, string, bytes, err := client.SimpleTest(ctx, 1, 2, 3.1, 4.1, true, "yelp", []byte("WOOOO"))
-				fmt.Printf("Got: %d, %d, %f, %f, %t, %s, %v, %v\n", integer, int64, float, double, bool, string, bytes, err)
-				return nil
-			},
 		})
+		c.Ready()
+		fmt.Printf("Stuff\n")
+		client := NewRPCPingpongClient(c)
+		integer, int64, float, double, bool, string, bytes, err := client.SimpleTest(context.Background(), 1, 2, 3.1, 4.1, true, "yelp", []byte("WOOOO"))
+		fmt.Printf("Got: %d, %d, %f, %f, %t, %s, %v, %v\n", integer, int64, float, double, bool, string, bytes, err)
 	}
 }
 

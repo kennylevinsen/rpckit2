@@ -26,7 +26,7 @@ enum RPCWireType: UInt64 {
 	case fixed32Bit = 5
 }
 
-enum RPCMessageType6: UInt64 {
+enum RPCMessageType: UInt64 {
 	case methodCall = 1
 	case methodReturn = 2
 }
@@ -592,7 +592,7 @@ class RPCConnection: NSObject, StreamDelegate {
 				self.readPos = 0
 				self.readNeeds = 4
 				self.readState = .readingHeader
-				if case .failure(_) = self.gotMessage(msg: message) {
+				if case .failure(let error) = self.gotMessage(msg: message) {
 					self.disconnect()
 				}
 				break
@@ -644,11 +644,11 @@ class RPCConnection: NSObject, StreamDelegate {
 	fileprivate func gotMessage(msg: readableMessage) -> Result<Void, RPCError> {
 		do {
 			let mtraw = try msg.readVarUInt().get()
-			guard let mt = RPCMessageType6(rawValue: mtraw) else {
+			guard let mt = RPCMessageType(rawValue: mtraw) else {
 				return .failure(RPCError.protocolError)
 			}
 			switch mt {
-			case RPCMessageType6.methodCall:
+			case RPCMessageType.methodCall:
 				let callID = try msg.readVarUInt().get();
 				let protocolID = try msg.readVarUInt().get();
 				let server = self.servers[protocolID]
@@ -659,7 +659,7 @@ class RPCConnection: NSObject, StreamDelegate {
 				let resp = try server!.handle(methodID: methodID, rmsg: msg).get();
 
 				let wmsg = writableMessage()
-				wmsg.writeVarUInt(value: RPCMessageType6.methodReturn.rawValue)
+				wmsg.writeVarUInt(value: RPCMessageType.methodReturn.rawValue)
 				wmsg.writeVarUInt(value: callID)
 				wmsg.writeVarUInt(value: resp.id())
 				if case .failure(let error) = resp.encode(wmsg) {
@@ -669,20 +669,19 @@ class RPCConnection: NSObject, StreamDelegate {
 
 				self.send(wmsg: wmsg)
 				return .success(())
-			case RPCMessageType6.methodReturn:
+			case RPCMessageType.methodReturn:
 				let callID = try msg.readVarUInt().get();
 				let callSlot = self.findAndReleaseCallSlot(id: callID)
 				if callSlot == nil {
 					return .failure(RPCError.protocolError)
 				}
 				try callSlot!.callback(msg).get()
-				break
+				return .success(())
 			}
 		} catch {
 			self.disconnect()
 			return .failure(RPCError.protocolError)
 		}
-		return .failure(RPCError.eof)
 	}
 }
 
@@ -849,11 +848,10 @@ protocol {{ required .Name | capitalize }}Server {
 	// {{ required .Description | capitalize }}
 	func {{ required .Name | capitalize }}(
 		{{- $input := required .Input -}}
-		{{- range $idx, $v := required .Input }}{{ required $v.Name }}: {{ required $v.T.SwiftType }}{{- if ne (add (len $input) -1) $idx }}, {{ end }}{{- end }}
-	) -> Result<(
+		{{- range $idx, $v := required .Input }}{{ required $v.Name }}: {{ required $v.T.SwiftType }}{{- if ne (add (len $input) -1) $idx }}, {{ end }}{{- end }}) -> Result<(
 		{{- $output := required .Output -}}
 		{{- range $idx, $v := required .Output }}{{ required $v.T.SwiftType }}{{- if ne (add (len $input) -1) $idx }}, {{ end }}{{- end }}), RPCError>
-	{{ end }}
+{{ end }}
 }
 
 class RPC{{ required .Name | capitalize }}Server : RPCCallServer {
@@ -889,6 +887,7 @@ class RPC{{ required .Name | capitalize }}Server : RPCCallServer {
 	{{- range required .Methods }}
 
 	func handle{{ required .Name | capitalize }}(_ rmsg: readableMessage) -> Result<RPCMessage, RPCError> {
+		{{ if ne (len .Input) 0 -}}
 		// Get the message class for the call and decode into it
 		let args: {{ format "%sMethod%sCall" (required $protoName) (required .Name | capitalize) }}
 		switch {{ format "%sMethod%sCall" (required $protoName) (required .Name | capitalize) }}.decode(rmsg) {
@@ -897,6 +896,7 @@ class RPC{{ required .Name | capitalize }}Server : RPCCallServer {
 		case .failure(let error):
 			return .failure(error)
 		}
+		{{ end -}}
 
 		// Call the user-provided implementation
 		let res = self.impl.{{ required .Name }}(
@@ -905,14 +905,16 @@ class RPC{{ required .Name | capitalize }}Server : RPCCallServer {
 				{{ $val.Name }}: args.{{ $val.Name }}{{- if ne (add (len $input) -1) $idx }}, {{ end }}
 				{{- end }})
 
-		// Unapck the return Result<tuple, Error>
+		// Unpack the return Result<tuple, Error>
 		switch res {
-		case .success(let res):
+		case .success({{ if ne (len .Output) 0 }}let res{{ end }}):
+			// Construct the return message
+			{{- if ne (len .Output) 0 }}
 			let ({{ $input := required .Input -}}
 				{{- range $idx, $val := required .Input -}}
 				{{ $val.Name }}{{- if ne (add (len $input) -1) $idx }}, {{ end }}
 				{{- end -}}) = res
-			// Construct the return message
+			{{- end }}
 			let retarg = {{ format "%sMethod%sReturn" (required $protoName) (required .Name | capitalize) }}(
 					{{- $input := required .Output -}}
 					{{- range $idx, $val := required .Output -}}
@@ -945,7 +947,7 @@ class RPC{{ required .Name | capitalize }}Client {
 
 	{{- $protoName := required .Name -}}
 	{{- $protoID := required .ID -}}
-	{{ range required .Methods }}
+	{{- range required .Methods }}
 
 	func {{ required .Name }}(
 		{{- $input := required .Input }}
@@ -961,6 +963,7 @@ class RPC{{ required .Name | capitalize }}Client {
 			}
 			switch resultTypeID {
 			case protocol{{ required $protoName | capitalize }}Method.{{ required .Name | capitalize }}.rawValue:
+				{{- if ne (len .Output) 0 }}
 				let ret: {{ format "%sMethod%sReturn" (required $protoName) (required .Name | capitalize) }}
 				switch {{ format "%sMethod%sReturn" (required $protoName) (required .Name | capitalize) }}.decode(rmsg) {
 				case .success(let v):
@@ -968,6 +971,7 @@ class RPC{{ required .Name | capitalize }}Client {
 				case .failure(let error):
 					return .failure(error)
 				}
+				{{- end }}
 				callback(.success(({{- $output := required .Output }}{{- range $idx, $v := required .Output }}ret.{{ required .Name }}{{- if ne (add (len $output) -1) $idx }}, {{ end }}{{ end }})))
 				return .success(())
 			case UInt64.max:
@@ -988,10 +992,11 @@ class RPC{{ required .Name | capitalize }}Client {
 		let __rpckit2_wmsg = writableMessage()
 
 		// Write the protocol header
-		__rpckit2_wmsg.writeVarUInt(value: RPCMessageType6.methodCall.rawValue)
+		__rpckit2_wmsg.writeVarUInt(value: RPCMessageType.methodCall.rawValue)
 		__rpckit2_wmsg.writeVarUInt(value: __rpckit2_callID)
 		__rpckit2_wmsg.writeVarUInt(value: {{ required $protoID }})
 		__rpckit2_wmsg.writeVarUInt(value: protocol{{ required $protoName | capitalize }}Method.{{ required .Name }}.rawValue)
+		{{- if ne (len .Input) 0 }}
 
 		let __rpckit2_callarg = {{ format "%sMethod%sCall" (required $protoName) (required .Name | capitalize) }}(
 					{{- $input := required .Input -}}
@@ -1001,38 +1006,38 @@ class RPC{{ required .Name | capitalize }}Client {
 		if case .failure(let error) = __rpckit2_callarg.encode(__rpckit2_wmsg) {
 			return .failure(error)
 		}
+		{{- end }}
+
 		__rpckit2_wmsg.finish()
 
 		self.conn.send(wmsg: __rpckit2_wmsg)
 		return .success(())
 	}
 
-	{{ end }}
+{{ end -}}
 }
 {{- end }}
 
 
 {{- define "swift-pb/serialization" -}}
 {{- /* (De-)Serialization of messages */ -}}
-{{ $typeName := required .TypeName }}
+{{- $typeName := required .TypeName -}}
 {{- if eq (len .Fields) 0 -}}
 {{- /*  Pretty implementation of message with 0 args */ -}}
 
-class {{ required $typeName }} : RPCMessage {
+fileprivate class {{ required $typeName }} : RPCMessage {
 	init() {}
-	func RPCEncode(wmsg: writableMessage) -> Result<(), RPCError> { return .success(()) }
-	func RPCDecode(rmsg: readableMessage) -> Result<(), RPCError> { return .success(()) }
+	func encode(_ wmsg: writableMessage) -> Result<(), RPCError> { return .success(()) }
+	static func decode(_ rmsg: readableMessage) -> Result<RPCMessage, RPCError> { return .success({{ required $typeName }}()) }
 	{{ if .TypeID -}}
-	func (s *{{ required .TypeName }}) id() -> UInt64 {
-		return {{ required .TypeID }}
-	}
+	func id() -> UInt64 { return {{ required .TypeID }} }
 	{{- end }}
 }
 
 {{- else -}}
 {{- /*  Arbitrary argument implementation */ -}}
 
-class {{ required $typeName }} : RPCMessage {
+fileprivate class {{ required $typeName }} : RPCMessage {
 	{{- range required .Fields }}
     var {{ required .Name }}: {{ .T.SwiftType }}
 	{{- end }}
@@ -1069,7 +1074,7 @@ class {{ required $typeName }} : RPCMessage {
 	}
 
 	static func decode(_ __rpckit2_rmsg: readableMessage) -> Result<RPCMessage, RPCError> {
-		{{ range required .Fields }}
+		{{- range required .Fields }}
 		var {{ required .Name }}: {{ .T.SwiftType }} = {{ .T.SwiftDefault }}
 		{{- end }}
 		do {
@@ -1096,7 +1101,7 @@ class {{ required $typeName }} : RPCMessage {
 	}
 }
 {{- end -}}
-{{- end }}
+{{- end -}}
 
 {{ range required .Protocols }}
 	{{- $protoName := required .Name -}}

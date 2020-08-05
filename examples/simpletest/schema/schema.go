@@ -60,6 +60,25 @@ func main() {
 	})
 	server2 := rpckit2.NewProtocol("wowo", 2)
 
+	server2.AddMethod(rpckit2.Method{
+		ID: 1, Name: "SimpleTest2",
+		Description: "The simplest of tests",
+		Input: []rpckit2.Property{
+			rpckit2.Property{ID: 1, T: rpckit2.Int(), Name: "vinteger"},
+		},
+		Output: []rpckit2.Property{
+			rpckit2.Property{ID: 1, T: rpckit2.Int(), Name: "vinteger"},
+		},
+	})
+
+	server2.AddMethod(rpckit2.Method{
+		ID: 2, Name: "SimpleTest3",
+		Description: "The simplest of tests",
+		Input: []rpckit2.Property{
+		},
+		Output: []rpckit2.Property{
+		},
+	})
 	if err := (rpckit2.SwiftGenerator{
 		Protocols: []*rpckit2.Protocol{
 			server1,
