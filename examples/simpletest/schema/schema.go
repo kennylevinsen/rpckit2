@@ -11,16 +11,16 @@ import (
 
 func main() {
 
-	backend := rpckit2.NewProtocol("Backend", 1)
-	/*backend.AddStruct(rpckit2.Struct{
+	backend := rpckit2.NewProtocol("Backend", 3)
+	backend.AddStruct(rpckit2.Struct{
 		Name:        "ChannelInfo",
 		Description: "Channel info object to contain details of channel",
 		Fields: []rpckit2.Property{
 			rpckit2.Property{ID: 1, T: rpckit2.Int64(), Name: "ID"},
 			rpckit2.Property{ID: 2, T: rpckit2.String(), Name: "Title"},
 		},
-	})*/
-/*
+	})
+
 	backend.AddMethod(rpckit2.Method{
 		ID: 1, Name: "Authenticate",
 		Description: "Authenticate using either (token or e-mail).",
@@ -40,7 +40,7 @@ func main() {
 		Output: []rpckit2.Property{
 			//TODO: an array of channelinfo(?) objects
 			rpckit2.Property{ID: 1, T: rpckit2.String(), Name: "greeting"},
-			//rpckit2.Property{ID: 2, T: rpckit2.Array(rpckit2.StructName("ChannelInfo")), Name: "Channels"},
+			rpckit2.Property{ID: 2, T: rpckit2.Array(rpckit2.StructName("ChannelInfo")), Name: "Channels"},
 		},
 	})
 
@@ -68,11 +68,11 @@ func main() {
 		ID: 5, Name: "RegisterNotifications",
 		Description: "Register for push notifications",
 		Input: []rpckit2.Property{
-			rpckit2.Property{ID: 1, T: rpckit2.String(), Name: "token"},
+			// rpckit2.Property{ID: 1, T: rpckit2.String(), Name: "token"},
 			rpckit2.Property{ID: 2, T: rpckit2.String(), Name: "name"},
 			rpckit2.Property{ID: 3, T: rpckit2.String(), Name: "devicetype"},
 		},
-	})*/
+	})
 	// TODO: Add update avatar method.
 	/*server1.AddMethod(rpckit2.Method{
 		ID: 3, Name: "TestMethod",
@@ -105,6 +105,7 @@ func main() {
 			rpckit2.Property{ID: 5, T: rpckit2.Bool(), Name: "vbool"},
 			rpckit2.Property{ID: 6, T: rpckit2.String(), Name: "vstring"},
 			rpckit2.Property{ID: 7, T: rpckit2.Bytes(), Name: "vbytes"},
+			rpckit2.Property{ID: 8, T: rpckit2.StructName("ChannelInfo"), Name: "Channels"},
 		},
 		Output: []rpckit2.Property{
 			rpckit2.Property{ID: 1, T: rpckit2.Int(), Name: "vinteger"},
@@ -114,6 +115,7 @@ func main() {
 			rpckit2.Property{ID: 5, T: rpckit2.Bool(), Name: "vbool"},
 			rpckit2.Property{ID: 6, T: rpckit2.String(), Name: "vstring"},
 			rpckit2.Property{ID: 7, T: rpckit2.Bytes(), Name: "vbytes"},
+			rpckit2.Property{ID: 8, T: rpckit2.StructName("ChannelInfo"), Name: "Channels"},
 		},
 	})
 
@@ -128,6 +130,7 @@ func main() {
 			rpckit2.Property{ID: 5, T: rpckit2.Array(rpckit2.Bool()), Name: "vbool"},
 			rpckit2.Property{ID: 6, T: rpckit2.Array(rpckit2.String()), Name: "vstring"},
 			rpckit2.Property{ID: 7, T: rpckit2.Array(rpckit2.Bytes()), Name: "vbytes"},
+			rpckit2.Property{ID: 8, T: rpckit2.Array(rpckit2.StructName("ChannelInfo")), Name: "Channels"},
 		},
 		Output: []rpckit2.Property{
 			rpckit2.Property{ID: 1, T: rpckit2.Array(rpckit2.Int()), Name: "vinteger"},
@@ -137,6 +140,7 @@ func main() {
 			rpckit2.Property{ID: 5, T: rpckit2.Array(rpckit2.Bool()), Name: "vbool"},
 			rpckit2.Property{ID: 6, T: rpckit2.Array(rpckit2.String()), Name: "vstring"},
 			rpckit2.Property{ID: 7, T: rpckit2.Array(rpckit2.Bytes()), Name: "vbytes"},
+			rpckit2.Property{ID: 8, T: rpckit2.Array(rpckit2.StructName("ChannelInfo")), Name: "Channels"},
 		},
 	})
 	server2 := rpckit2.NewProtocol("wowo", 2)
@@ -146,10 +150,12 @@ func main() {
 		Description: "The simplest of tests",
 		Input: []rpckit2.Property{
 			rpckit2.Property{ID: 1, T: rpckit2.String(), Name: "token"},
+			rpckit2.Property{ID: 2, T: rpckit2.Array(rpckit2.StructName("ChannelInfo")), Name: "Channels"},
 			// rpckit2.Property{ID: 2, T: rpckit2.String(), Name: "email"},
 		},
 		Output: []rpckit2.Property{
 			rpckit2.Property{ID: 1, T: rpckit2.String(), Name: "token"},
+			rpckit2.Property{ID: 2, T: rpckit2.Array(rpckit2.StructName("ChannelInfo")), Name: "Channels"},
 			//TOOD: More details about self: avatar, username, etc...
 		},
 	})
@@ -176,6 +182,7 @@ func main() {
 	if err := (rpckit2.GoGenerator{
 		Protocols: []*rpckit2.Protocol{
 			server1,
+			backend,
 		},
 		PackageName: "main",
 	}.Generate("../schema.generated")); err != nil {

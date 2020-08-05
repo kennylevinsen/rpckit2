@@ -214,7 +214,7 @@ func (t *structType) SwiftType() string {
 }
 
 func (t *structType) SwiftDefault() string {
-	return "nil"
+	return strings.Title(t.name) + "()"
 }
 
 type Property struct {

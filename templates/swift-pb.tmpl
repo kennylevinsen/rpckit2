@@ -41,13 +41,14 @@ class readableMessage {
 			return nil
 		}
 		self.buf = slice
-		self.pos = 4
-		self.len = Int( Data(slice[..<4]).withUnsafeBytes { $0.load(as: UInt32.self) }.bigEndian )
+		self.pos = slice.startIndex + 4
+		self.len = Int( Data(slice[slice.startIndex..<slice.startIndex+4]).withUnsafeBytes { $0.load(as: UInt32.self) }.bigEndian )
 	}
 
-	init?(embeddedSlice: ArraySlice<UInt8>) {
+	init(embeddedSlice: ArraySlice<UInt8>) {
 		self.buf = embeddedSlice
-		self.len = buf.count
+		self.len = self.buf.startIndex + buf.count
+		self.pos = self.buf.startIndex
 	}
 
 	func readBytes() -> Result<ArraySlice<UInt8>, RPCError> {
@@ -75,6 +76,15 @@ class readableMessage {
 			} else {
 				return .failure(RPCError.protocolError)
 			}
+		case .failure(let error):
+			return .failure(error)
+		}
+	}
+
+	func readEmbeddedMessage() -> Result<readableMessage, RPCError> {
+		switch self.readBytes() {
+		case .success(let val):
+			return .success(readableMessage(embeddedSlice: val))
 		case .failure(let error):
 			return .failure(error)
 		}
@@ -225,6 +235,15 @@ class writableMessage {
 		}
 	}
 
+	init(embedded: Bool) {
+		self.buf.reserveCapacity(1024)
+		if !embedded {
+			for _ in 0..<4 {
+				self.buf.append(0)
+			}
+		}
+	}
+
 	init(capacity: Int) {
 		self.buf.reserveCapacity(capacity)
 		for _ in 0..<4 {
@@ -367,7 +386,7 @@ class writableMessage {
 	}
 
 	func writePBMessage(fieldNumber: UInt64, msg: writableMessage) {
-		self.writeBytes(bytes: msg.buf[...])
+		self.writePBBytes(fieldNumber: fieldNumber, value: msg.buf[...])
 	}
 }
 
@@ -736,6 +755,18 @@ for v in {{ required .Accessor }} {
 }
 {{- end }}
 
+{{- define "swift-pb/marshal-struct" -}}
+{{- /* Marshal struct, using custom encoder */ -}}
+do {
+	let em = writableMessage(embedded: true)
+    let vs: rpcGlobalStruct{{ required .Field.SwiftType }} = rpcGlobalStruct{{ required .Field.SwiftType }}({{ required .Accessor }})
+	if case .failure(let error) = vs.encode(em) {
+		return .failure(error)
+	}
+    {{ required .Message }}.writePBMessage(fieldNumber: {{ required .ID}}, msg: em)
+}
+{{- end }}
+
 {{- define "swift-pb/marshal" -}}
 {{- /* Switch to check the type of the current field and dispatch to the proper marshaller */ -}}
 {{- if .Field.IsStruct -}}{{- template "swift-pb/marshal-struct" . -}}
@@ -763,6 +794,17 @@ let v: {{ required .Field.InnerValue.SwiftType }}
 {{ template "swift-pb/unmarshal" dict "Field" .Field.InnerValue "Accessor" "v" "Message" $.Message "ProtoName" .ProtoName }}
 {{ required .Accessor }}.append(v)
 {{- end }}
+
+{{ define "swift-pb/unmarshal-struct" -}}
+{{- /* Global struct, handled by a custom decoder */ -}}
+let em = try {{ required .Message }}.readEmbeddedMessage().get()
+switch rpcGlobalStruct{{ required .Field.SwiftType }}.decode(em) {
+case .success(let val):
+	{{ required .Accessor }} = (val as! rpcGlobalStruct{{ required .Field.SwiftType }}).v
+case .failure(let error):
+	return .failure(error)
+}
+{{ end }}
 
 {{- define "swift-pb/unmarshal" -}}
 {{- /* Switch to check the type of the current field and dispatch to the proper unmarshaller */ -}}
@@ -942,38 +984,42 @@ class RPC{{ required .Name | capitalize }}Client {
 		{{- $input := required .Input }}
 		{{- range $idx, $v := required .Input }}{{ required $v.Name}}: {{ required $v.T.SwiftType }}, {{ end }}callback: @escaping (Result<(
 		{{- $output := required .Output }}{{- range $idx, $v := required .Output }}{{ required $v.T.SwiftType }}{{- if ne (add (len $output) -1) $idx }}, {{ end }}
-		{{- end }}), Error>) -> ()) -> Result<Void, Error> {
+		{{- end }}), Error>) -> ()) {
 
 		// Names prefixed with __rpckit2 to avoid argument name collisions
 
 		let __rpckit2_callID = self.conn.acquireCallSlot(callback: { (rmsg) -> Result<Void, RPCError> in
 			guard let resultTypeID = try? rmsg.readVarUInt().get() else {
-				return .failure(.protocolError)
+				callback(.failure(RPCError.protocolError))
+				return .failure(RPCError.protocolError)
 			}
 			switch resultTypeID {
 			case protocol{{ required $protoName | capitalize }}Method.{{ required .Name | capitalize }}.rawValue:
-				{{- if ne (len .Output) 0 }}
-				let ret: {{ format "%sMethod%sReturn" (required $protoName) (required .Name | capitalize) }}
 				switch {{ format "%sMethod%sReturn" (required $protoName) (required .Name | capitalize) }}.decode(rmsg) {
-				case .success(let v):
-					ret = v as! {{ format "%sMethod%sReturn" (required $protoName) (required .Name | capitalize) }}
+				case .success({{ if ne (len .Output) 0 }}let v{{ else }}_{{ end }}):
+					{{- if ne (len .Output) 0 }}
+					let ret = v as! {{ format "%sMethod%sReturn" (required $protoName) (required .Name | capitalize) }}
+					callback(.success(({{- $output := required .Output }}{{- range $idx, $v := required .Output }}ret.{{ required .Name }}{{- if ne (add (len $output) -1) $idx }}, {{ end }}{{ end }})))
+					{{- else }}
+					callback(.success(()))
+					{{- end }}
+					return .success(())
 				case .failure(let error):
+					callback(.failure(error))
 					return .failure(error)
 				}
-				{{- end }}
-				callback(.success(({{- $output := required .Output }}{{- range $idx, $v := required .Output }}ret.{{ required .Name }}{{- if ne (add (len $output) -1) $idx }}, {{ end }}{{ end }})))
-				return .success(())
 			case UInt64.max:
-				let ret: rpcError
 				switch rpcError.decode(rmsg) {
 				case .success(let v):
-					ret = v as! rpcError
+					let ret = v as! rpcError
+					callback(.failure(RPCError.applicationError(ret.error)))
+					return .success(())
 				case .failure(let error):
+					callback(.failure(error))
 					return .failure(error)
 				}
-				callback(.failure(RPCError.applicationError(ret.error)))
-				return .success(())
 			default:
+				callback(.failure(RPCError.protocolError))
 				return .failure(RPCError.protocolError)
 			}
 		})
@@ -993,14 +1039,15 @@ class RPC{{ required .Name | capitalize }}Client {
 					{{ $val.Name }}{{- if ne (add (len $input) -1) $idx }}, {{ end }}
 					{{- end }}))
 		if case .failure(let error) = __rpckit2_callarg.encode(__rpckit2_wmsg) {
-			return .failure(error)
+				callback(.failure(RPCError.protocolError))
+			callback(.failure(error))
+			return ()
 		}
 		{{- end }}
 
 		__rpckit2_wmsg.finish()
 
 		self.conn.send(wmsg: __rpckit2_wmsg)
-		return .success(())
 	}
 
 {{ end }}
@@ -1062,7 +1109,7 @@ fileprivate class {{ required $typeName }} : RPCMessage {
 	static func decode(_ __rpckit2_rmsg: readableMessage) -> Result<RPCMessage, RPCError> {
 		{{ if eq (len .Fields) 1 -}}{{ range required .Fields }}var args: {{ .T.SwiftType }} = {{ .T.SwiftDefault }}{{ end }}
 		{{- else -}}
-		var args: ({{- $fields := required .Fields}}{{- range $idx, $v := required .Fields }}{{ required $v.T.SwiftType }}{{- if ne (add (len $fields) -1) $idx }}, {{ end }}{{ end }}) = ({{- $fields := required .Fields}}{{- range $idx, $v := required .Fields }}{{ required $v.T.SwiftDefault }}{{- if ne (add (len $fields) -1) $idx }}, {{ end }}{{ end }})
+		var args: ({{- $fields := required .Fields}}{{- range $idx, $v := required .Fields }}{{ required $v.Name }}: {{ required $v.T.SwiftType }}{{- if ne (add (len $fields) -1) $idx }}, {{ end }}{{ end }}) = ({{- $fields := required .Fields}}{{- range $idx, $v := required .Fields }}{{ required $v.T.SwiftDefault }}{{- if ne (add (len $fields) -1) $idx }}, {{ end }}{{ end }})
 		{{- end }}
 		do {
 			while true {
@@ -1079,7 +1126,7 @@ fileprivate class {{ required $typeName }} : RPCMessage {
 				let tag = try __rpckit2_rmsg.readVarUInt().get()
 				switch tag {
 				{{- range .Fields }}
-				{{- $accessor := format "args.%d" (add64 (required .ID) -1) }}
+				{{- $accessor := format "args.%s" (required .Name) }}
 				case ({{ required .ID }} << 3 | {{ if .T.IsArray }}{{ template "swift-pb/property-to-wiretype" .T.InnerValue.String}}{{ else if .T.IsMarshalled}}{{ template "swift-pb/property-to-wiretype" "String"}}{{ else }}{{ template "swift-pb/property-to-wiretype" .T.String}}{{ end }}.rawValue):
 {{ template "swift-pb/unmarshal" dict "Field" .T "Accessor" $accessor "Message" "__rpckit2_rmsg" "ProtoName" $.ProtoName }}
 					break
@@ -1101,6 +1148,101 @@ fileprivate class {{ required $typeName }} : RPCMessage {
 }
 {{- end -}}
 {{- end -}}
+
+{{ range required .Protocols }}
+{{ range required .Structs }}
+{{ $struct_name := .Name }}
+// {{ required .Description | capitalize }}
+public class {{ required .Name | capitalize }} {
+{{- range required .Fields }}
+    {{- if .Description }}
+    // {{ required .Description | capitalize }}
+    {{ end }}
+    public var {{ required .Name | capitalize }}: {{ .T.SwiftType }} = {{ .T.SwiftDefault }}
+{{- end }}
+}
+
+{{ end }}
+{{ end }}
+
+
+{{- define "swift-pb/serialization-struct" -}}
+{{- /* (De-)Serialization of messages */ -}}
+{{- $typeName := required .TypeName -}}
+{{- if eq (len .Fields) 0 -}}
+{{- /*  Pretty implementation of message with 0 args */ -}}
+
+fileprivate class {{ required $typeName }} : RPCMessage {
+	var s: {{ required .Name | capitalize }}
+	init() {}
+	func encode(_ wmsg: writableMessage) -> Result<(), RPCError> { return .success(()) }
+	static func decode(_ rmsg: readableMessage) -> Result<RPCMessage, RPCError> { return .success({{ required $typeName }}()) }
+	{{ if .TypeID -}}
+	func id() -> UInt64 { return {{ required .TypeID }} }
+	{{- end }}
+}
+
+{{- else -}}
+{{- /*  Arbitrary argument implementation */ -}}
+
+fileprivate class {{ required $typeName }} : RPCMessage {
+	fileprivate var v: {{ required .Name | capitalize }}
+
+	init(_ arg: {{ required .Name | capitalize }}) {
+		v = arg
+	}
+
+	func id() -> UInt64 {
+		return {{ required .TypeID }}
+	}
+
+	func encode(_ __rpckit2_wmsg: writableMessage) -> Result<(), RPCError> {
+		// Write the auto-generated message
+		{{- range required .Fields }}
+		{{- $accessor := format "self.v.%s" (required .Name) }}
+{{ template "swift-pb/marshal" dict "Field" .T "Accessor" $accessor  "Message" "__rpckit2_wmsg" "ID" .ID "ProtoName" $.ProtoName }}
+		{{- end }}
+		return .success(())
+	}
+
+	static func decode(_ __rpckit2_rmsg: readableMessage) -> Result<RPCMessage, RPCError> {
+		let args: {{ required .Name | capitalize }} = {{ required .Name | capitalize }}()
+		do {
+			while true {
+				let tag = try __rpckit2_rmsg.readVarUInt().get()
+				switch tag {
+				{{- range .Fields }}
+				{{- $accessor := format "args.%s" (required .Name) }}
+				case ({{ required .ID }} << 3 | {{ if .T.IsArray }}{{ template "swift-pb/property-to-wiretype" .T.InnerValue.String}}{{ else if .T.IsMarshalled}}{{ template "swift-pb/property-to-wiretype" "String"}}{{ else }}{{ template "swift-pb/property-to-wiretype" .T.String}}{{ end }}.rawValue):
+{{ template "swift-pb/unmarshal" dict "Field" .T "Accessor" $accessor "Message" "__rpckit2_rmsg" "ProtoName" $.ProtoName }}
+					break
+				{{- end }}
+				default:
+					return .failure(RPCError.protocolError)
+				}
+			}
+		} catch RPCError.eof {
+			// Not a problem
+		} catch let error as RPCError {
+			return .failure(error)
+		} catch {
+			return .failure(RPCError.protocolError)
+		}
+		return .success({{ required $typeName }}(args))
+	}
+}
+{{- end -}}
+{{- end -}}
+
+{{ range required .Protocols }}
+{{- $protoName := required .Name -}}
+{{- $protoID := required .ID -}}
+{{ range required .Structs }}
+{{ if ifnotexists (format "rpcGlobalStruct%s" (required .Name | capitalize)) -}}
+{{ template "swift-pb/serialization-struct" dict "TypeName" (format "rpcGlobalStruct%s" (required .Name | capitalize)) "Name" .Name "TypeID" 0 "Fields" .Fields "ProtoName" $protoName }}
+{{- end }}
+{{ end }}
+{{ end }}
 
 {{ range required .Protocols }}
 	{{- $protoName := required .Name -}}

@@ -37,13 +37,14 @@ class readableMessage {
 			return nil
 		}
 		self.buf = slice
-		self.pos = 4
-		self.len = Int( Data(slice[..<4]).withUnsafeBytes { $0.load(as: UInt32.self) }.bigEndian )
+		self.pos = slice.startIndex + 4
+		self.len = Int( Data(slice[slice.startIndex..<slice.startIndex+4]).withUnsafeBytes { $0.load(as: UInt32.self) }.bigEndian )
 	}
 
-	init?(embeddedSlice: ArraySlice<UInt8>) {
+	init(embeddedSlice: ArraySlice<UInt8>) {
 		self.buf = embeddedSlice
-		self.len = buf.count
+		self.len = self.buf.startIndex + buf.count
+		self.pos = self.buf.startIndex
 	}
 
 	func readBytes() -> Result<ArraySlice<UInt8>, RPCError> {
@@ -71,6 +72,15 @@ class readableMessage {
 			} else {
 				return .failure(RPCError.protocolError)
 			}
+		case .failure(let error):
+			return .failure(error)
+		}
+	}
+
+	func readEmbeddedMessage() -> Result<readableMessage, RPCError> {
+		switch self.readBytes() {
+		case .success(let val):
+			return .success(readableMessage(embeddedSlice: val))
 		case .failure(let error):
 			return .failure(error)
 		}
@@ -221,6 +231,15 @@ class writableMessage {
 		}
 	}
 
+	init(embedded: Bool) {
+		self.buf.reserveCapacity(1024)
+		if !embedded {
+			for _ in 0..<4 {
+				self.buf.append(0)
+			}
+		}
+	}
+
 	init(capacity: Int) {
 		self.buf.reserveCapacity(capacity)
 		for _ in 0..<4 {
@@ -363,7 +382,7 @@ class writableMessage {
 	}
 
 	func writePBMessage(fieldNumber: UInt64, msg: writableMessage) {
-		self.writeBytes(bytes: msg.buf[...])
+		self.writePBBytes(fieldNumber: fieldNumber, value: msg.buf[...])
 	}
 }
 
@@ -691,6 +710,14 @@ fileprivate enum protocolWowoMethod: UInt64 {
 	case SimpleTest3 = 2
 }
 
+fileprivate enum protocolBackendMethod: UInt64 {
+	case Authenticate = 1
+	case ListChannels = 2
+	case SetAvatar = 3
+	case SetName = 4
+	case RegisterNotifications = 5
+}
+
 
 
 class rpcError : RPCMessage {
@@ -749,10 +776,10 @@ class rpcError : RPCMessage {
 // The PingpongServer protocol defines the pingpong protocol.
 protocol PingpongServer {
 	// The simplest of tests
-	func SimpleTest(vinteger: Int64, vint64: Int64, vfloat: Float, vdouble: Double, vbool: Bool, vstring: String, vbytes: ArraySlice<UInt8>) -> Result<(Int64, Int64, Float, Double, Bool, String, ArraySlice<UInt8>), RPCError>
+	func SimpleTest(vinteger: Int64, vint64: Int64, vfloat: Float, vdouble: Double, vbool: Bool, vstring: String, vbytes: ArraySlice<UInt8>, Channels: ChannelInfo) -> Result<(Int64, Int64, Float, Double, Bool, String, ArraySlice<UInt8>, ChannelInfo), RPCError>
 
 	// The simplest of tests, but with arrays
-	func ArrayTest(vinteger: [Int64], vint64: [Int64], vfloat: [Float], vdouble: [Double], vbool: [Bool], vstring: [String], vbytes: [ArraySlice<UInt8>]) -> Result<([Int64], [Int64], [Float], [Double], [Bool], [String], [ArraySlice<UInt8>]), RPCError>
+	func ArrayTest(vinteger: [Int64], vint64: [Int64], vfloat: [Float], vdouble: [Double], vbool: [Bool], vstring: [String], vbytes: [ArraySlice<UInt8>], Channels: [ChannelInfo]) -> Result<([Int64], [Int64], [Float], [Double], [Bool], [String], [ArraySlice<UInt8>], [ChannelInfo]), RPCError>
 
 }
 
@@ -790,7 +817,7 @@ class RPCPingpongServer : RPCCallServer {
 			return .failure(error)
 		}
 		// Call the user-provided implementation
-		let res = self.impl.SimpleTest(vinteger: args.vinteger, vint64: args.vint64, vfloat: args.vfloat, vdouble: args.vdouble, vbool: args.vbool, vstring: args.vstring, vbytes: args.vbytes)
+		let res = self.impl.SimpleTest(vinteger: args.vinteger, vint64: args.vint64, vfloat: args.vfloat, vdouble: args.vdouble, vbool: args.vbool, vstring: args.vstring, vbytes: args.vbytes, Channels: args.Channels)
 
 		// Unpack the return Result<tuple, Error>
 		switch res {
@@ -813,7 +840,7 @@ class RPCPingpongServer : RPCCallServer {
 			return .failure(error)
 		}
 		// Call the user-provided implementation
-		let res = self.impl.ArrayTest(vinteger: args.vinteger, vint64: args.vint64, vfloat: args.vfloat, vdouble: args.vdouble, vbool: args.vbool, vstring: args.vstring, vbytes: args.vbytes)
+		let res = self.impl.ArrayTest(vinteger: args.vinteger, vint64: args.vint64, vfloat: args.vfloat, vdouble: args.vdouble, vbool: args.vbool, vstring: args.vstring, vbytes: args.vbytes, Channels: args.Channels)
 
 		// Unpack the return Result<tuple, Error>
 		switch res {
@@ -830,7 +857,7 @@ class RPCPingpongServer : RPCCallServer {
 // The WowoServer protocol defines the wowo protocol.
 protocol WowoServer {
 	// The simplest of tests
-	func SimpleTest2(token: String) -> Result<(String), RPCError>
+	func SimpleTest2(token: String, Channels: [ChannelInfo]) -> Result<(String, [ChannelInfo]), RPCError>
 
 	// The simplest of tests
 	func SimpleTest3() -> Result<(), RPCError>
@@ -871,7 +898,7 @@ class RPCWowoServer : RPCCallServer {
 			return .failure(error)
 		}
 		// Call the user-provided implementation
-		let res = self.impl.SimpleTest2(token: args.token)
+		let res = self.impl.SimpleTest2(token: args.token, Channels: args.Channels)
 
 		// Unpack the return Result<tuple, Error>
 		switch res {
@@ -902,6 +929,21 @@ class RPCWowoServer : RPCCallServer {
 
 // The BackendServer protocol defines the Backend protocol.
 protocol BackendServer {
+	// Authenticate using either (token or e-mail).
+	func Authenticate(token: String, email: String) -> Result<(String), RPCError>
+
+	// List my active channels
+	func ListChannels() -> Result<(String, [ChannelInfo]), RPCError>
+
+	// Set the avatar for the currently authenticated user
+	func SetAvatar(image: ArraySlice<UInt8>) -> Result<(), RPCError>
+
+	// Set the name of the current user
+	func SetName(name: String) -> Result<(), RPCError>
+
+	// Register for push notifications
+	func RegisterNotifications(name: String, devicetype: String) -> Result<(), RPCError>
+
 }
 
 class RPCBackendServer : RPCCallServer {
@@ -912,12 +954,133 @@ class RPCBackendServer : RPCCallServer {
 	}
 
 	func id() -> UInt64 {
-		return 1
+		return 3
 	}
 
 	func handle(methodID: UInt64, rmsg: readableMessage) -> Result<RPCMessage, RPCError> {
-		return .failure(RPCError.protocolError)
-		
+		guard let method = protocolBackendMethod(rawValue: methodID) else {
+			return .failure(RPCError.protocolError)
+		}
+
+		switch method {
+		case protocolBackendMethod.Authenticate:
+			return self.handleAuthenticate(rmsg)
+		case protocolBackendMethod.ListChannels:
+			return self.handleListChannels(rmsg)
+		case protocolBackendMethod.SetAvatar:
+			return self.handleSetAvatar(rmsg)
+		case protocolBackendMethod.SetName:
+			return self.handleSetName(rmsg)
+		case protocolBackendMethod.RegisterNotifications:
+			return self.handleRegisterNotifications(rmsg)
+		}
+	}
+
+	func handleAuthenticate(_ rmsg: readableMessage) -> Result<RPCMessage, RPCError> {
+		// Get the message class for the call and decode into it
+		let args: BackendMethodAuthenticateCall
+		switch BackendMethodAuthenticateCall.decode(rmsg) {
+		case .success(let v):
+			args = v as! BackendMethodAuthenticateCall
+		case .failure(let error):
+			return .failure(error)
+		}
+		// Call the user-provided implementation
+		let res = self.impl.Authenticate(token: args.token, email: args.email)
+
+		// Unpack the return Result<tuple, Error>
+		switch res {
+		case .success(let res):
+			// Construct the return message
+			let retarg = BackendMethodAuthenticateReturn(res)
+			return .success(retarg)
+		case .failure(let error):
+			return .failure(error)
+		}
+	}
+
+	func handleListChannels(_ rmsg: readableMessage) -> Result<RPCMessage, RPCError> {
+		// Call the user-provided implementation
+		let res = self.impl.ListChannels()
+
+		// Unpack the return Result<tuple, Error>
+		switch res {
+		case .success(let res):
+			// Construct the return message
+			let retarg = BackendMethodListChannelsReturn(res)
+			return .success(retarg)
+		case .failure(let error):
+			return .failure(error)
+		}
+	}
+
+	func handleSetAvatar(_ rmsg: readableMessage) -> Result<RPCMessage, RPCError> {
+		// Get the message class for the call and decode into it
+		let args: BackendMethodSetAvatarCall
+		switch BackendMethodSetAvatarCall.decode(rmsg) {
+		case .success(let v):
+			args = v as! BackendMethodSetAvatarCall
+		case .failure(let error):
+			return .failure(error)
+		}
+		// Call the user-provided implementation
+		let res = self.impl.SetAvatar(image: args.image)
+
+		// Unpack the return Result<tuple, Error>
+		switch res {
+		case .success():
+			// Construct the return message
+			let retarg = BackendMethodSetAvatarReturn()
+			return .success(retarg)
+		case .failure(let error):
+			return .failure(error)
+		}
+	}
+
+	func handleSetName(_ rmsg: readableMessage) -> Result<RPCMessage, RPCError> {
+		// Get the message class for the call and decode into it
+		let args: BackendMethodSetNameCall
+		switch BackendMethodSetNameCall.decode(rmsg) {
+		case .success(let v):
+			args = v as! BackendMethodSetNameCall
+		case .failure(let error):
+			return .failure(error)
+		}
+		// Call the user-provided implementation
+		let res = self.impl.SetName(name: args.name)
+
+		// Unpack the return Result<tuple, Error>
+		switch res {
+		case .success():
+			// Construct the return message
+			let retarg = BackendMethodSetNameReturn()
+			return .success(retarg)
+		case .failure(let error):
+			return .failure(error)
+		}
+	}
+
+	func handleRegisterNotifications(_ rmsg: readableMessage) -> Result<RPCMessage, RPCError> {
+		// Get the message class for the call and decode into it
+		let args: BackendMethodRegisterNotificationsCall
+		switch BackendMethodRegisterNotificationsCall.decode(rmsg) {
+		case .success(let v):
+			args = v as! BackendMethodRegisterNotificationsCall
+		case .failure(let error):
+			return .failure(error)
+		}
+		// Call the user-provided implementation
+		let res = self.impl.RegisterNotifications(name: args.name, devicetype: args.devicetype)
+
+		// Unpack the return Result<tuple, Error>
+		switch res {
+		case .success():
+			// Construct the return message
+			let retarg = BackendMethodRegisterNotificationsReturn()
+			return .success(retarg)
+		case .failure(let error):
+			return .failure(error)
+		}
 	}
 }
 
@@ -929,36 +1092,38 @@ class RPCPingpongClient {
 		self.conn = conn
 	}
 
-	func SimpleTest(vinteger: Int64, vint64: Int64, vfloat: Float, vdouble: Double, vbool: Bool, vstring: String, vbytes: ArraySlice<UInt8>, callback: @escaping (Result<(Int64, Int64, Float, Double, Bool, String, ArraySlice<UInt8>), Error>) -> ()) -> Result<Void, Error> {
+	func SimpleTest(vinteger: Int64, vint64: Int64, vfloat: Float, vdouble: Double, vbool: Bool, vstring: String, vbytes: ArraySlice<UInt8>, Channels: ChannelInfo, callback: @escaping (Result<(Int64, Int64, Float, Double, Bool, String, ArraySlice<UInt8>, ChannelInfo), Error>) -> ()) {
 
 		// Names prefixed with __rpckit2 to avoid argument name collisions
 
 		let __rpckit2_callID = self.conn.acquireCallSlot(callback: { (rmsg) -> Result<Void, RPCError> in
 			guard let resultTypeID = try? rmsg.readVarUInt().get() else {
-				return .failure(.protocolError)
+				callback(.failure(RPCError.protocolError))
+				return .failure(RPCError.protocolError)
 			}
 			switch resultTypeID {
 			case protocolPingpongMethod.SimpleTest.rawValue:
-				let ret: pingpongMethodSimpleTestReturn
 				switch pingpongMethodSimpleTestReturn.decode(rmsg) {
 				case .success(let v):
-					ret = v as! pingpongMethodSimpleTestReturn
+					let ret = v as! pingpongMethodSimpleTestReturn
+					callback(.success((ret.vinteger, ret.vint64, ret.vfloat, ret.vdouble, ret.vbool, ret.vstring, ret.vbytes, ret.Channels)))
+					return .success(())
 				case .failure(let error):
+					callback(.failure(error))
 					return .failure(error)
 				}
-				callback(.success((ret.vinteger, ret.vint64, ret.vfloat, ret.vdouble, ret.vbool, ret.vstring, ret.vbytes)))
-				return .success(())
 			case UInt64.max:
-				let ret: rpcError
 				switch rpcError.decode(rmsg) {
 				case .success(let v):
-					ret = v as! rpcError
+					let ret = v as! rpcError
+					callback(.failure(RPCError.applicationError(ret.error)))
+					return .success(())
 				case .failure(let error):
+					callback(.failure(error))
 					return .failure(error)
 				}
-				callback(.failure(RPCError.applicationError(ret.error)))
-				return .success(())
 			default:
+				callback(.failure(RPCError.protocolError))
 				return .failure(RPCError.protocolError)
 			}
 		})
@@ -971,49 +1136,52 @@ class RPCPingpongClient {
 		__rpckit2_wmsg.writeVarUInt(value: 1)
 		__rpckit2_wmsg.writeVarUInt(value: protocolPingpongMethod.SimpleTest.rawValue)
 
-		let __rpckit2_callarg = pingpongMethodSimpleTestCall((vinteger, vint64, vfloat, vdouble, vbool, vstring, vbytes))
+		let __rpckit2_callarg = pingpongMethodSimpleTestCall((vinteger, vint64, vfloat, vdouble, vbool, vstring, vbytes, Channels))
 		if case .failure(let error) = __rpckit2_callarg.encode(__rpckit2_wmsg) {
-			return .failure(error)
+				callback(.failure(RPCError.protocolError))
+			callback(.failure(error))
+			return ()
 		}
 
 		__rpckit2_wmsg.finish()
 
 		self.conn.send(wmsg: __rpckit2_wmsg)
-		return .success(())
 	}
 
 
 
-	func ArrayTest(vinteger: [Int64], vint64: [Int64], vfloat: [Float], vdouble: [Double], vbool: [Bool], vstring: [String], vbytes: [ArraySlice<UInt8>], callback: @escaping (Result<([Int64], [Int64], [Float], [Double], [Bool], [String], [ArraySlice<UInt8>]), Error>) -> ()) -> Result<Void, Error> {
+	func ArrayTest(vinteger: [Int64], vint64: [Int64], vfloat: [Float], vdouble: [Double], vbool: [Bool], vstring: [String], vbytes: [ArraySlice<UInt8>], Channels: [ChannelInfo], callback: @escaping (Result<([Int64], [Int64], [Float], [Double], [Bool], [String], [ArraySlice<UInt8>], [ChannelInfo]), Error>) -> ()) {
 
 		// Names prefixed with __rpckit2 to avoid argument name collisions
 
 		let __rpckit2_callID = self.conn.acquireCallSlot(callback: { (rmsg) -> Result<Void, RPCError> in
 			guard let resultTypeID = try? rmsg.readVarUInt().get() else {
-				return .failure(.protocolError)
+				callback(.failure(RPCError.protocolError))
+				return .failure(RPCError.protocolError)
 			}
 			switch resultTypeID {
 			case protocolPingpongMethod.ArrayTest.rawValue:
-				let ret: pingpongMethodArrayTestReturn
 				switch pingpongMethodArrayTestReturn.decode(rmsg) {
 				case .success(let v):
-					ret = v as! pingpongMethodArrayTestReturn
+					let ret = v as! pingpongMethodArrayTestReturn
+					callback(.success((ret.vinteger, ret.vint64, ret.vfloat, ret.vdouble, ret.vbool, ret.vstring, ret.vbytes, ret.Channels)))
+					return .success(())
 				case .failure(let error):
+					callback(.failure(error))
 					return .failure(error)
 				}
-				callback(.success((ret.vinteger, ret.vint64, ret.vfloat, ret.vdouble, ret.vbool, ret.vstring, ret.vbytes)))
-				return .success(())
 			case UInt64.max:
-				let ret: rpcError
 				switch rpcError.decode(rmsg) {
 				case .success(let v):
-					ret = v as! rpcError
+					let ret = v as! rpcError
+					callback(.failure(RPCError.applicationError(ret.error)))
+					return .success(())
 				case .failure(let error):
+					callback(.failure(error))
 					return .failure(error)
 				}
-				callback(.failure(RPCError.applicationError(ret.error)))
-				return .success(())
 			default:
+				callback(.failure(RPCError.protocolError))
 				return .failure(RPCError.protocolError)
 			}
 		})
@@ -1026,15 +1194,16 @@ class RPCPingpongClient {
 		__rpckit2_wmsg.writeVarUInt(value: 1)
 		__rpckit2_wmsg.writeVarUInt(value: protocolPingpongMethod.ArrayTest.rawValue)
 
-		let __rpckit2_callarg = pingpongMethodArrayTestCall((vinteger, vint64, vfloat, vdouble, vbool, vstring, vbytes))
+		let __rpckit2_callarg = pingpongMethodArrayTestCall((vinteger, vint64, vfloat, vdouble, vbool, vstring, vbytes, Channels))
 		if case .failure(let error) = __rpckit2_callarg.encode(__rpckit2_wmsg) {
-			return .failure(error)
+				callback(.failure(RPCError.protocolError))
+			callback(.failure(error))
+			return ()
 		}
 
 		__rpckit2_wmsg.finish()
 
 		self.conn.send(wmsg: __rpckit2_wmsg)
-		return .success(())
 	}
 
 
@@ -1049,36 +1218,38 @@ class RPCWowoClient {
 		self.conn = conn
 	}
 
-	func SimpleTest2(token: String, callback: @escaping (Result<(String), Error>) -> ()) -> Result<Void, Error> {
+	func SimpleTest2(token: String, Channels: [ChannelInfo], callback: @escaping (Result<(String, [ChannelInfo]), Error>) -> ()) {
 
 		// Names prefixed with __rpckit2 to avoid argument name collisions
 
 		let __rpckit2_callID = self.conn.acquireCallSlot(callback: { (rmsg) -> Result<Void, RPCError> in
 			guard let resultTypeID = try? rmsg.readVarUInt().get() else {
-				return .failure(.protocolError)
+				callback(.failure(RPCError.protocolError))
+				return .failure(RPCError.protocolError)
 			}
 			switch resultTypeID {
 			case protocolWowoMethod.SimpleTest2.rawValue:
-				let ret: wowoMethodSimpleTest2Return
 				switch wowoMethodSimpleTest2Return.decode(rmsg) {
 				case .success(let v):
-					ret = v as! wowoMethodSimpleTest2Return
+					let ret = v as! wowoMethodSimpleTest2Return
+					callback(.success((ret.token, ret.Channels)))
+					return .success(())
 				case .failure(let error):
+					callback(.failure(error))
 					return .failure(error)
 				}
-				callback(.success((ret.token)))
-				return .success(())
 			case UInt64.max:
-				let ret: rpcError
 				switch rpcError.decode(rmsg) {
 				case .success(let v):
-					ret = v as! rpcError
+					let ret = v as! rpcError
+					callback(.failure(RPCError.applicationError(ret.error)))
+					return .success(())
 				case .failure(let error):
+					callback(.failure(error))
 					return .failure(error)
 				}
-				callback(.failure(RPCError.applicationError(ret.error)))
-				return .success(())
 			default:
+				callback(.failure(RPCError.protocolError))
 				return .failure(RPCError.protocolError)
 			}
 		})
@@ -1091,42 +1262,51 @@ class RPCWowoClient {
 		__rpckit2_wmsg.writeVarUInt(value: 2)
 		__rpckit2_wmsg.writeVarUInt(value: protocolWowoMethod.SimpleTest2.rawValue)
 
-		let __rpckit2_callarg = wowoMethodSimpleTest2Call((token))
+		let __rpckit2_callarg = wowoMethodSimpleTest2Call((token, Channels))
 		if case .failure(let error) = __rpckit2_callarg.encode(__rpckit2_wmsg) {
-			return .failure(error)
+				callback(.failure(RPCError.protocolError))
+			callback(.failure(error))
+			return ()
 		}
 
 		__rpckit2_wmsg.finish()
 
 		self.conn.send(wmsg: __rpckit2_wmsg)
-		return .success(())
 	}
 
 
 
-	func SimpleTest3(callback: @escaping (Result<(), Error>) -> ()) -> Result<Void, Error> {
+	func SimpleTest3(callback: @escaping (Result<(), Error>) -> ()) {
 
 		// Names prefixed with __rpckit2 to avoid argument name collisions
 
 		let __rpckit2_callID = self.conn.acquireCallSlot(callback: { (rmsg) -> Result<Void, RPCError> in
 			guard let resultTypeID = try? rmsg.readVarUInt().get() else {
-				return .failure(.protocolError)
+				callback(.failure(RPCError.protocolError))
+				return .failure(RPCError.protocolError)
 			}
 			switch resultTypeID {
 			case protocolWowoMethod.SimpleTest3.rawValue:
-				callback(.success(()))
-				return .success(())
-			case UInt64.max:
-				let ret: rpcError
-				switch rpcError.decode(rmsg) {
-				case .success(let v):
-					ret = v as! rpcError
+				switch wowoMethodSimpleTest3Return.decode(rmsg) {
+				case .success(_):
+					callback(.success(()))
+					return .success(())
 				case .failure(let error):
+					callback(.failure(error))
 					return .failure(error)
 				}
-				callback(.failure(RPCError.applicationError(ret.error)))
-				return .success(())
+			case UInt64.max:
+				switch rpcError.decode(rmsg) {
+				case .success(let v):
+					let ret = v as! rpcError
+					callback(.failure(RPCError.applicationError(ret.error)))
+					return .success(())
+				case .failure(let error):
+					callback(.failure(error))
+					return .failure(error)
+				}
 			default:
+				callback(.failure(RPCError.protocolError))
 				return .failure(RPCError.protocolError)
 			}
 		})
@@ -1142,7 +1322,6 @@ class RPCWowoClient {
 		__rpckit2_wmsg.finish()
 
 		self.conn.send(wmsg: __rpckit2_wmsg)
-		return .success(())
 	}
 
 
@@ -1156,12 +1335,352 @@ class RPCBackendClient {
 	init(conn: RPCConnection) {
 		self.conn = conn
 	}
+
+	func Authenticate(token: String, email: String, callback: @escaping (Result<(String), Error>) -> ()) {
+
+		// Names prefixed with __rpckit2 to avoid argument name collisions
+
+		let __rpckit2_callID = self.conn.acquireCallSlot(callback: { (rmsg) -> Result<Void, RPCError> in
+			guard let resultTypeID = try? rmsg.readVarUInt().get() else {
+				callback(.failure(RPCError.protocolError))
+				return .failure(RPCError.protocolError)
+			}
+			switch resultTypeID {
+			case protocolBackendMethod.Authenticate.rawValue:
+				switch BackendMethodAuthenticateReturn.decode(rmsg) {
+				case .success(let v):
+					let ret = v as! BackendMethodAuthenticateReturn
+					callback(.success((ret.token)))
+					return .success(())
+				case .failure(let error):
+					callback(.failure(error))
+					return .failure(error)
+				}
+			case UInt64.max:
+				switch rpcError.decode(rmsg) {
+				case .success(let v):
+					let ret = v as! rpcError
+					callback(.failure(RPCError.applicationError(ret.error)))
+					return .success(())
+				case .failure(let error):
+					callback(.failure(error))
+					return .failure(error)
+				}
+			default:
+				callback(.failure(RPCError.protocolError))
+				return .failure(RPCError.protocolError)
+			}
+		})
+
+		let __rpckit2_wmsg = writableMessage()
+
+		// Write the protocol header
+		__rpckit2_wmsg.writeVarUInt(value: RPCMessageType.methodCall.rawValue)
+		__rpckit2_wmsg.writeVarUInt(value: __rpckit2_callID)
+		__rpckit2_wmsg.writeVarUInt(value: 3)
+		__rpckit2_wmsg.writeVarUInt(value: protocolBackendMethod.Authenticate.rawValue)
+
+		let __rpckit2_callarg = BackendMethodAuthenticateCall((token, email))
+		if case .failure(let error) = __rpckit2_callarg.encode(__rpckit2_wmsg) {
+				callback(.failure(RPCError.protocolError))
+			callback(.failure(error))
+			return ()
+		}
+
+		__rpckit2_wmsg.finish()
+
+		self.conn.send(wmsg: __rpckit2_wmsg)
+	}
+
+
+
+	func ListChannels(callback: @escaping (Result<(String, [ChannelInfo]), Error>) -> ()) {
+
+		// Names prefixed with __rpckit2 to avoid argument name collisions
+
+		let __rpckit2_callID = self.conn.acquireCallSlot(callback: { (rmsg) -> Result<Void, RPCError> in
+			guard let resultTypeID = try? rmsg.readVarUInt().get() else {
+				callback(.failure(RPCError.protocolError))
+				return .failure(RPCError.protocolError)
+			}
+			switch resultTypeID {
+			case protocolBackendMethod.ListChannels.rawValue:
+				switch BackendMethodListChannelsReturn.decode(rmsg) {
+				case .success(let v):
+					let ret = v as! BackendMethodListChannelsReturn
+					callback(.success((ret.greeting, ret.Channels)))
+					return .success(())
+				case .failure(let error):
+					callback(.failure(error))
+					return .failure(error)
+				}
+			case UInt64.max:
+				switch rpcError.decode(rmsg) {
+				case .success(let v):
+					let ret = v as! rpcError
+					callback(.failure(RPCError.applicationError(ret.error)))
+					return .success(())
+				case .failure(let error):
+					callback(.failure(error))
+					return .failure(error)
+				}
+			default:
+				callback(.failure(RPCError.protocolError))
+				return .failure(RPCError.protocolError)
+			}
+		})
+
+		let __rpckit2_wmsg = writableMessage()
+
+		// Write the protocol header
+		__rpckit2_wmsg.writeVarUInt(value: RPCMessageType.methodCall.rawValue)
+		__rpckit2_wmsg.writeVarUInt(value: __rpckit2_callID)
+		__rpckit2_wmsg.writeVarUInt(value: 3)
+		__rpckit2_wmsg.writeVarUInt(value: protocolBackendMethod.ListChannels.rawValue)
+
+		__rpckit2_wmsg.finish()
+
+		self.conn.send(wmsg: __rpckit2_wmsg)
+	}
+
+
+
+	func SetAvatar(image: ArraySlice<UInt8>, callback: @escaping (Result<(), Error>) -> ()) {
+
+		// Names prefixed with __rpckit2 to avoid argument name collisions
+
+		let __rpckit2_callID = self.conn.acquireCallSlot(callback: { (rmsg) -> Result<Void, RPCError> in
+			guard let resultTypeID = try? rmsg.readVarUInt().get() else {
+				callback(.failure(RPCError.protocolError))
+				return .failure(RPCError.protocolError)
+			}
+			switch resultTypeID {
+			case protocolBackendMethod.SetAvatar.rawValue:
+				switch BackendMethodSetAvatarReturn.decode(rmsg) {
+				case .success(_):
+					callback(.success(()))
+					return .success(())
+				case .failure(let error):
+					callback(.failure(error))
+					return .failure(error)
+				}
+			case UInt64.max:
+				switch rpcError.decode(rmsg) {
+				case .success(let v):
+					let ret = v as! rpcError
+					callback(.failure(RPCError.applicationError(ret.error)))
+					return .success(())
+				case .failure(let error):
+					callback(.failure(error))
+					return .failure(error)
+				}
+			default:
+				callback(.failure(RPCError.protocolError))
+				return .failure(RPCError.protocolError)
+			}
+		})
+
+		let __rpckit2_wmsg = writableMessage()
+
+		// Write the protocol header
+		__rpckit2_wmsg.writeVarUInt(value: RPCMessageType.methodCall.rawValue)
+		__rpckit2_wmsg.writeVarUInt(value: __rpckit2_callID)
+		__rpckit2_wmsg.writeVarUInt(value: 3)
+		__rpckit2_wmsg.writeVarUInt(value: protocolBackendMethod.SetAvatar.rawValue)
+
+		let __rpckit2_callarg = BackendMethodSetAvatarCall((image))
+		if case .failure(let error) = __rpckit2_callarg.encode(__rpckit2_wmsg) {
+				callback(.failure(RPCError.protocolError))
+			callback(.failure(error))
+			return ()
+		}
+
+		__rpckit2_wmsg.finish()
+
+		self.conn.send(wmsg: __rpckit2_wmsg)
+	}
+
+
+
+	func SetName(name: String, callback: @escaping (Result<(), Error>) -> ()) {
+
+		// Names prefixed with __rpckit2 to avoid argument name collisions
+
+		let __rpckit2_callID = self.conn.acquireCallSlot(callback: { (rmsg) -> Result<Void, RPCError> in
+			guard let resultTypeID = try? rmsg.readVarUInt().get() else {
+				callback(.failure(RPCError.protocolError))
+				return .failure(RPCError.protocolError)
+			}
+			switch resultTypeID {
+			case protocolBackendMethod.SetName.rawValue:
+				switch BackendMethodSetNameReturn.decode(rmsg) {
+				case .success(_):
+					callback(.success(()))
+					return .success(())
+				case .failure(let error):
+					callback(.failure(error))
+					return .failure(error)
+				}
+			case UInt64.max:
+				switch rpcError.decode(rmsg) {
+				case .success(let v):
+					let ret = v as! rpcError
+					callback(.failure(RPCError.applicationError(ret.error)))
+					return .success(())
+				case .failure(let error):
+					callback(.failure(error))
+					return .failure(error)
+				}
+			default:
+				callback(.failure(RPCError.protocolError))
+				return .failure(RPCError.protocolError)
+			}
+		})
+
+		let __rpckit2_wmsg = writableMessage()
+
+		// Write the protocol header
+		__rpckit2_wmsg.writeVarUInt(value: RPCMessageType.methodCall.rawValue)
+		__rpckit2_wmsg.writeVarUInt(value: __rpckit2_callID)
+		__rpckit2_wmsg.writeVarUInt(value: 3)
+		__rpckit2_wmsg.writeVarUInt(value: protocolBackendMethod.SetName.rawValue)
+
+		let __rpckit2_callarg = BackendMethodSetNameCall((name))
+		if case .failure(let error) = __rpckit2_callarg.encode(__rpckit2_wmsg) {
+				callback(.failure(RPCError.protocolError))
+			callback(.failure(error))
+			return ()
+		}
+
+		__rpckit2_wmsg.finish()
+
+		self.conn.send(wmsg: __rpckit2_wmsg)
+	}
+
+
+
+	func RegisterNotifications(name: String, devicetype: String, callback: @escaping (Result<(), Error>) -> ()) {
+
+		// Names prefixed with __rpckit2 to avoid argument name collisions
+
+		let __rpckit2_callID = self.conn.acquireCallSlot(callback: { (rmsg) -> Result<Void, RPCError> in
+			guard let resultTypeID = try? rmsg.readVarUInt().get() else {
+				callback(.failure(RPCError.protocolError))
+				return .failure(RPCError.protocolError)
+			}
+			switch resultTypeID {
+			case protocolBackendMethod.RegisterNotifications.rawValue:
+				switch BackendMethodRegisterNotificationsReturn.decode(rmsg) {
+				case .success(_):
+					callback(.success(()))
+					return .success(())
+				case .failure(let error):
+					callback(.failure(error))
+					return .failure(error)
+				}
+			case UInt64.max:
+				switch rpcError.decode(rmsg) {
+				case .success(let v):
+					let ret = v as! rpcError
+					callback(.failure(RPCError.applicationError(ret.error)))
+					return .success(())
+				case .failure(let error):
+					callback(.failure(error))
+					return .failure(error)
+				}
+			default:
+				callback(.failure(RPCError.protocolError))
+				return .failure(RPCError.protocolError)
+			}
+		})
+
+		let __rpckit2_wmsg = writableMessage()
+
+		// Write the protocol header
+		__rpckit2_wmsg.writeVarUInt(value: RPCMessageType.methodCall.rawValue)
+		__rpckit2_wmsg.writeVarUInt(value: __rpckit2_callID)
+		__rpckit2_wmsg.writeVarUInt(value: 3)
+		__rpckit2_wmsg.writeVarUInt(value: protocolBackendMethod.RegisterNotifications.rawValue)
+
+		let __rpckit2_callarg = BackendMethodRegisterNotificationsCall((name, devicetype))
+		if case .failure(let error) = __rpckit2_callarg.encode(__rpckit2_wmsg) {
+				callback(.failure(RPCError.protocolError))
+			callback(.failure(error))
+			return ()
+		}
+
+		__rpckit2_wmsg.finish()
+
+		self.conn.send(wmsg: __rpckit2_wmsg)
+	}
+
+
 }
 
 
-//
-// Auto-generate serialization classes below
-//
+
+
+
+
+
+// Channel info object to contain details of channel
+public class ChannelInfo {
+    public var ID: Int64 = 0
+    public var Title: String = ""
+}
+
+
+
+
+
+fileprivate class rpcGlobalStructChannelInfo : RPCMessage {
+	fileprivate var v: ChannelInfo
+
+	init(_ arg: ChannelInfo) {
+		v = arg
+	}
+
+	func id() -> UInt64 {
+		return 0
+	}
+
+	func encode(_ __rpckit2_wmsg: writableMessage) -> Result<(), RPCError> {
+		// Write the auto-generated message
+__rpckit2_wmsg.writePBInt64(fieldNumber: 1, value: self.v.ID)
+__rpckit2_wmsg.writePBString(fieldNumber: 2, value: self.v.Title)
+		return .success(())
+	}
+
+	static func decode(_ __rpckit2_rmsg: readableMessage) -> Result<RPCMessage, RPCError> {
+		let args: ChannelInfo = ChannelInfo()
+		do {
+			while true {
+				let tag = try __rpckit2_rmsg.readVarUInt().get()
+				switch tag {
+				case (1 << 3 | RPCWireType.fixed64Bit.rawValue):
+args.ID = try __rpckit2_rmsg.readInt64().get()
+					break
+				case (2 << 3 | RPCWireType.lengthDelimited.rawValue):
+args.Title = try __rpckit2_rmsg.readString().get()
+					break
+				default:
+					return .failure(RPCError.protocolError)
+				}
+			}
+		} catch RPCError.eof {
+			// Not a problem
+		} catch let error as RPCError {
+			return .failure(error)
+		} catch {
+			return .failure(RPCError.protocolError)
+		}
+		return .success(rpcGlobalStructChannelInfo(args))
+	}
+}
+
+
+
+
 fileprivate class pingpongMethodSimpleTestCall : RPCMessage {
     var vinteger: Int64
     var vint64: Int64
@@ -1170,6 +1689,7 @@ fileprivate class pingpongMethodSimpleTestCall : RPCMessage {
     var vbool: Bool
     var vstring: String
     var vbytes: ArraySlice<UInt8>
+    var Channels: ChannelInfo
 
 	init() {
 	    self.vinteger = 0
@@ -1179,10 +1699,11 @@ fileprivate class pingpongMethodSimpleTestCall : RPCMessage {
 	    self.vbool = false
 	    self.vstring = ""
 	    self.vbytes = []
+	    self.Channels = ChannelInfo()
 	}
 
-	init(_ args: (Int64, Int64, Float, Double, Bool, String, ArraySlice<UInt8>)) {
-		(self.vinteger, self.vint64, self.vfloat, self.vdouble, self.vbool, self.vstring, self.vbytes) = args
+	init(_ args: (Int64, Int64, Float, Double, Bool, String, ArraySlice<UInt8>, ChannelInfo)) {
+		(self.vinteger, self.vint64, self.vfloat, self.vdouble, self.vbool, self.vstring, self.vbytes, self.Channels) = args
 	}
 
 	func id() -> UInt64 {
@@ -1198,35 +1719,53 @@ __rpckit2_wmsg.writePBDouble(fieldNumber: 4, value: self.vdouble)
 __rpckit2_wmsg.writePBBool(fieldNumber: 5, value: self.vbool)
 __rpckit2_wmsg.writePBString(fieldNumber: 6, value: self.vstring)
 __rpckit2_wmsg.writePBBytes(fieldNumber: 7, value: self.vbytes)
+do {
+	let em = writableMessage(embedded: true)
+    let vs: rpcGlobalStructChannelInfo = rpcGlobalStructChannelInfo(self.Channels)
+	if case .failure(let error) = vs.encode(em) {
+		return .failure(error)
+	}
+    __rpckit2_wmsg.writePBMessage(fieldNumber: 8, msg: em)
+}
 		return .success(())
 	}
 
 	static func decode(_ __rpckit2_rmsg: readableMessage) -> Result<RPCMessage, RPCError> {
-		var args: (Int64, Int64, Float, Double, Bool, String, ArraySlice<UInt8>) = (0, 0, 0.0, 0.0, false, "", [])
+		var args: (vinteger: Int64, vint64: Int64, vfloat: Float, vdouble: Double, vbool: Bool, vstring: String, vbytes: ArraySlice<UInt8>, Channels: ChannelInfo) = (0, 0, 0.0, 0.0, false, "", [], ChannelInfo())
 		do {
 			while true {
 				let tag = try __rpckit2_rmsg.readVarUInt().get()
 				switch tag {
 				case (1 << 3 | RPCWireType.varInt.rawValue):
-args.0 = try __rpckit2_rmsg.readInt().get()
+args.vinteger = try __rpckit2_rmsg.readInt().get()
 					break
 				case (2 << 3 | RPCWireType.fixed64Bit.rawValue):
-args.1 = try __rpckit2_rmsg.readInt64().get()
+args.vint64 = try __rpckit2_rmsg.readInt64().get()
 					break
 				case (3 << 3 | RPCWireType.fixed32Bit.rawValue):
-args.2 = try __rpckit2_rmsg.readFloat().get()
+args.vfloat = try __rpckit2_rmsg.readFloat().get()
 					break
 				case (4 << 3 | RPCWireType.fixed64Bit.rawValue):
-args.3 = try __rpckit2_rmsg.readDouble().get()
+args.vdouble = try __rpckit2_rmsg.readDouble().get()
 					break
 				case (5 << 3 | RPCWireType.varInt.rawValue):
-args.4 = try __rpckit2_rmsg.readBool().get()
+args.vbool = try __rpckit2_rmsg.readBool().get()
 					break
 				case (6 << 3 | RPCWireType.lengthDelimited.rawValue):
-args.5 = try __rpckit2_rmsg.readString().get()
+args.vstring = try __rpckit2_rmsg.readString().get()
 					break
 				case (7 << 3 | RPCWireType.lengthDelimited.rawValue):
-args.6 = try __rpckit2_rmsg.readBytes().get()
+args.vbytes = try __rpckit2_rmsg.readBytes().get()
+					break
+				case (8 << 3 | RPCWireType.lengthDelimited.rawValue):
+let em = try __rpckit2_rmsg.readEmbeddedMessage().get()
+switch rpcGlobalStructChannelInfo.decode(em) {
+case .success(let val):
+	args.Channels = (val as! rpcGlobalStructChannelInfo).v
+case .failure(let error):
+	return .failure(error)
+}
+
 					break
 				default:
 					return .failure(RPCError.protocolError)
@@ -1250,6 +1789,7 @@ fileprivate class pingpongMethodSimpleTestReturn : RPCMessage {
     var vbool: Bool
     var vstring: String
     var vbytes: ArraySlice<UInt8>
+    var Channels: ChannelInfo
 
 	init() {
 	    self.vinteger = 0
@@ -1259,10 +1799,11 @@ fileprivate class pingpongMethodSimpleTestReturn : RPCMessage {
 	    self.vbool = false
 	    self.vstring = ""
 	    self.vbytes = []
+	    self.Channels = ChannelInfo()
 	}
 
-	init(_ args: (Int64, Int64, Float, Double, Bool, String, ArraySlice<UInt8>)) {
-		(self.vinteger, self.vint64, self.vfloat, self.vdouble, self.vbool, self.vstring, self.vbytes) = args
+	init(_ args: (Int64, Int64, Float, Double, Bool, String, ArraySlice<UInt8>, ChannelInfo)) {
+		(self.vinteger, self.vint64, self.vfloat, self.vdouble, self.vbool, self.vstring, self.vbytes, self.Channels) = args
 	}
 
 	func id() -> UInt64 {
@@ -1278,35 +1819,53 @@ __rpckit2_wmsg.writePBDouble(fieldNumber: 4, value: self.vdouble)
 __rpckit2_wmsg.writePBBool(fieldNumber: 5, value: self.vbool)
 __rpckit2_wmsg.writePBString(fieldNumber: 6, value: self.vstring)
 __rpckit2_wmsg.writePBBytes(fieldNumber: 7, value: self.vbytes)
+do {
+	let em = writableMessage(embedded: true)
+    let vs: rpcGlobalStructChannelInfo = rpcGlobalStructChannelInfo(self.Channels)
+	if case .failure(let error) = vs.encode(em) {
+		return .failure(error)
+	}
+    __rpckit2_wmsg.writePBMessage(fieldNumber: 8, msg: em)
+}
 		return .success(())
 	}
 
 	static func decode(_ __rpckit2_rmsg: readableMessage) -> Result<RPCMessage, RPCError> {
-		var args: (Int64, Int64, Float, Double, Bool, String, ArraySlice<UInt8>) = (0, 0, 0.0, 0.0, false, "", [])
+		var args: (vinteger: Int64, vint64: Int64, vfloat: Float, vdouble: Double, vbool: Bool, vstring: String, vbytes: ArraySlice<UInt8>, Channels: ChannelInfo) = (0, 0, 0.0, 0.0, false, "", [], ChannelInfo())
 		do {
 			while true {
 				let tag = try __rpckit2_rmsg.readVarUInt().get()
 				switch tag {
 				case (1 << 3 | RPCWireType.varInt.rawValue):
-args.0 = try __rpckit2_rmsg.readInt().get()
+args.vinteger = try __rpckit2_rmsg.readInt().get()
 					break
 				case (2 << 3 | RPCWireType.fixed64Bit.rawValue):
-args.1 = try __rpckit2_rmsg.readInt64().get()
+args.vint64 = try __rpckit2_rmsg.readInt64().get()
 					break
 				case (3 << 3 | RPCWireType.fixed32Bit.rawValue):
-args.2 = try __rpckit2_rmsg.readFloat().get()
+args.vfloat = try __rpckit2_rmsg.readFloat().get()
 					break
 				case (4 << 3 | RPCWireType.fixed64Bit.rawValue):
-args.3 = try __rpckit2_rmsg.readDouble().get()
+args.vdouble = try __rpckit2_rmsg.readDouble().get()
 					break
 				case (5 << 3 | RPCWireType.varInt.rawValue):
-args.4 = try __rpckit2_rmsg.readBool().get()
+args.vbool = try __rpckit2_rmsg.readBool().get()
 					break
 				case (6 << 3 | RPCWireType.lengthDelimited.rawValue):
-args.5 = try __rpckit2_rmsg.readString().get()
+args.vstring = try __rpckit2_rmsg.readString().get()
 					break
 				case (7 << 3 | RPCWireType.lengthDelimited.rawValue):
-args.6 = try __rpckit2_rmsg.readBytes().get()
+args.vbytes = try __rpckit2_rmsg.readBytes().get()
+					break
+				case (8 << 3 | RPCWireType.lengthDelimited.rawValue):
+let em = try __rpckit2_rmsg.readEmbeddedMessage().get()
+switch rpcGlobalStructChannelInfo.decode(em) {
+case .success(let val):
+	args.Channels = (val as! rpcGlobalStructChannelInfo).v
+case .failure(let error):
+	return .failure(error)
+}
+
 					break
 				default:
 					return .failure(RPCError.protocolError)
@@ -1331,6 +1890,7 @@ fileprivate class pingpongMethodArrayTestCall : RPCMessage {
     var vbool: [Bool]
     var vstring: [String]
     var vbytes: [ArraySlice<UInt8>]
+    var Channels: [ChannelInfo]
 
 	init() {
 	    self.vinteger = []
@@ -1340,10 +1900,11 @@ fileprivate class pingpongMethodArrayTestCall : RPCMessage {
 	    self.vbool = []
 	    self.vstring = []
 	    self.vbytes = []
+	    self.Channels = []
 	}
 
-	init(_ args: ([Int64], [Int64], [Float], [Double], [Bool], [String], [ArraySlice<UInt8>])) {
-		(self.vinteger, self.vint64, self.vfloat, self.vdouble, self.vbool, self.vstring, self.vbytes) = args
+	init(_ args: ([Int64], [Int64], [Float], [Double], [Bool], [String], [ArraySlice<UInt8>], [ChannelInfo])) {
+		(self.vinteger, self.vint64, self.vfloat, self.vdouble, self.vbool, self.vstring, self.vbytes, self.Channels) = args
 	}
 
 	func id() -> UInt64 {
@@ -1373,11 +1934,21 @@ for v in self.vstring {
 for v in self.vbytes {
 	__rpckit2_wmsg.writePBBytes(fieldNumber: 7, value: v)
 }
+for v in self.Channels {
+	do {
+	let em = writableMessage(embedded: true)
+    let vs: rpcGlobalStructChannelInfo = rpcGlobalStructChannelInfo(v)
+	if case .failure(let error) = vs.encode(em) {
+		return .failure(error)
+	}
+    __rpckit2_wmsg.writePBMessage(fieldNumber: 8, msg: em)
+}
+}
 		return .success(())
 	}
 
 	static func decode(_ __rpckit2_rmsg: readableMessage) -> Result<RPCMessage, RPCError> {
-		var args: ([Int64], [Int64], [Float], [Double], [Bool], [String], [ArraySlice<UInt8>]) = ([], [], [], [], [], [], [])
+		var args: (vinteger: [Int64], vint64: [Int64], vfloat: [Float], vdouble: [Double], vbool: [Bool], vstring: [String], vbytes: [ArraySlice<UInt8>], Channels: [ChannelInfo]) = ([], [], [], [], [], [], [], [])
 		do {
 			while true {
 				let tag = try __rpckit2_rmsg.readVarUInt().get()
@@ -1385,37 +1956,49 @@ for v in self.vbytes {
 				case (1 << 3 | RPCWireType.varInt.rawValue):
 let v: Int64
 v = try __rpckit2_rmsg.readInt().get()
-args.0.append(v)
+args.vinteger.append(v)
 					break
 				case (2 << 3 | RPCWireType.fixed64Bit.rawValue):
 let v: Int64
 v = try __rpckit2_rmsg.readInt64().get()
-args.1.append(v)
+args.vint64.append(v)
 					break
 				case (3 << 3 | RPCWireType.fixed32Bit.rawValue):
 let v: Float
 v = try __rpckit2_rmsg.readFloat().get()
-args.2.append(v)
+args.vfloat.append(v)
 					break
 				case (4 << 3 | RPCWireType.fixed64Bit.rawValue):
 let v: Double
 v = try __rpckit2_rmsg.readDouble().get()
-args.3.append(v)
+args.vdouble.append(v)
 					break
 				case (5 << 3 | RPCWireType.varInt.rawValue):
 let v: Bool
 v = try __rpckit2_rmsg.readBool().get()
-args.4.append(v)
+args.vbool.append(v)
 					break
 				case (6 << 3 | RPCWireType.lengthDelimited.rawValue):
 let v: String
 v = try __rpckit2_rmsg.readString().get()
-args.5.append(v)
+args.vstring.append(v)
 					break
 				case (7 << 3 | RPCWireType.lengthDelimited.rawValue):
 let v: ArraySlice<UInt8>
 v = try __rpckit2_rmsg.readBytes().get()
-args.6.append(v)
+args.vbytes.append(v)
+					break
+				case (8 << 3 | RPCWireType.lengthDelimited.rawValue):
+let v: ChannelInfo
+let em = try __rpckit2_rmsg.readEmbeddedMessage().get()
+switch rpcGlobalStructChannelInfo.decode(em) {
+case .success(let val):
+	v = (val as! rpcGlobalStructChannelInfo).v
+case .failure(let error):
+	return .failure(error)
+}
+
+args.Channels.append(v)
 					break
 				default:
 					return .failure(RPCError.protocolError)
@@ -1439,6 +2022,7 @@ fileprivate class pingpongMethodArrayTestReturn : RPCMessage {
     var vbool: [Bool]
     var vstring: [String]
     var vbytes: [ArraySlice<UInt8>]
+    var Channels: [ChannelInfo]
 
 	init() {
 	    self.vinteger = []
@@ -1448,10 +2032,11 @@ fileprivate class pingpongMethodArrayTestReturn : RPCMessage {
 	    self.vbool = []
 	    self.vstring = []
 	    self.vbytes = []
+	    self.Channels = []
 	}
 
-	init(_ args: ([Int64], [Int64], [Float], [Double], [Bool], [String], [ArraySlice<UInt8>])) {
-		(self.vinteger, self.vint64, self.vfloat, self.vdouble, self.vbool, self.vstring, self.vbytes) = args
+	init(_ args: ([Int64], [Int64], [Float], [Double], [Bool], [String], [ArraySlice<UInt8>], [ChannelInfo])) {
+		(self.vinteger, self.vint64, self.vfloat, self.vdouble, self.vbool, self.vstring, self.vbytes, self.Channels) = args
 	}
 
 	func id() -> UInt64 {
@@ -1481,11 +2066,21 @@ for v in self.vstring {
 for v in self.vbytes {
 	__rpckit2_wmsg.writePBBytes(fieldNumber: 7, value: v)
 }
+for v in self.Channels {
+	do {
+	let em = writableMessage(embedded: true)
+    let vs: rpcGlobalStructChannelInfo = rpcGlobalStructChannelInfo(v)
+	if case .failure(let error) = vs.encode(em) {
+		return .failure(error)
+	}
+    __rpckit2_wmsg.writePBMessage(fieldNumber: 8, msg: em)
+}
+}
 		return .success(())
 	}
 
 	static func decode(_ __rpckit2_rmsg: readableMessage) -> Result<RPCMessage, RPCError> {
-		var args: ([Int64], [Int64], [Float], [Double], [Bool], [String], [ArraySlice<UInt8>]) = ([], [], [], [], [], [], [])
+		var args: (vinteger: [Int64], vint64: [Int64], vfloat: [Float], vdouble: [Double], vbool: [Bool], vstring: [String], vbytes: [ArraySlice<UInt8>], Channels: [ChannelInfo]) = ([], [], [], [], [], [], [], [])
 		do {
 			while true {
 				let tag = try __rpckit2_rmsg.readVarUInt().get()
@@ -1493,37 +2088,49 @@ for v in self.vbytes {
 				case (1 << 3 | RPCWireType.varInt.rawValue):
 let v: Int64
 v = try __rpckit2_rmsg.readInt().get()
-args.0.append(v)
+args.vinteger.append(v)
 					break
 				case (2 << 3 | RPCWireType.fixed64Bit.rawValue):
 let v: Int64
 v = try __rpckit2_rmsg.readInt64().get()
-args.1.append(v)
+args.vint64.append(v)
 					break
 				case (3 << 3 | RPCWireType.fixed32Bit.rawValue):
 let v: Float
 v = try __rpckit2_rmsg.readFloat().get()
-args.2.append(v)
+args.vfloat.append(v)
 					break
 				case (4 << 3 | RPCWireType.fixed64Bit.rawValue):
 let v: Double
 v = try __rpckit2_rmsg.readDouble().get()
-args.3.append(v)
+args.vdouble.append(v)
 					break
 				case (5 << 3 | RPCWireType.varInt.rawValue):
 let v: Bool
 v = try __rpckit2_rmsg.readBool().get()
-args.4.append(v)
+args.vbool.append(v)
 					break
 				case (6 << 3 | RPCWireType.lengthDelimited.rawValue):
 let v: String
 v = try __rpckit2_rmsg.readString().get()
-args.5.append(v)
+args.vstring.append(v)
 					break
 				case (7 << 3 | RPCWireType.lengthDelimited.rawValue):
 let v: ArraySlice<UInt8>
 v = try __rpckit2_rmsg.readBytes().get()
-args.6.append(v)
+args.vbytes.append(v)
+					break
+				case (8 << 3 | RPCWireType.lengthDelimited.rawValue):
+let v: ChannelInfo
+let em = try __rpckit2_rmsg.readEmbeddedMessage().get()
+switch rpcGlobalStructChannelInfo.decode(em) {
+case .success(let val):
+	v = (val as! rpcGlobalStructChannelInfo).v
+case .failure(let error):
+	return .failure(error)
+}
+
+args.Channels.append(v)
 					break
 				default:
 					return .failure(RPCError.protocolError)
@@ -1543,13 +2150,15 @@ args.6.append(v)
 
 fileprivate class wowoMethodSimpleTest2Call : RPCMessage {
     var token: String
+    var Channels: [ChannelInfo]
 
 	init() {
 	    self.token = ""
+	    self.Channels = []
 	}
 
-	init(_ args: (String)) {
-		(self.token) = args
+	init(_ args: (String, [ChannelInfo])) {
+		(self.token, self.Channels) = args
 	}
 
 	func id() -> UInt64 {
@@ -1559,16 +2168,41 @@ fileprivate class wowoMethodSimpleTest2Call : RPCMessage {
 	func encode(_ __rpckit2_wmsg: writableMessage) -> Result<(), RPCError> {
 		// Write the auto-generated message
 __rpckit2_wmsg.writePBString(fieldNumber: 1, value: self.token)
+for v in self.Channels {
+	do {
+	let em = writableMessage(embedded: true)
+    let vs: rpcGlobalStructChannelInfo = rpcGlobalStructChannelInfo(v)
+	if case .failure(let error) = vs.encode(em) {
+		return .failure(error)
+	}
+    __rpckit2_wmsg.writePBMessage(fieldNumber: 2, msg: em)
+}
+}
 		return .success(())
 	}
 
 	static func decode(_ __rpckit2_rmsg: readableMessage) -> Result<RPCMessage, RPCError> {
-		var args: String = ""
+		var args: (token: String, Channels: [ChannelInfo]) = ("", [])
 		do {
 			while true {
-				if (try __rpckit2_rmsg.readVarUInt().get() == 1 << 3 | RPCWireType.lengthDelimited.rawValue) {
-args = try __rpckit2_rmsg.readString().get()
-				} else {
+				let tag = try __rpckit2_rmsg.readVarUInt().get()
+				switch tag {
+				case (1 << 3 | RPCWireType.lengthDelimited.rawValue):
+args.token = try __rpckit2_rmsg.readString().get()
+					break
+				case (2 << 3 | RPCWireType.lengthDelimited.rawValue):
+let v: ChannelInfo
+let em = try __rpckit2_rmsg.readEmbeddedMessage().get()
+switch rpcGlobalStructChannelInfo.decode(em) {
+case .success(let val):
+	v = (val as! rpcGlobalStructChannelInfo).v
+case .failure(let error):
+	return .failure(error)
+}
+
+args.Channels.append(v)
+					break
+				default:
 					return .failure(RPCError.protocolError)
 				}
 			}
@@ -1584,13 +2218,15 @@ args = try __rpckit2_rmsg.readString().get()
 }
 fileprivate class wowoMethodSimpleTest2Return : RPCMessage {
     var token: String
+    var Channels: [ChannelInfo]
 
 	init() {
 	    self.token = ""
+	    self.Channels = []
 	}
 
-	init(_ args: (String)) {
-		(self.token) = args
+	init(_ args: (String, [ChannelInfo])) {
+		(self.token, self.Channels) = args
 	}
 
 	func id() -> UInt64 {
@@ -1600,16 +2236,41 @@ fileprivate class wowoMethodSimpleTest2Return : RPCMessage {
 	func encode(_ __rpckit2_wmsg: writableMessage) -> Result<(), RPCError> {
 		// Write the auto-generated message
 __rpckit2_wmsg.writePBString(fieldNumber: 1, value: self.token)
+for v in self.Channels {
+	do {
+	let em = writableMessage(embedded: true)
+    let vs: rpcGlobalStructChannelInfo = rpcGlobalStructChannelInfo(v)
+	if case .failure(let error) = vs.encode(em) {
+		return .failure(error)
+	}
+    __rpckit2_wmsg.writePBMessage(fieldNumber: 2, msg: em)
+}
+}
 		return .success(())
 	}
 
 	static func decode(_ __rpckit2_rmsg: readableMessage) -> Result<RPCMessage, RPCError> {
-		var args: String = ""
+		var args: (token: String, Channels: [ChannelInfo]) = ("", [])
 		do {
 			while true {
-				if (try __rpckit2_rmsg.readVarUInt().get() == 1 << 3 | RPCWireType.lengthDelimited.rawValue) {
-args = try __rpckit2_rmsg.readString().get()
-				} else {
+				let tag = try __rpckit2_rmsg.readVarUInt().get()
+				switch tag {
+				case (1 << 3 | RPCWireType.lengthDelimited.rawValue):
+args.token = try __rpckit2_rmsg.readString().get()
+					break
+				case (2 << 3 | RPCWireType.lengthDelimited.rawValue):
+let v: ChannelInfo
+let em = try __rpckit2_rmsg.readEmbeddedMessage().get()
+switch rpcGlobalStructChannelInfo.decode(em) {
+case .success(let val):
+	v = (val as! rpcGlobalStructChannelInfo).v
+case .failure(let error):
+	return .failure(error)
+}
+
+args.Channels.append(v)
+					break
+				default:
 					return .failure(RPCError.protocolError)
 				}
 			}
@@ -1638,4 +2299,324 @@ fileprivate class wowoMethodSimpleTest3Return : RPCMessage {
 }
 	
 
+fileprivate class BackendMethodAuthenticateCall : RPCMessage {
+    var token: String
+    var email: String
+
+	init() {
+	    self.token = ""
+	    self.email = ""
+	}
+
+	init(_ args: (String, String)) {
+		(self.token, self.email) = args
+	}
+
+	func id() -> UInt64 {
+		return protocolBackendMethod.Authenticate.rawValue
+	}
+
+	func encode(_ __rpckit2_wmsg: writableMessage) -> Result<(), RPCError> {
+		// Write the auto-generated message
+__rpckit2_wmsg.writePBString(fieldNumber: 1, value: self.token)
+__rpckit2_wmsg.writePBString(fieldNumber: 2, value: self.email)
+		return .success(())
+	}
+
+	static func decode(_ __rpckit2_rmsg: readableMessage) -> Result<RPCMessage, RPCError> {
+		var args: (token: String, email: String) = ("", "")
+		do {
+			while true {
+				let tag = try __rpckit2_rmsg.readVarUInt().get()
+				switch tag {
+				case (1 << 3 | RPCWireType.lengthDelimited.rawValue):
+args.token = try __rpckit2_rmsg.readString().get()
+					break
+				case (2 << 3 | RPCWireType.lengthDelimited.rawValue):
+args.email = try __rpckit2_rmsg.readString().get()
+					break
+				default:
+					return .failure(RPCError.protocolError)
+				}
+			}
+		} catch RPCError.eof {
+			// Not a problem
+		} catch let error as RPCError {
+			return .failure(error)
+		} catch {
+			return .failure(RPCError.protocolError)
+		}
+		return .success(BackendMethodAuthenticateCall(args))
+	}
+}
+fileprivate class BackendMethodAuthenticateReturn : RPCMessage {
+    var token: String
+
+	init() {
+	    self.token = ""
+	}
+
+	init(_ args: (String)) {
+		(self.token) = args
+	}
+
+	func id() -> UInt64 {
+		return protocolBackendMethod.Authenticate.rawValue
+	}
+
+	func encode(_ __rpckit2_wmsg: writableMessage) -> Result<(), RPCError> {
+		// Write the auto-generated message
+__rpckit2_wmsg.writePBString(fieldNumber: 1, value: self.token)
+		return .success(())
+	}
+
+	static func decode(_ __rpckit2_rmsg: readableMessage) -> Result<RPCMessage, RPCError> {
+		var args: String = ""
+		do {
+			while true {
+				if (try __rpckit2_rmsg.readVarUInt().get() == 1 << 3 | RPCWireType.lengthDelimited.rawValue) {
+args = try __rpckit2_rmsg.readString().get()
+				} else {
+					return .failure(RPCError.protocolError)
+				}
+			}
+		} catch RPCError.eof {
+			// Not a problem
+		} catch let error as RPCError {
+			return .failure(error)
+		} catch {
+			return .failure(RPCError.protocolError)
+		}
+		return .success(BackendMethodAuthenticateReturn(args))
+	}
+}
+	
+fileprivate class BackendMethodListChannelsCall : RPCMessage {
+	init() {}
+	func encode(_ wmsg: writableMessage) -> Result<(), RPCError> { return .success(()) }
+	static func decode(_ rmsg: readableMessage) -> Result<RPCMessage, RPCError> { return .success(BackendMethodListChannelsCall()) }
+	func id() -> UInt64 { return protocolBackendMethod.ListChannels.rawValue }
+}
+fileprivate class BackendMethodListChannelsReturn : RPCMessage {
+    var greeting: String
+    var Channels: [ChannelInfo]
+
+	init() {
+	    self.greeting = ""
+	    self.Channels = []
+	}
+
+	init(_ args: (String, [ChannelInfo])) {
+		(self.greeting, self.Channels) = args
+	}
+
+	func id() -> UInt64 {
+		return protocolBackendMethod.ListChannels.rawValue
+	}
+
+	func encode(_ __rpckit2_wmsg: writableMessage) -> Result<(), RPCError> {
+		// Write the auto-generated message
+__rpckit2_wmsg.writePBString(fieldNumber: 1, value: self.greeting)
+for v in self.Channels {
+	do {
+	let em = writableMessage(embedded: true)
+    let vs: rpcGlobalStructChannelInfo = rpcGlobalStructChannelInfo(v)
+	if case .failure(let error) = vs.encode(em) {
+		return .failure(error)
+	}
+    __rpckit2_wmsg.writePBMessage(fieldNumber: 2, msg: em)
+}
+}
+		return .success(())
+	}
+
+	static func decode(_ __rpckit2_rmsg: readableMessage) -> Result<RPCMessage, RPCError> {
+		var args: (greeting: String, Channels: [ChannelInfo]) = ("", [])
+		do {
+			while true {
+				let tag = try __rpckit2_rmsg.readVarUInt().get()
+				switch tag {
+				case (1 << 3 | RPCWireType.lengthDelimited.rawValue):
+args.greeting = try __rpckit2_rmsg.readString().get()
+					break
+				case (2 << 3 | RPCWireType.lengthDelimited.rawValue):
+let v: ChannelInfo
+let em = try __rpckit2_rmsg.readEmbeddedMessage().get()
+switch rpcGlobalStructChannelInfo.decode(em) {
+case .success(let val):
+	v = (val as! rpcGlobalStructChannelInfo).v
+case .failure(let error):
+	return .failure(error)
+}
+
+args.Channels.append(v)
+					break
+				default:
+					return .failure(RPCError.protocolError)
+				}
+			}
+		} catch RPCError.eof {
+			// Not a problem
+		} catch let error as RPCError {
+			return .failure(error)
+		} catch {
+			return .failure(RPCError.protocolError)
+		}
+		return .success(BackendMethodListChannelsReturn(args))
+	}
+}
+	
+fileprivate class BackendMethodSetAvatarCall : RPCMessage {
+    var image: ArraySlice<UInt8>
+
+	init() {
+	    self.image = []
+	}
+
+	init(_ args: (ArraySlice<UInt8>)) {
+		(self.image) = args
+	}
+
+	func id() -> UInt64 {
+		return protocolBackendMethod.SetAvatar.rawValue
+	}
+
+	func encode(_ __rpckit2_wmsg: writableMessage) -> Result<(), RPCError> {
+		// Write the auto-generated message
+__rpckit2_wmsg.writePBBytes(fieldNumber: 1, value: self.image)
+		return .success(())
+	}
+
+	static func decode(_ __rpckit2_rmsg: readableMessage) -> Result<RPCMessage, RPCError> {
+		var args: ArraySlice<UInt8> = []
+		do {
+			while true {
+				if (try __rpckit2_rmsg.readVarUInt().get() == 1 << 3 | RPCWireType.lengthDelimited.rawValue) {
+args = try __rpckit2_rmsg.readBytes().get()
+				} else {
+					return .failure(RPCError.protocolError)
+				}
+			}
+		} catch RPCError.eof {
+			// Not a problem
+		} catch let error as RPCError {
+			return .failure(error)
+		} catch {
+			return .failure(RPCError.protocolError)
+		}
+		return .success(BackendMethodSetAvatarCall(args))
+	}
+}
+fileprivate class BackendMethodSetAvatarReturn : RPCMessage {
+	init() {}
+	func encode(_ wmsg: writableMessage) -> Result<(), RPCError> { return .success(()) }
+	static func decode(_ rmsg: readableMessage) -> Result<RPCMessage, RPCError> { return .success(BackendMethodSetAvatarReturn()) }
+	func id() -> UInt64 { return protocolBackendMethod.SetAvatar.rawValue }
+}
+	
+fileprivate class BackendMethodSetNameCall : RPCMessage {
+    var name: String
+
+	init() {
+	    self.name = ""
+	}
+
+	init(_ args: (String)) {
+		(self.name) = args
+	}
+
+	func id() -> UInt64 {
+		return protocolBackendMethod.SetName.rawValue
+	}
+
+	func encode(_ __rpckit2_wmsg: writableMessage) -> Result<(), RPCError> {
+		// Write the auto-generated message
+__rpckit2_wmsg.writePBString(fieldNumber: 1, value: self.name)
+		return .success(())
+	}
+
+	static func decode(_ __rpckit2_rmsg: readableMessage) -> Result<RPCMessage, RPCError> {
+		var args: String = ""
+		do {
+			while true {
+				if (try __rpckit2_rmsg.readVarUInt().get() == 1 << 3 | RPCWireType.lengthDelimited.rawValue) {
+args = try __rpckit2_rmsg.readString().get()
+				} else {
+					return .failure(RPCError.protocolError)
+				}
+			}
+		} catch RPCError.eof {
+			// Not a problem
+		} catch let error as RPCError {
+			return .failure(error)
+		} catch {
+			return .failure(RPCError.protocolError)
+		}
+		return .success(BackendMethodSetNameCall(args))
+	}
+}
+fileprivate class BackendMethodSetNameReturn : RPCMessage {
+	init() {}
+	func encode(_ wmsg: writableMessage) -> Result<(), RPCError> { return .success(()) }
+	static func decode(_ rmsg: readableMessage) -> Result<RPCMessage, RPCError> { return .success(BackendMethodSetNameReturn()) }
+	func id() -> UInt64 { return protocolBackendMethod.SetName.rawValue }
+}
+	
+fileprivate class BackendMethodRegisterNotificationsCall : RPCMessage {
+    var name: String
+    var devicetype: String
+
+	init() {
+	    self.name = ""
+	    self.devicetype = ""
+	}
+
+	init(_ args: (String, String)) {
+		(self.name, self.devicetype) = args
+	}
+
+	func id() -> UInt64 {
+		return protocolBackendMethod.RegisterNotifications.rawValue
+	}
+
+	func encode(_ __rpckit2_wmsg: writableMessage) -> Result<(), RPCError> {
+		// Write the auto-generated message
+__rpckit2_wmsg.writePBString(fieldNumber: 2, value: self.name)
+__rpckit2_wmsg.writePBString(fieldNumber: 3, value: self.devicetype)
+		return .success(())
+	}
+
+	static func decode(_ __rpckit2_rmsg: readableMessage) -> Result<RPCMessage, RPCError> {
+		var args: (name: String, devicetype: String) = ("", "")
+		do {
+			while true {
+				let tag = try __rpckit2_rmsg.readVarUInt().get()
+				switch tag {
+				case (2 << 3 | RPCWireType.lengthDelimited.rawValue):
+args.name = try __rpckit2_rmsg.readString().get()
+					break
+				case (3 << 3 | RPCWireType.lengthDelimited.rawValue):
+args.devicetype = try __rpckit2_rmsg.readString().get()
+					break
+				default:
+					return .failure(RPCError.protocolError)
+				}
+			}
+		} catch RPCError.eof {
+			// Not a problem
+		} catch let error as RPCError {
+			return .failure(error)
+		} catch {
+			return .failure(RPCError.protocolError)
+		}
+		return .success(BackendMethodRegisterNotificationsCall(args))
+	}
+}
+fileprivate class BackendMethodRegisterNotificationsReturn : RPCMessage {
+	init() {}
+	func encode(_ wmsg: writableMessage) -> Result<(), RPCError> { return .success(()) }
+	static func decode(_ rmsg: readableMessage) -> Result<RPCMessage, RPCError> { return .success(BackendMethodRegisterNotificationsReturn()) }
+	func id() -> UInt64 { return protocolBackendMethod.RegisterNotifications.rawValue }
+}
+	
 
