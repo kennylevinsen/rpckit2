@@ -726,6 +726,12 @@ class RPCConnection: NSObject, StreamDelegate {
 {{- end -}}
 {{ end }}
 
+
+
+{{- /*                              */ -}}
+{{- /* Per-protocol method ID enums */ -}}
+{{- /*                              */ -}}
+
 {{- range required .Protocols}}
 
 {{ if ne (len .Methods) 0 -}}
@@ -755,15 +761,28 @@ for v in {{ required .Accessor }} {
 }
 {{- end }}
 
+{{ define "swift-pb/marshal-map" -}}
+{{- /* Marshal map, using a custom encoder */ -}}
+{{- $vname := retrieve (format "rpcMap-%s" .Field.SwiftType) -}}
+for (key, value) in {{ required .Accessor }} {
+	let em = writableMessage(embedded: true)
+	let vs = {{ $vname }}(key, value)
+	if case .failure(let error) = vs.encode(em) {
+		return .failure(error)
+	}
+	{{ required .Message }}.writePBMessage(fieldNumber: {{ required .ID}}, msg: em)
+}
+{{ end }}
+
 {{- define "swift-pb/marshal-struct" -}}
 {{- /* Marshal struct, using custom encoder */ -}}
 do {
 	let em = writableMessage(embedded: true)
-    let vs: rpcGlobalStruct{{ required .Field.SwiftType }} = rpcGlobalStruct{{ required .Field.SwiftType }}({{ required .Accessor }})
+	let vs: rpcGlobalStruct{{ required .Field.SwiftType }} = rpcGlobalStruct{{ required .Field.SwiftType }}({{ required .Accessor }})
 	if case .failure(let error) = vs.encode(em) {
 		return .failure(error)
 	}
-    {{ required .Message }}.writePBMessage(fieldNumber: {{ required .ID}}, msg: em)
+	{{ required .Message }}.writePBMessage(fieldNumber: {{ required .ID}}, msg: em)
 }
 {{- end }}
 
@@ -795,6 +814,19 @@ let v: {{ required .Field.InnerValue.SwiftType }}
 {{ required .Accessor }}.append(v)
 {{- end }}
 
+{{ define "swift-pb/unmarshal-map" -}}
+{{- /* Map<Type, Type>, handled by a custom struct decoder */ -}}
+{{- $vname := retrieve (format "rpcMap-%s" .Field.SwiftType) -}}
+let em = try {{ required .Message }}.readEmbeddedMessage().get()
+switch {{ $vname }}.decode(em) {
+case .success(let val):
+	let x = val as! {{ $vname }}
+	{{ required .Accessor }}[x.key] = x.value
+case .failure(let error):
+	return .failure(error)
+}
+{{ end }}
+
 {{ define "swift-pb/unmarshal-struct" -}}
 {{- /* Global struct, handled by a custom decoder */ -}}
 let em = try {{ required .Message }}.readEmbeddedMessage().get()
@@ -815,65 +847,6 @@ case .failure(let error):
 {{- else -}}{{- template "swift-pb/unmarshal-simple" . -}}
 {{- end -}}
 {{- end }}
-
-
-
-{{- /*                       */}}
-{{- /* Message serialization */}}
-{{- /*                       */}}
-
-class rpcError : RPCMessage {
-	fileprivate var error: String
-	private var errorType: RPCErrorType
-
-	init() {
-		self.error = ""
-		self.errorType = .generic
-	}
-
-	init(_ args: (String, RPCErrorType)) {
-		(self.error, self.errorType) = args
-	}
-
-	func id() -> UInt64 {
-		return UInt64.max
-	}
-
-	func encode(_ wmsg: writableMessage) -> Result<(), RPCError> {
-		wmsg.writePBUInt64(fieldNumber: 1, value: self.errorType.rawValue)
-		wmsg.writePBString(fieldNumber: 2, value: self.error)
-		return .success(())
-	}
-
-	static func decode(_ rmsg: readableMessage) -> Result<RPCMessage, RPCError> {
-		var error: String = ""
-		var errorType: RPCErrorType = .generic
-		do {
-			while true {
-				let tag = try rmsg.readVarUInt().get()
-				switch tag {
-				case (1 << 3 | RPCWireType.varInt.rawValue):
-					guard let v = RPCErrorType(rawValue: try! rmsg.readUInt64().get()) else {
-						return .failure(.protocolError)
-					}
-					errorType = v
-					break
-				case (2 << 3 | RPCWireType.fixed64Bit.rawValue):
-					error = try rmsg.readString().get()
-					break
-				default:
-					break
-				}
-			}
-		} catch RPCError.eof {
-		} catch let error as RPCError {
-			return .failure(error)
-		} catch {
-			return .failure(RPCError.protocolError)
-		}
-		return .success(rpcError((error, errorType)))
-	}
-}
 
 
 
@@ -1056,6 +1029,65 @@ class RPC{{ required .Name | capitalize }}Client {
 
 
 
+{{- /*                       */}}
+{{- /* Message serialization */}}
+{{- /*                       */}}
+
+class rpcError : RPCMessage {
+	fileprivate var error: String
+	private var errorType: RPCErrorType
+
+	init() {
+		self.error = ""
+		self.errorType = .generic
+	}
+
+	init(_ args: (String, RPCErrorType)) {
+		(self.error, self.errorType) = args
+	}
+
+	func id() -> UInt64 {
+		return UInt64.max
+	}
+
+	func encode(_ wmsg: writableMessage) -> Result<(), RPCError> {
+		wmsg.writePBUInt64(fieldNumber: 1, value: self.errorType.rawValue)
+		wmsg.writePBString(fieldNumber: 2, value: self.error)
+		return .success(())
+	}
+
+	static func decode(_ rmsg: readableMessage) -> Result<RPCMessage, RPCError> {
+		var error: String = ""
+		var errorType: RPCErrorType = .generic
+		do {
+			while true {
+				let tag = try rmsg.readVarUInt().get()
+				switch tag {
+				case (1 << 3 | RPCWireType.varInt.rawValue):
+					guard let v = RPCErrorType(rawValue: try! rmsg.readUInt64().get()) else {
+						return .failure(.protocolError)
+					}
+					errorType = v
+					break
+				case (2 << 3 | RPCWireType.fixed64Bit.rawValue):
+					error = try rmsg.readString().get()
+					break
+				default:
+					break
+				}
+			}
+		} catch RPCError.eof {
+		} catch let error as RPCError {
+			return .failure(error)
+		} catch {
+			return .failure(RPCError.protocolError)
+		}
+		return .success(rpcError((error, errorType)))
+	}
+}
+
+
+
 {{- define "swift-pb/serialization" -}}
 {{- /* (De-)Serialization of messages */ -}}
 {{- $typeName := required .TypeName -}}
@@ -1076,12 +1108,12 @@ fileprivate class {{ required $typeName }} : RPCMessage {
 
 fileprivate class {{ required $typeName }} : RPCMessage {
 	{{- range required .Fields }}
-    var {{ required .Name }}: {{ .T.SwiftType }}
+	var {{ required .Name }}: {{ .T.SwiftType }}
 	{{- end }}
 
 	init() {
 		{{- range required .Fields }}
-	    self.{{ required .Name }} = {{ required .T.SwiftDefault }}
+		self.{{ required .Name }} = {{ required .T.SwiftDefault }}
 		{{- end }}
 	}
 
@@ -1155,10 +1187,10 @@ fileprivate class {{ required $typeName }} : RPCMessage {
 // {{ required .Description | capitalize }}
 public class {{ required .Name | capitalize }} {
 {{- range required .Fields }}
-    {{- if .Description }}
-    // {{ required .Description | capitalize }}
-    {{ end }}
-    public var {{ required .Name | capitalize }}: {{ .T.SwiftType }} = {{ .T.SwiftDefault }}
+	{{- if .Description }}
+	// {{ required .Description | capitalize }}
+	{{ end }}
+	public var {{ required .Name | capitalize }}: {{ .T.SwiftType }} = {{ .T.SwiftDefault }}
 {{- end }}
 }
 
@@ -1193,7 +1225,7 @@ fileprivate class {{ required $typeName }} : RPCMessage {
 	}
 
 	func id() -> UInt64 {
-		return {{ required .TypeID }}
+		return 0
 	}
 
 	func encode(_ __rpckit2_wmsg: writableMessage) -> Result<(), RPCError> {
@@ -1234,13 +1266,90 @@ fileprivate class {{ required $typeName }} : RPCMessage {
 {{- end -}}
 {{- end -}}
 
+
+{{- define "swift-pb/serialization-map" -}}
+{{- /* (De-)Serialization of messages */ -}}
+{{ if .T.IsArray }}
+{{ template "swift-pb/serialization-map" dict "T" .T.InnerValue "ProtoName" .ProtoName }}
+{{ else if .T.IsMap }}
+{{ template "swift-pb/serialization-map" dict "T" .T.InnerKey "ProtoName" .ProtoName }}
+{{ template "swift-pb/serialization-map" dict "T" .T.InnerValue "ProtoName" .ProtoName }}
+{{ $name := format "rpcMapKey%sValue%s" .T.InnerKey .T.InnerValue }}
+{{ if ifnotexists (format "rpcMap%s" .T.SwiftType) }}
+{{ store (format "rpcMap-%s" .T.SwiftType) $name }}
+fileprivate class {{ required $name }} : RPCMessage {
+	fileprivate var key: {{ required .T.InnerKey.SwiftType }}
+	fileprivate var value: {{ required .T.InnerValue.SwiftType }}
+
+	init() {
+		self.key = {{ required .T.InnerKey.SwiftDefault }}
+		self.value = {{ required .T.InnerValue.SwiftDefault }}
+	}
+
+	init(_ key: {{ required .T.InnerKey.SwiftType}}, _ value: {{ required .T.InnerValue.SwiftType}}) {
+		self.key = key
+		self.value = value
+	}
+
+	func id() -> UInt64 {
+		return 0
+	}
+
+	func encode(_ __rpckit2_wmsg: writableMessage) -> Result<(), RPCError> {
+		// Write the auto-generated message
+{{ template "swift-pb/marshal" dict "Field" .T.InnerKey "Accessor" "self.key" "Message" "__rpckit2_wmsg" "ID" 1 "ProtoName" .ProtoName }}
+{{ template "swift-pb/marshal" dict "Field" .T.InnerValue "Accessor" "self.value" "Message" "__rpckit2_wmsg" "ID" 2 "ProtoName" .ProtoName }}
+		return .success(())
+	}
+
+	static func decode(_ __rpckit2_rmsg: readableMessage) -> Result<RPCMessage, RPCError> {
+		var key: {{ required .T.InnerKey.SwiftType }} = {{ required .T.InnerKey.SwiftDefault }}
+		var value: {{ required .T.InnerValue.SwiftType }} = {{ required .T.InnerValue.SwiftDefault }}
+		do {
+			while true {
+				let tag = try __rpckit2_rmsg.readVarUInt().get()
+				switch tag {
+				case (1 << 3 | {{ if .T.InnerKey.IsMarshalled }}{{ template "swift-pb/property-to-wiretype" "String"}}{{ else }}{{ template "swift-pb/property-to-wiretype" .T.InnerKey.String }}{{ end }}.rawValue):
+{{ template "swift-pb/unmarshal" dict "Field" .T.InnerKey "Accessor" "key" "Message" "__rpckit2_rmsg" "ProtoName" .ProtoName }}
+				case (2 << 3 | {{ if .T.InnerValue.IsMarshalled }}{{ template "swift-pb/property-to-wiretype" "String"}}{{ else }}{{ template "swift-pb/property-to-wiretype" .T.InnerValue.String }}{{ end }}.rawValue):
+{{ template "swift-pb/unmarshal" dict "Field" .T.InnerValue "Accessor" "value" "Message" "__rpckit2_rmsg" "ProtoName" .ProtoName }}
+					break
+				default:
+					return .failure(RPCError.protocolError)
+				}
+			}
+		} catch RPCError.eof {
+			// Not a problem
+		} catch let error as RPCError {
+			return .failure(error)
+		} catch {
+			return .failure(RPCError.protocolError)
+		}
+		return .success({{ required $name }}(key, value))
+	}
+}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+
 {{ range required .Protocols }}
 {{- $protoName := required .Name -}}
 {{- $protoID := required .ID -}}
 {{ range required .Structs }}
 {{ if ifnotexists (format "rpcGlobalStruct%s" (required .Name | capitalize)) -}}
-{{ template "swift-pb/serialization-struct" dict "TypeName" (format "rpcGlobalStruct%s" (required .Name | capitalize)) "Name" .Name "TypeID" 0 "Fields" .Fields "ProtoName" $protoName }}
+{{ range required .Fields }}
+{{ template "swift-pb/serialization-map" dict "T" .T "ProtoName" $protoName }}
+{{ end }}
+{{ template "swift-pb/serialization-struct" dict "TypeName" (format "rpcGlobalStruct%s" (required .Name | capitalize)) "Name" .Name "Fields" .Fields "ProtoName" $protoName }}
 {{- end }}
+{{ end }}
+{{ range required .Methods }}
+{{ range required .Input }}
+{{ template "swift-pb/serialization-map" dict "T" .T "ProtoName" $protoName }}
+{{ end }}
+{{ range required .Output }}
+{{ template "swift-pb/serialization-map" dict "T" .T "ProtoName" $protoName }}
+{{ end }}
 {{ end }}
 {{ end }}
 

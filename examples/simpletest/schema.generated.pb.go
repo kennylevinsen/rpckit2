@@ -1262,17 +1262,10 @@ func unmarshalUUID(s string) (uuid.UUID, error) {
 }
 
 type protoPingpongMethod uint64
-type protoBackendMethod uint64
 
 const (
 	protoPingpongMethodSimpleTest protoPingpongMethod = 1
 	protoPingpongMethodArrayTest  protoPingpongMethod = 2
-
-	protoBackendMethodAuthenticate          protoBackendMethod = 1
-	protoBackendMethodListChannels          protoBackendMethod = 2
-	protoBackendMethodSetAvatar             protoBackendMethod = 3
-	protoBackendMethodSetName               protoBackendMethod = 4
-	protoBackendMethodRegisterNotifications protoBackendMethod = 5
 )
 
 type protoDescriptor struct {
@@ -1292,52 +1285,6 @@ var protoMap = map[uint64]protoDescriptor{
 			2: methodDescriptor{name: "ArrayTest"},
 		},
 	},
-	3: protoDescriptor{
-		name: "Backend",
-		methods: map[uint64]methodDescriptor{
-			1: methodDescriptor{name: "Authenticate"},
-			2: methodDescriptor{name: "ListChannels"},
-			3: methodDescriptor{name: "SetAvatar"},
-			4: methodDescriptor{name: "SetName"},
-			5: methodDescriptor{name: "RegisterNotifications"},
-		},
-	},
-}
-
-type rpcGlobalStructChannelInfo struct {
-	v ChannelInfo
-}
-
-func (s *rpcGlobalStructChannelInfo) RPCEncode(m *message) error {
-	m.WritePBInt64(1, s.v.ID)
-	m.WritePBString(2, s.v.Title)
-	return nil
-}
-
-func (s *rpcGlobalStructChannelInfo) RPCDecode(m *message) error {
-	var (
-		err error
-		tag uint64
-	)
-	for err == nil {
-		tag, err = m.ReadVarint()
-		switch tag {
-		case uint64(1<<3) | uint64(wireType64bit):
-			s.v.ID, err = m.ReadInt64()
-
-		case uint64(2<<3) | uint64(wireTypeLengthDelimited):
-			s.v.Title, err = m.ReadString()
-
-		default:
-			if err != io.EOF {
-				err = m.ReadPBSkip(tag)
-			}
-		}
-	}
-	if err == io.EOF {
-		return nil
-	}
-	return err
 }
 
 type rpcReqProtoPingpongMethodSimpleTest struct {
@@ -1348,7 +1295,6 @@ type rpcReqProtoPingpongMethodSimpleTest struct {
 	Vbool    bool
 	Vstring  string
 	Vbytes   []byte
-	Channels ChannelInfo
 }
 
 func (s *rpcReqProtoPingpongMethodSimpleTest) RPCEncode(m *message) error {
@@ -1359,15 +1305,6 @@ func (s *rpcReqProtoPingpongMethodSimpleTest) RPCEncode(m *message) error {
 	m.WritePBBool(5, s.Vbool)
 	m.WritePBString(6, s.Vstring)
 	m.WritePBBytes(7, s.Vbytes)
-	{
-		em := newEmbeddedMessage(messageCapacity)
-		var vs rpcGlobalStructChannelInfo
-		vs.v = s.Channels
-		if err := vs.RPCEncode(em); err != nil {
-			return err
-		}
-		m.WritePBMessage(8, em)
-	}
 	return nil
 }
 
@@ -1400,23 +1337,6 @@ func (s *rpcReqProtoPingpongMethodSimpleTest) RPCDecode(m *message) error {
 		case uint64(7<<3) | uint64(wireTypeLengthDelimited):
 			s.Vbytes, err = m.ReadBytes()
 
-		case uint64(8<<3) | uint64(wireTypeLengthDelimited):
-			var em *message
-
-			em, err = m.ReadEmbeddedMessageNoCopy()
-			if err != nil {
-				break
-			}
-
-			var vs rpcGlobalStructChannelInfo
-			if err = vs.RPCDecode(em); err == io.EOF {
-				err = nil
-			} else if err != nil {
-				break
-			}
-
-			s.Channels = vs.v
-
 		default:
 			if err != io.EOF {
 				err = m.ReadPBSkip(tag)
@@ -1441,7 +1361,6 @@ type rpcRespProtoPingpongMethodSimpleTest struct {
 	Vbool    bool
 	Vstring  string
 	Vbytes   []byte
-	Channels ChannelInfo
 }
 
 func (s *rpcRespProtoPingpongMethodSimpleTest) RPCEncode(m *message) error {
@@ -1452,15 +1371,6 @@ func (s *rpcRespProtoPingpongMethodSimpleTest) RPCEncode(m *message) error {
 	m.WritePBBool(5, s.Vbool)
 	m.WritePBString(6, s.Vstring)
 	m.WritePBBytes(7, s.Vbytes)
-	{
-		em := newEmbeddedMessage(messageCapacity)
-		var vs rpcGlobalStructChannelInfo
-		vs.v = s.Channels
-		if err := vs.RPCEncode(em); err != nil {
-			return err
-		}
-		m.WritePBMessage(8, em)
-	}
 	return nil
 }
 
@@ -1493,23 +1403,6 @@ func (s *rpcRespProtoPingpongMethodSimpleTest) RPCDecode(m *message) error {
 		case uint64(7<<3) | uint64(wireTypeLengthDelimited):
 			s.Vbytes, err = m.ReadBytes()
 
-		case uint64(8<<3) | uint64(wireTypeLengthDelimited):
-			var em *message
-
-			em, err = m.ReadEmbeddedMessageNoCopy()
-			if err != nil {
-				break
-			}
-
-			var vs rpcGlobalStructChannelInfo
-			if err = vs.RPCDecode(em); err == io.EOF {
-				err = nil
-			} else if err != nil {
-				break
-			}
-
-			s.Channels = vs.v
-
 		default:
 			if err != io.EOF {
 				err = m.ReadPBSkip(tag)
@@ -1534,7 +1427,6 @@ type rpcReqProtoPingpongMethodArrayTest struct {
 	Vbool    []bool
 	Vstring  []string
 	Vbytes   [][]byte
-	Channels []ChannelInfo
 }
 
 func (s *rpcReqProtoPingpongMethodArrayTest) RPCEncode(m *message) error {
@@ -1558,17 +1450,6 @@ func (s *rpcReqProtoPingpongMethodArrayTest) RPCEncode(m *message) error {
 	}
 	for _, v := range s.Vbytes {
 		m.WritePBBytes(7, v)
-	}
-	for _, v := range s.Channels {
-		{
-			em := newEmbeddedMessage(messageCapacity)
-			var vs rpcGlobalStructChannelInfo
-			vs.v = v
-			if err := vs.RPCEncode(em); err != nil {
-				return err
-			}
-			m.WritePBMessage(8, em)
-		}
 	}
 	return nil
 }
@@ -1616,25 +1497,6 @@ func (s *rpcReqProtoPingpongMethodArrayTest) RPCDecode(m *message) error {
 			v, err = m.ReadBytes()
 			s.Vbytes = append(s.Vbytes, v)
 
-		case uint64(8<<3) | uint64(wireTypeLengthDelimited):
-			var v ChannelInfo
-			var em *message
-
-			em, err = m.ReadEmbeddedMessageNoCopy()
-			if err != nil {
-				break
-			}
-
-			var vs rpcGlobalStructChannelInfo
-			if err = vs.RPCDecode(em); err == io.EOF {
-				err = nil
-			} else if err != nil {
-				break
-			}
-
-			v = vs.v
-			s.Channels = append(s.Channels, v)
-
 		default:
 			if err != io.EOF {
 				err = m.ReadPBSkip(tag)
@@ -1659,7 +1521,6 @@ type rpcRespProtoPingpongMethodArrayTest struct {
 	Vbool    []bool
 	Vstring  []string
 	Vbytes   [][]byte
-	Channels []ChannelInfo
 }
 
 func (s *rpcRespProtoPingpongMethodArrayTest) RPCEncode(m *message) error {
@@ -1683,17 +1544,6 @@ func (s *rpcRespProtoPingpongMethodArrayTest) RPCEncode(m *message) error {
 	}
 	for _, v := range s.Vbytes {
 		m.WritePBBytes(7, v)
-	}
-	for _, v := range s.Channels {
-		{
-			em := newEmbeddedMessage(messageCapacity)
-			var vs rpcGlobalStructChannelInfo
-			vs.v = v
-			if err := vs.RPCEncode(em); err != nil {
-				return err
-			}
-			m.WritePBMessage(8, em)
-		}
 	}
 	return nil
 }
@@ -1741,25 +1591,6 @@ func (s *rpcRespProtoPingpongMethodArrayTest) RPCDecode(m *message) error {
 			v, err = m.ReadBytes()
 			s.Vbytes = append(s.Vbytes, v)
 
-		case uint64(8<<3) | uint64(wireTypeLengthDelimited):
-			var v ChannelInfo
-			var em *message
-
-			em, err = m.ReadEmbeddedMessageNoCopy()
-			if err != nil {
-				break
-			}
-
-			var vs rpcGlobalStructChannelInfo
-			if err = vs.RPCDecode(em); err == io.EOF {
-				err = nil
-			} else if err != nil {
-				break
-			}
-
-			v = vs.v
-			s.Channels = append(s.Channels, v)
-
 		default:
 			if err != io.EOF {
 				err = m.ReadPBSkip(tag)
@@ -1776,301 +1607,8 @@ func (s *rpcRespProtoPingpongMethodArrayTest) RPCID() uint64 {
 	return uint64(protoPingpongMethodArrayTest)
 }
 
-type rpcReqProtoBackendMethodAuthenticate struct {
-	Token string
-	Email string
-}
-
-func (s *rpcReqProtoBackendMethodAuthenticate) RPCEncode(m *message) error {
-	m.WritePBString(1, s.Token)
-	m.WritePBString(2, s.Email)
-	return nil
-}
-
-func (s *rpcReqProtoBackendMethodAuthenticate) RPCDecode(m *message) error {
-	var (
-		err error
-		tag uint64
-	)
-	for err == nil {
-		tag, err = m.ReadVarint()
-		switch tag {
-		case uint64(1<<3) | uint64(wireTypeLengthDelimited):
-			s.Token, err = m.ReadString()
-
-		case uint64(2<<3) | uint64(wireTypeLengthDelimited):
-			s.Email, err = m.ReadString()
-
-		default:
-			if err != io.EOF {
-				err = m.ReadPBSkip(tag)
-			}
-		}
-	}
-	if err == io.EOF {
-		return nil
-	}
-	return err
-}
-
-func (s *rpcReqProtoBackendMethodAuthenticate) RPCID() uint64 {
-	return uint64(protoBackendMethodAuthenticate)
-}
-
-type rpcRespProtoBackendMethodAuthenticate struct {
-	Token string
-}
-
-func (s *rpcRespProtoBackendMethodAuthenticate) RPCEncode(m *message) error {
-	m.WritePBString(1, s.Token)
-	return nil
-}
-
-func (s *rpcRespProtoBackendMethodAuthenticate) RPCDecode(m *message) error {
-	var (
-		err error
-		tag uint64
-	)
-	for err == nil {
-		tag, err = m.ReadVarint()
-		switch tag {
-		case uint64(1<<3) | uint64(wireTypeLengthDelimited):
-			s.Token, err = m.ReadString()
-
-		default:
-			if err != io.EOF {
-				err = m.ReadPBSkip(tag)
-			}
-		}
-	}
-	if err == io.EOF {
-		return nil
-	}
-	return err
-}
-
-func (s *rpcRespProtoBackendMethodAuthenticate) RPCID() uint64 {
-	return uint64(protoBackendMethodAuthenticate)
-}
-
-type rpcReqProtoBackendMethodListChannels struct{}
-
-func (s *rpcReqProtoBackendMethodListChannels) RPCEncode(m *message) error { return nil }
-func (s *rpcReqProtoBackendMethodListChannels) RPCDecode(m *message) error { return nil }
-func (s *rpcReqProtoBackendMethodListChannels) RPCID() uint64 {
-	return uint64(protoBackendMethodListChannels)
-}
-
-type rpcRespProtoBackendMethodListChannels struct {
-	Greeting string
-	Channels []ChannelInfo
-}
-
-func (s *rpcRespProtoBackendMethodListChannels) RPCEncode(m *message) error {
-	m.WritePBString(1, s.Greeting)
-	for _, v := range s.Channels {
-		{
-			em := newEmbeddedMessage(messageCapacity)
-			var vs rpcGlobalStructChannelInfo
-			vs.v = v
-			if err := vs.RPCEncode(em); err != nil {
-				return err
-			}
-			m.WritePBMessage(2, em)
-		}
-	}
-	return nil
-}
-
-func (s *rpcRespProtoBackendMethodListChannels) RPCDecode(m *message) error {
-	var (
-		err error
-		tag uint64
-	)
-	for err == nil {
-		tag, err = m.ReadVarint()
-		switch tag {
-		case uint64(1<<3) | uint64(wireTypeLengthDelimited):
-			s.Greeting, err = m.ReadString()
-
-		case uint64(2<<3) | uint64(wireTypeLengthDelimited):
-			var v ChannelInfo
-			var em *message
-
-			em, err = m.ReadEmbeddedMessageNoCopy()
-			if err != nil {
-				break
-			}
-
-			var vs rpcGlobalStructChannelInfo
-			if err = vs.RPCDecode(em); err == io.EOF {
-				err = nil
-			} else if err != nil {
-				break
-			}
-
-			v = vs.v
-			s.Channels = append(s.Channels, v)
-
-		default:
-			if err != io.EOF {
-				err = m.ReadPBSkip(tag)
-			}
-		}
-	}
-	if err == io.EOF {
-		return nil
-	}
-	return err
-}
-
-func (s *rpcRespProtoBackendMethodListChannels) RPCID() uint64 {
-	return uint64(protoBackendMethodListChannels)
-}
-
-type rpcReqProtoBackendMethodSetAvatar struct {
-	Image []byte
-}
-
-func (s *rpcReqProtoBackendMethodSetAvatar) RPCEncode(m *message) error {
-	m.WritePBBytes(1, s.Image)
-	return nil
-}
-
-func (s *rpcReqProtoBackendMethodSetAvatar) RPCDecode(m *message) error {
-	var (
-		err error
-		tag uint64
-	)
-	for err == nil {
-		tag, err = m.ReadVarint()
-		switch tag {
-		case uint64(1<<3) | uint64(wireTypeLengthDelimited):
-			s.Image, err = m.ReadBytes()
-
-		default:
-			if err != io.EOF {
-				err = m.ReadPBSkip(tag)
-			}
-		}
-	}
-	if err == io.EOF {
-		return nil
-	}
-	return err
-}
-
-func (s *rpcReqProtoBackendMethodSetAvatar) RPCID() uint64 {
-	return uint64(protoBackendMethodSetAvatar)
-}
-
-type rpcRespProtoBackendMethodSetAvatar struct{}
-
-func (s *rpcRespProtoBackendMethodSetAvatar) RPCEncode(m *message) error { return nil }
-func (s *rpcRespProtoBackendMethodSetAvatar) RPCDecode(m *message) error { return nil }
-func (s *rpcRespProtoBackendMethodSetAvatar) RPCID() uint64 {
-	return uint64(protoBackendMethodSetAvatar)
-}
-
-type rpcReqProtoBackendMethodSetName struct {
-	Name string
-}
-
-func (s *rpcReqProtoBackendMethodSetName) RPCEncode(m *message) error {
-	m.WritePBString(1, s.Name)
-	return nil
-}
-
-func (s *rpcReqProtoBackendMethodSetName) RPCDecode(m *message) error {
-	var (
-		err error
-		tag uint64
-	)
-	for err == nil {
-		tag, err = m.ReadVarint()
-		switch tag {
-		case uint64(1<<3) | uint64(wireTypeLengthDelimited):
-			s.Name, err = m.ReadString()
-
-		default:
-			if err != io.EOF {
-				err = m.ReadPBSkip(tag)
-			}
-		}
-	}
-	if err == io.EOF {
-		return nil
-	}
-	return err
-}
-
-func (s *rpcReqProtoBackendMethodSetName) RPCID() uint64 {
-	return uint64(protoBackendMethodSetName)
-}
-
-type rpcRespProtoBackendMethodSetName struct{}
-
-func (s *rpcRespProtoBackendMethodSetName) RPCEncode(m *message) error { return nil }
-func (s *rpcRespProtoBackendMethodSetName) RPCDecode(m *message) error { return nil }
-func (s *rpcRespProtoBackendMethodSetName) RPCID() uint64 {
-	return uint64(protoBackendMethodSetName)
-}
-
-type rpcReqProtoBackendMethodRegisterNotifications struct {
-	Name       string
-	Devicetype string
-}
-
-func (s *rpcReqProtoBackendMethodRegisterNotifications) RPCEncode(m *message) error {
-	m.WritePBString(2, s.Name)
-	m.WritePBString(3, s.Devicetype)
-	return nil
-}
-
-func (s *rpcReqProtoBackendMethodRegisterNotifications) RPCDecode(m *message) error {
-	var (
-		err error
-		tag uint64
-	)
-	for err == nil {
-		tag, err = m.ReadVarint()
-		switch tag {
-		case uint64(2<<3) | uint64(wireTypeLengthDelimited):
-			s.Name, err = m.ReadString()
-
-		case uint64(3<<3) | uint64(wireTypeLengthDelimited):
-			s.Devicetype, err = m.ReadString()
-
-		default:
-			if err != io.EOF {
-				err = m.ReadPBSkip(tag)
-			}
-		}
-	}
-	if err == io.EOF {
-		return nil
-	}
-	return err
-}
-
-func (s *rpcReqProtoBackendMethodRegisterNotifications) RPCID() uint64 {
-	return uint64(protoBackendMethodRegisterNotifications)
-}
-
-type rpcRespProtoBackendMethodRegisterNotifications struct{}
-
-func (s *rpcRespProtoBackendMethodRegisterNotifications) RPCEncode(m *message) error { return nil }
-func (s *rpcRespProtoBackendMethodRegisterNotifications) RPCDecode(m *message) error { return nil }
-func (s *rpcRespProtoBackendMethodRegisterNotifications) RPCID() uint64 {
-	return uint64(protoBackendMethodRegisterNotifications)
-}
-
 type rpcCallServerForPingpong struct {
 	methods PingpongProtocol
-}
-
-type rpcCallServerForBackend struct {
-	methods BackendProtocol
 }
 
 // RPCPingpongServer creates a new RPCServer for the pingpong protocol.
@@ -2081,16 +1619,8 @@ func RPCPingpongServer(methods PingpongProtocol) RPCServer {
 	}
 }
 
-// RPCBackendServer creates a new RPCServer for the Backend protocol.
-func RPCBackendServer(methods BackendProtocol) RPCServer {
-	return &rpcServer{
-		ProtocolID: 3,
-		Server:     &rpcCallServerForBackend{methods: methods},
-	}
-}
-
 func (args *rpcReqProtoPingpongMethodSimpleTest) call(ctx context.Context, s rpcCallServer) (resp rpcMessage) {
-	vinteger, vint64, vfloat, vdouble, vbool, vstring, vbytes, Channels, err := s.(*rpcCallServerForPingpong).methods.SimpleTest(ctx, args.Vinteger, args.Vint64, args.Vfloat, args.Vdouble, args.Vbool, args.Vstring, args.Vbytes, args.Channels)
+	vinteger, vint64, vfloat, vdouble, vbool, vstring, vbytes, err := s.(*rpcCallServerForPingpong).methods.SimpleTest(ctx, args.Vinteger, args.Vint64, args.Vfloat, args.Vdouble, args.Vbool, args.Vstring, args.Vbytes)
 	if err != nil {
 		if rpcMsg, ok := err.(rpcMessage); ok {
 			return rpcMsg
@@ -2105,12 +1635,11 @@ func (args *rpcReqProtoPingpongMethodSimpleTest) call(ctx context.Context, s rpc
 		Vbool:    vbool,
 		Vstring:  vstring,
 		Vbytes:   vbytes,
-		Channels: Channels,
 	}
 }
 
 func (args *rpcReqProtoPingpongMethodArrayTest) call(ctx context.Context, s rpcCallServer) (resp rpcMessage) {
-	vinteger, vint64, vfloat, vdouble, vbool, vstring, vbytes, Channels, err := s.(*rpcCallServerForPingpong).methods.ArrayTest(ctx, args.Vinteger, args.Vint64, args.Vfloat, args.Vdouble, args.Vbool, args.Vstring, args.Vbytes, args.Channels)
+	vinteger, vint64, vfloat, vdouble, vbool, vstring, vbytes, err := s.(*rpcCallServerForPingpong).methods.ArrayTest(ctx, args.Vinteger, args.Vint64, args.Vfloat, args.Vdouble, args.Vbool, args.Vstring, args.Vbytes)
 	if err != nil {
 		if rpcMsg, ok := err.(rpcMessage); ok {
 			return rpcMsg
@@ -2125,7 +1654,6 @@ func (args *rpcReqProtoPingpongMethodArrayTest) call(ctx context.Context, s rpcC
 		Vbool:    vbool,
 		Vstring:  vstring,
 		Vbytes:   vbytes,
-		Channels: Channels,
 	}
 }
 
@@ -2148,103 +1676,6 @@ func (s *rpcCallServerForPingpong) handle(ctx context.Context, methodID uint64, 
 	}
 }
 
-func (args *rpcReqProtoBackendMethodAuthenticate) call(ctx context.Context, s rpcCallServer) (resp rpcMessage) {
-	token, err := s.(*rpcCallServerForBackend).methods.Authenticate(ctx, args.Token, args.Email)
-	if err != nil {
-		if rpcMsg, ok := err.(rpcMessage); ok {
-			return rpcMsg
-		}
-		return &rpcError{id: ApplicationError, error: err.Error()}
-	}
-	return &rpcRespProtoBackendMethodAuthenticate{
-		Token: token,
-	}
-}
-
-func (args *rpcReqProtoBackendMethodListChannels) call(ctx context.Context, s rpcCallServer) (resp rpcMessage) {
-	greeting, Channels, err := s.(*rpcCallServerForBackend).methods.ListChannels(ctx)
-	if err != nil {
-		if rpcMsg, ok := err.(rpcMessage); ok {
-			return rpcMsg
-		}
-		return &rpcError{id: ApplicationError, error: err.Error()}
-	}
-	return &rpcRespProtoBackendMethodListChannels{
-		Greeting: greeting,
-		Channels: Channels,
-	}
-}
-
-func (args *rpcReqProtoBackendMethodSetAvatar) call(ctx context.Context, s rpcCallServer) (resp rpcMessage) {
-	err := s.(*rpcCallServerForBackend).methods.SetAvatar(ctx, args.Image)
-	if err != nil {
-		if rpcMsg, ok := err.(rpcMessage); ok {
-			return rpcMsg
-		}
-		return &rpcError{id: ApplicationError, error: err.Error()}
-	}
-	return &rpcRespProtoBackendMethodSetAvatar{}
-}
-
-func (args *rpcReqProtoBackendMethodSetName) call(ctx context.Context, s rpcCallServer) (resp rpcMessage) {
-	err := s.(*rpcCallServerForBackend).methods.SetName(ctx, args.Name)
-	if err != nil {
-		if rpcMsg, ok := err.(rpcMessage); ok {
-			return rpcMsg
-		}
-		return &rpcError{id: ApplicationError, error: err.Error()}
-	}
-	return &rpcRespProtoBackendMethodSetName{}
-}
-
-func (args *rpcReqProtoBackendMethodRegisterNotifications) call(ctx context.Context, s rpcCallServer) (resp rpcMessage) {
-	err := s.(*rpcCallServerForBackend).methods.RegisterNotifications(ctx, args.Name, args.Devicetype)
-	if err != nil {
-		if rpcMsg, ok := err.(rpcMessage); ok {
-			return rpcMsg
-		}
-		return &rpcError{id: ApplicationError, error: err.Error()}
-	}
-	return &rpcRespProtoBackendMethodRegisterNotifications{}
-}
-
-func (s *rpcCallServerForBackend) handle(ctx context.Context, methodID uint64, m *message) (callable rpcCallable, err error) {
-	switch methodID {
-	case uint64(protoBackendMethodAuthenticate):
-		args := rpcReqProtoBackendMethodAuthenticate{}
-		if err := args.RPCDecode(m); err != nil {
-			return nil, fmt.Errorf("unable to decode method call: %v", err)
-		}
-		return &args, nil
-	case uint64(protoBackendMethodListChannels):
-		args := rpcReqProtoBackendMethodListChannels{}
-		if err := args.RPCDecode(m); err != nil {
-			return nil, fmt.Errorf("unable to decode method call: %v", err)
-		}
-		return &args, nil
-	case uint64(protoBackendMethodSetAvatar):
-		args := rpcReqProtoBackendMethodSetAvatar{}
-		if err := args.RPCDecode(m); err != nil {
-			return nil, fmt.Errorf("unable to decode method call: %v", err)
-		}
-		return &args, nil
-	case uint64(protoBackendMethodSetName):
-		args := rpcReqProtoBackendMethodSetName{}
-		if err := args.RPCDecode(m); err != nil {
-			return nil, fmt.Errorf("unable to decode method call: %v", err)
-		}
-		return &args, nil
-	case uint64(protoBackendMethodRegisterNotifications):
-		args := rpcReqProtoBackendMethodRegisterNotifications{}
-		if err := args.RPCDecode(m); err != nil {
-			return nil, fmt.Errorf("unable to decode method call: %v", err)
-		}
-		return &args, nil
-	default:
-		return nil, fmt.Errorf("unknown method ID: %d", methodID)
-	}
-}
-
 // The RPCPingpongClient type is a RPC client for the pingpong protocol.
 type RPCPingpongClient struct {
 	c *RPCConnection
@@ -2255,18 +1686,8 @@ func NewRPCPingpongClient(c *RPCConnection) *RPCPingpongClient {
 	return &RPCPingpongClient{c: c}
 }
 
-// The RPCBackendClient type is a RPC client for the Backend protocol.
-type RPCBackendClient struct {
-	c *RPCConnection
-}
-
-// NewRPCBackendClient creates a new RPC client for the Backend protocol.
-func NewRPCBackendClient(c *RPCConnection) *RPCBackendClient {
-	return &RPCBackendClient{c: c}
-}
-
 // The simplest of tests
-func (c *RPCPingpongClient) SimpleTest(ctx context.Context, reqVinteger int64, reqVint64 int64, reqVfloat float32, reqVdouble float64, reqVbool bool, reqVstring string, reqVbytes []byte, reqChannels ChannelInfo) (respVinteger int64, respVint64 int64, respVfloat float32, respVdouble float64, respVbool bool, respVstring string, respVbytes []byte, respChannels ChannelInfo, err error) {
+func (c *RPCPingpongClient) SimpleTest(ctx context.Context, reqVinteger int64, reqVint64 int64, reqVfloat float32, reqVdouble float64, reqVbool bool, reqVstring string, reqVbytes []byte) (respVinteger int64, respVint64 int64, respVfloat float32, respVdouble float64, respVbool bool, respVstring string, respVbytes []byte, err error) {
 
 	var decoderErr error
 	decoder := func(msg *message) error {
@@ -2289,7 +1710,6 @@ func (c *RPCPingpongClient) SimpleTest(ctx context.Context, reqVinteger int64, r
 			respVbool = r.Vbool
 			respVstring = r.Vstring
 			respVbytes = r.Vbytes
-			respChannels = r.Channels
 			return nil
 		default:
 			var isPrivate bool
@@ -2311,7 +1731,6 @@ func (c *RPCPingpongClient) SimpleTest(ctx context.Context, reqVinteger int64, r
 		Vbool:    reqVbool,
 		Vstring:  reqVstring,
 		Vbytes:   reqVbytes,
-		Channels: reqChannels,
 	})
 
 	if decoderErr != nil {
@@ -2322,7 +1741,7 @@ func (c *RPCPingpongClient) SimpleTest(ctx context.Context, reqVinteger int64, r
 }
 
 // The simplest of tests, but with arrays
-func (c *RPCPingpongClient) ArrayTest(ctx context.Context, reqVinteger []int64, reqVint64 []int64, reqVfloat []float32, reqVdouble []float64, reqVbool []bool, reqVstring []string, reqVbytes [][]byte, reqChannels []ChannelInfo) (respVinteger []int64, respVint64 []int64, respVfloat []float32, respVdouble []float64, respVbool []bool, respVstring []string, respVbytes [][]byte, respChannels []ChannelInfo, err error) {
+func (c *RPCPingpongClient) ArrayTest(ctx context.Context, reqVinteger []int64, reqVint64 []int64, reqVfloat []float32, reqVdouble []float64, reqVbool []bool, reqVstring []string, reqVbytes [][]byte) (respVinteger []int64, respVint64 []int64, respVfloat []float32, respVdouble []float64, respVbool []bool, respVstring []string, respVbytes [][]byte, err error) {
 
 	var decoderErr error
 	decoder := func(msg *message) error {
@@ -2345,7 +1764,6 @@ func (c *RPCPingpongClient) ArrayTest(ctx context.Context, reqVinteger []int64, 
 			respVbool = r.Vbool
 			respVstring = r.Vstring
 			respVbytes = r.Vbytes
-			respChannels = r.Channels
 			return nil
 		default:
 			var isPrivate bool
@@ -2367,215 +1785,6 @@ func (c *RPCPingpongClient) ArrayTest(ctx context.Context, reqVinteger []int64, 
 		Vbool:    reqVbool,
 		Vstring:  reqVstring,
 		Vbytes:   reqVbytes,
-		Channels: reqChannels,
-	})
-
-	if decoderErr != nil {
-		err = decoderErr
-	}
-
-	return
-}
-
-// Authenticate using either (token or e-mail).
-func (c *RPCBackendClient) Authenticate(ctx context.Context, reqToken string, reqEmail string) (respToken string, err error) {
-
-	var decoderErr error
-	decoder := func(msg *message) error {
-		resultTypeID, err := msg.ReadVarint()
-		if err != nil {
-			decoderErr = &rpcError{id: GenericError, error: fmt.Sprintf("error while decoding message type: %v", err)}
-			return decoderErr
-		}
-		switch resultTypeID {
-		case uint64(protoBackendMethodAuthenticate):
-			var r rpcRespProtoBackendMethodAuthenticate
-			if err := r.RPCDecode(msg); err != nil {
-				decoderErr = &rpcError{id: GenericError, error: fmt.Sprintf("could not decode result: %v", err)}
-				return decoderErr
-			}
-			respToken = r.Token
-			return nil
-		default:
-			var isPrivate bool
-			err, isPrivate = c.c.handlePrivateResponse(resultTypeID, msg)
-			if !isPrivate {
-				decoderErr = &rpcError{id: ProtocolError, error: fmt.Sprintf("unexpected return type for call type %d: %d", uint64(protoBackendMethodAuthenticate), resultTypeID)}
-				return decoderErr
-			}
-			decoderErr = err
-			return nil
-		}
-	}
-
-	err = c.c.call(ctx, decoder, true, 3, uint64(protoBackendMethodAuthenticate), &rpcReqProtoBackendMethodAuthenticate{
-		Token: reqToken,
-		Email: reqEmail,
-	})
-
-	if decoderErr != nil {
-		err = decoderErr
-	}
-
-	return
-}
-
-// List my active channels
-func (c *RPCBackendClient) ListChannels(ctx context.Context) (respGreeting string, respChannels []ChannelInfo, err error) {
-
-	var decoderErr error
-	decoder := func(msg *message) error {
-		resultTypeID, err := msg.ReadVarint()
-		if err != nil {
-			decoderErr = &rpcError{id: GenericError, error: fmt.Sprintf("error while decoding message type: %v", err)}
-			return decoderErr
-		}
-		switch resultTypeID {
-		case uint64(protoBackendMethodListChannels):
-			var r rpcRespProtoBackendMethodListChannels
-			if err := r.RPCDecode(msg); err != nil {
-				decoderErr = &rpcError{id: GenericError, error: fmt.Sprintf("could not decode result: %v", err)}
-				return decoderErr
-			}
-			respGreeting = r.Greeting
-			respChannels = r.Channels
-			return nil
-		default:
-			var isPrivate bool
-			err, isPrivate = c.c.handlePrivateResponse(resultTypeID, msg)
-			if !isPrivate {
-				decoderErr = &rpcError{id: ProtocolError, error: fmt.Sprintf("unexpected return type for call type %d: %d", uint64(protoBackendMethodListChannels), resultTypeID)}
-				return decoderErr
-			}
-			decoderErr = err
-			return nil
-		}
-	}
-
-	err = c.c.call(ctx, decoder, true, 3, uint64(protoBackendMethodListChannels), &rpcReqProtoBackendMethodListChannels{})
-
-	if decoderErr != nil {
-		err = decoderErr
-	}
-
-	return
-}
-
-// Set the avatar for the currently authenticated user
-func (c *RPCBackendClient) SetAvatar(ctx context.Context, reqImage []byte) (err error) {
-
-	var decoderErr error
-	decoder := func(msg *message) error {
-		resultTypeID, err := msg.ReadVarint()
-		if err != nil {
-			decoderErr = &rpcError{id: GenericError, error: fmt.Sprintf("error while decoding message type: %v", err)}
-			return decoderErr
-		}
-		switch resultTypeID {
-		case uint64(protoBackendMethodSetAvatar):
-			var r rpcRespProtoBackendMethodSetAvatar
-			if err := r.RPCDecode(msg); err != nil {
-				decoderErr = &rpcError{id: GenericError, error: fmt.Sprintf("could not decode result: %v", err)}
-				return decoderErr
-			}
-			return nil
-		default:
-			var isPrivate bool
-			err, isPrivate = c.c.handlePrivateResponse(resultTypeID, msg)
-			if !isPrivate {
-				decoderErr = &rpcError{id: ProtocolError, error: fmt.Sprintf("unexpected return type for call type %d: %d", uint64(protoBackendMethodSetAvatar), resultTypeID)}
-				return decoderErr
-			}
-			decoderErr = err
-			return nil
-		}
-	}
-
-	err = c.c.call(ctx, decoder, true, 3, uint64(protoBackendMethodSetAvatar), &rpcReqProtoBackendMethodSetAvatar{
-		Image: reqImage,
-	})
-
-	if decoderErr != nil {
-		err = decoderErr
-	}
-
-	return
-}
-
-// Set the name of the current user
-func (c *RPCBackendClient) SetName(ctx context.Context, reqName string) (err error) {
-
-	var decoderErr error
-	decoder := func(msg *message) error {
-		resultTypeID, err := msg.ReadVarint()
-		if err != nil {
-			decoderErr = &rpcError{id: GenericError, error: fmt.Sprintf("error while decoding message type: %v", err)}
-			return decoderErr
-		}
-		switch resultTypeID {
-		case uint64(protoBackendMethodSetName):
-			var r rpcRespProtoBackendMethodSetName
-			if err := r.RPCDecode(msg); err != nil {
-				decoderErr = &rpcError{id: GenericError, error: fmt.Sprintf("could not decode result: %v", err)}
-				return decoderErr
-			}
-			return nil
-		default:
-			var isPrivate bool
-			err, isPrivate = c.c.handlePrivateResponse(resultTypeID, msg)
-			if !isPrivate {
-				decoderErr = &rpcError{id: ProtocolError, error: fmt.Sprintf("unexpected return type for call type %d: %d", uint64(protoBackendMethodSetName), resultTypeID)}
-				return decoderErr
-			}
-			decoderErr = err
-			return nil
-		}
-	}
-
-	err = c.c.call(ctx, decoder, true, 3, uint64(protoBackendMethodSetName), &rpcReqProtoBackendMethodSetName{
-		Name: reqName,
-	})
-
-	if decoderErr != nil {
-		err = decoderErr
-	}
-
-	return
-}
-
-// Register for push notifications
-func (c *RPCBackendClient) RegisterNotifications(ctx context.Context, reqName string, reqDevicetype string) (err error) {
-
-	var decoderErr error
-	decoder := func(msg *message) error {
-		resultTypeID, err := msg.ReadVarint()
-		if err != nil {
-			decoderErr = &rpcError{id: GenericError, error: fmt.Sprintf("error while decoding message type: %v", err)}
-			return decoderErr
-		}
-		switch resultTypeID {
-		case uint64(protoBackendMethodRegisterNotifications):
-			var r rpcRespProtoBackendMethodRegisterNotifications
-			if err := r.RPCDecode(msg); err != nil {
-				decoderErr = &rpcError{id: GenericError, error: fmt.Sprintf("could not decode result: %v", err)}
-				return decoderErr
-			}
-			return nil
-		default:
-			var isPrivate bool
-			err, isPrivate = c.c.handlePrivateResponse(resultTypeID, msg)
-			if !isPrivate {
-				decoderErr = &rpcError{id: ProtocolError, error: fmt.Sprintf("unexpected return type for call type %d: %d", uint64(protoBackendMethodRegisterNotifications), resultTypeID)}
-				return decoderErr
-			}
-			decoderErr = err
-			return nil
-		}
-	}
-
-	err = c.c.call(ctx, decoder, true, 3, uint64(protoBackendMethodRegisterNotifications), &rpcReqProtoBackendMethodRegisterNotifications{
-		Name:       reqName,
-		Devicetype: reqDevicetype,
 	})
 
 	if decoderErr != nil {

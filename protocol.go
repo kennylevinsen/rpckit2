@@ -181,7 +181,7 @@ func (t *mapType) GoType() string {
 	return "map[" + t.key.GoType() + "]" + t.value.GoType()
 }
 func (t *mapType) SwiftType() string {
-	return "[" + t.key.GoType() + " : " + t.value.GoType() + " ]"
+	return "[" + t.key.SwiftType() + " : " + t.value.SwiftType() + " ]"
 }
 func (t *mapType) SwiftDefault() string {
 	return "[:]"

@@ -30,12 +30,8 @@ func main() {
 		c.Ready()
 		fmt.Printf("Stuff\n")
 		client := NewRPCPingpongClient(c)
-		// channels := []ChannelInfo{
-		// 	ChannelInfo{ID: 1, Title: "werwer"},
-		// 	ChannelInfo{ID: 2, Title: "werwjkljlkjar"},
-		// }
-		integer, int64, float, double, bool, string, bytes, channel, err := client.SimpleTest(context.Background(), 1, 2, 3.1, 4.1, true, "yelp", []byte("WOOOO"), ChannelInfo{ID: 1, Title: "werwer"},)
-		fmt.Printf("Got: %d, %d, %f, %f, %t, %s, %v, %v, %v\n", integer, int64, float, double, bool, string, bytes, channel, err)
+		integer, int64, float, double, bool, string, bytes, err := client.SimpleTest(context.Background(), 1, 2, 3.1, 4.1, true, "yelp", []byte("WOOOO"))
+		fmt.Printf("Got: %d, %d, %f, %f, %t, %s, %v, %v, %#v\n", integer, int64, float, double, bool, string, bytes, err)
 		// ainteger, aint64, afloat, adouble, abool, astring, abytes, achannels, err := client.ArrayTest(context.Background(), 1, 2, 3.1, 4.1, true, "yelp", []byte("WOOOO"), channels)
 		// fmt.Printf("Got: %d, %d, %f, %f, %t, %s, %v, %v, %v\n", ainteger, aint64, afloat, adouble, abool, astring, abytes, achannels, err)
 	}
@@ -43,13 +39,13 @@ func main() {
 
 type server struct {}
 
-func (c *server) SimpleTest(ctx context.Context, integer int64, int64 int64, float float32, double float64, bool bool, string string, bytes []byte, channel ChannelInfo) (int64, int64, float32, float64, bool, string, []byte, ChannelInfo, error) {
-	fmt.Printf("Got: %d, %d, %f, %f, %t, %s, %v, %v\n", integer, int64, float, double, bool, string, bytes, channel)
-	return integer, int64, float, double, bool, string, bytes, channel, nil
+func (c *server) SimpleTest(ctx context.Context, integer int64, int64 int64, float float32, double float64, bool bool, string string, bytes []byte) (int64, int64, float32, float64, bool, string, []byte, error) {
+	fmt.Printf("Got: %d, %d, %f, %f, %t, %s, %v, %v\n", integer, int64, float, double, bool, string, bytes)
+	return integer, int64, float, double, bool, string, bytes, nil
 }
 
-func (c *server) ArrayTest(ctx context.Context, integer []int64, int64 []int64, float []float32, double []float64, bool []bool, string []string, bytes [][]byte, v []ChannelInfo) ([]int64, []int64, []float32, []float64, []bool, []string, [][]byte, []ChannelInfo, error) {
+func (c *server) ArrayTest(ctx context.Context, integer []int64, int64 []int64, float []float32, double []float64, bool []bool, string []string, bytes [][]byte) ([]int64, []int64, []float32, []float64, []bool, []string, [][]byte, error) {
 
-	fmt.Printf("Got: %v, %v, %v, %v, %v, %v, %v, %v\n", integer, int64, float, double, bool, string, bytes, v)
-	return integer, int64, float, double, bool, string, bytes, v, nil
+	fmt.Printf("Got: %v, %v, %v, %v, %v, %v, %v, %v\n", integer, int64, float, double, bool, string, bytes)
+	return integer, int64, float, double, bool, string, bytes, nil
 }
