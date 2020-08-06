@@ -3,6 +3,7 @@ import Foundation
 enum RPCError: Error {
 	case eof
 	case protocolError
+	case connectionError
 	case applicationError(String)
 }
 
@@ -429,7 +430,7 @@ class RPCConnection: NSObject, StreamDelegate {
 	private let servers: [UInt64 : RPCCallServer]
 
 	// Connection
-	private var connectionState: rpcConnectionState
+	fileprivate var connectionState: rpcConnectionState
 	private var inputStream: InputStream!
 	private var outputStream: OutputStream!
 
@@ -439,8 +440,9 @@ class RPCConnection: NSObject, StreamDelegate {
 	private var readBuffer: [UInt8]
 
 	private var writeBuffer: [UInt8]
+	private var disconnectHook: (RPCConnection) -> ()
 
-	init(host: String, port: Int, tls: Bool, servers: [RPCCallServer]) {
+	init(host: String, port: Int, tls: Bool, servers: [RPCCallServer], disconnectHook: @escaping (RPCConnection) -> ()) {
 		self.host = host
 		self.port = port
 		self.tls = tls
@@ -456,11 +458,7 @@ class RPCConnection: NSObject, StreamDelegate {
 			smap[server.id()] = server
 		}
 		self.servers = smap
-	}
-
-
-	convenience init(host: String, port: Int, tls: Bool) {
-		self.init(host: host, port: port, tls: tls, servers: [])
+		self.disconnectHook = disconnectHook
 	}
 
 	func connect() {
@@ -523,10 +521,8 @@ class RPCConnection: NSObject, StreamDelegate {
 			self.inputStream = nil
 			self.outputStream = nil
 			self.writeBuffer.removeAll()
+			self.disconnectHook(self)
 		}
-		DispatchQueue.main.asyncAfter(deadline: .now() + 5.0, execute: {
-			self.connect()
-		})
 	}
 
 	fileprivate func acquireCallSlot(callback: @escaping (readableMessage) -> Result<Void, RPCError>) -> UInt64 {
@@ -628,7 +624,7 @@ class RPCConnection: NSObject, StreamDelegate {
 			return stream.write(posptr, maxLength: cnt)
 		}
 		if written == -1 {
-			// TODO: DIE!
+			self.disconnect()
 		} else if written > 0 {
 			self.writeBuffer.removeFirst(written)
 		}
@@ -694,7 +690,6 @@ class RPCConnection: NSObject, StreamDelegate {
 				return .success(())
 			}
 		} catch {
-			self.disconnect()
 			return .failure(RPCError.protocolError)
 		}
 	}
@@ -802,6 +797,11 @@ class RPCPingpongClient {
 
 	func SimpleTest(vinteger: Int64, vint64: Int64, vfloat: Float, vdouble: Double, vbool: Bool, vstring: String, vbytes: ArraySlice<UInt8>, callback: @escaping (Result<(Int64, Int64, Float, Double, Bool, String, ArraySlice<UInt8>), Error>) -> ()) {
 
+		if self.conn.connectionState == .disconnected {
+			callback(.failure(RPCError.connectionError))
+			return ()
+		}
+
 		// Names prefixed with __rpckit2 to avoid argument name collisions
 
 		let __rpckit2_callID = self.conn.acquireCallSlot(callback: { (rmsg) -> Result<Void, RPCError> in
@@ -859,6 +859,11 @@ class RPCPingpongClient {
 
 
 	func ArrayTest(vinteger: [Int64], vint64: [Int64], vfloat: [Float], vdouble: [Double], vbool: [Bool], vstring: [String], vbytes: [ArraySlice<UInt8>], callback: @escaping (Result<([Int64], [Int64], [Float], [Double], [Bool], [String], [ArraySlice<UInt8>]), Error>) -> ()) {
+
+		if self.conn.connectionState == .disconnected {
+			callback(.failure(RPCError.connectionError))
+			return ()
+		}
 
 		// Names prefixed with __rpckit2 to avoid argument name collisions
 
@@ -949,15 +954,17 @@ class rpcError : RPCMessage {
 				let tag = try rmsg.readVarUInt().get()
 				switch tag {
 				case (1 << 3 | RPCWireType.varInt.rawValue):
-					guard let v = RPCErrorType(rawValue: try! rmsg.readUInt64().get()) else {
+					let rv = try! rmsg.readVarUInt().get()
+					guard let v = RPCErrorType(rawValue: rv) else {
 						return .failure(.protocolError)
 					}
 					errorType = v
 					break
-				case (2 << 3 | RPCWireType.fixed64Bit.rawValue):
+				case (2 << 3 | RPCWireType.lengthDelimited.rawValue):
 					error = try rmsg.readString().get()
 					break
 				default:
+					try rmsg.readPBSkip(tag: tag).get()
 					break
 				}
 			}
@@ -1133,7 +1140,8 @@ args.vstring = try __rpckit2_rmsg.readString().get()
 args.vbytes = try __rpckit2_rmsg.readBytes().get()
 					break
 				default:
-					return .failure(RPCError.protocolError)
+					try __rpckit2_rmsg.readPBSkip(tag: tag).get()
+					break
 				}
 			}
 		} catch RPCError.eof {
@@ -1213,7 +1221,8 @@ args.vstring = try __rpckit2_rmsg.readString().get()
 args.vbytes = try __rpckit2_rmsg.readBytes().get()
 					break
 				default:
-					return .failure(RPCError.protocolError)
+					try __rpckit2_rmsg.readPBSkip(tag: tag).get()
+					break
 				}
 			}
 		} catch RPCError.eof {
@@ -1322,7 +1331,8 @@ v = try __rpckit2_rmsg.readBytes().get()
 args.vbytes.append(v)
 					break
 				default:
-					return .failure(RPCError.protocolError)
+					try __rpckit2_rmsg.readPBSkip(tag: tag).get()
+					break
 				}
 			}
 		} catch RPCError.eof {
@@ -1430,7 +1440,8 @@ v = try __rpckit2_rmsg.readBytes().get()
 args.vbytes.append(v)
 					break
 				default:
-					return .failure(RPCError.protocolError)
+					try __rpckit2_rmsg.readPBSkip(tag: tag).get()
+					break
 				}
 			}
 		} catch RPCError.eof {
