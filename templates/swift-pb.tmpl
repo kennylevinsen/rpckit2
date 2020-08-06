@@ -1231,7 +1231,7 @@ fileprivate class {{ required $typeName }} : RPCMessage {
 	func encode(_ __rpckit2_wmsg: writableMessage) -> Result<(), RPCError> {
 		// Write the auto-generated message
 		{{- range required .Fields }}
-		{{- $accessor := format "self.v.%s" (required .Name) }}
+		{{- $accessor := format "self.v.%s" (required .Name | capitalize) }}
 {{ template "swift-pb/marshal" dict "Field" .T "Accessor" $accessor  "Message" "__rpckit2_wmsg" "ID" .ID "ProtoName" $.ProtoName }}
 		{{- end }}
 		return .success(())
@@ -1244,7 +1244,7 @@ fileprivate class {{ required $typeName }} : RPCMessage {
 				let tag = try __rpckit2_rmsg.readVarUInt().get()
 				switch tag {
 				{{- range .Fields }}
-				{{- $accessor := format "args.%s" (required .Name) }}
+				{{- $accessor := format "args.%s" (required .Name | capitalize) }}
 				case ({{ required .ID }} << 3 | {{ if .T.IsArray }}{{ template "swift-pb/property-to-wiretype" .T.InnerValue.String}}{{ else if .T.IsMarshalled}}{{ template "swift-pb/property-to-wiretype" "String"}}{{ else }}{{ template "swift-pb/property-to-wiretype" .T.String}}{{ end }}.rawValue):
 {{ template "swift-pb/unmarshal" dict "Field" .T "Accessor" $accessor "Message" "__rpckit2_rmsg" "ProtoName" $.ProtoName }}
 					break
