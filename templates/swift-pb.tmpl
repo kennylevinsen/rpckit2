@@ -1012,7 +1012,6 @@ class RPC{{ required .Name | capitalize }}Client {
 					{{ $val.Name }}{{- if ne (add (len $input) -1) $idx }}, {{ end }}
 					{{- end }}))
 		if case .failure(let error) = __rpckit2_callarg.encode(__rpckit2_wmsg) {
-				callback(.failure(RPCError.protocolError))
 			callback(.failure(error))
 			return ()
 		}
