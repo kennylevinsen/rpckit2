@@ -544,6 +544,7 @@ class RPCConnection: NSObject, StreamDelegate {
 
 	fileprivate func send(wmsg: writableMessage) {
 		self.writeBuffer.append(contentsOf: wmsg.buf)
+		self.flushWriteBuffer(stream: self.outputStream)
 	}
 
 	fileprivate func hasBytesAvailable(stream: InputStream) {
@@ -611,7 +612,8 @@ class RPCConnection: NSObject, StreamDelegate {
 	fileprivate func flushWriteBuffer(stream: OutputStream) {
 		// Just like the case with hasBytesAvailable, the buffer management
 		// here is simple but dumb.
-		if self.writeBuffer.count == 0 || self.connectionState != .connected {
+		if self.writeBuffer.count == 0 || self.connectionState != .connected ||
+				!stream.hasSpaceAvailable {
 			return
 		}
 		let cnt = self.writeBuffer.count;
