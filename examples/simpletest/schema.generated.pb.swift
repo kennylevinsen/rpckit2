@@ -28,6 +28,7 @@ enum RPCMessageType: UInt64 {
 	case methodReturn = 2
 }
 
+// readableMessage implements primitive deserialization over an array slice.
 class readableMessage {
 	var pos: Int = 0
 	var len: Int = 0
@@ -221,6 +222,7 @@ class readableMessage {
 	}
 }
 
+// writableMessage implements primitive serialization to a buffer
 class writableMessage {
 	var buf: [UInt8] = []
 	var embedded: Bool = false
@@ -387,21 +389,41 @@ class writableMessage {
 	}
 }
 
-protocol RPCMessage {
+// RPCSerializable is the internal protocol that serialization types (e.g.
+// structs, call arguments, return values) must implement. It is not meant to
+// be used directly by users of rpckit2. It is only used as a return type from
+// server implementations.
+//
+// Note that deserialization is done by calling a static factory method
+// directly on the target message type.
+protocol RPCSerializable {
+
+	// Encode this message into the specified writableMessage
 	func encode(_: writableMessage) -> Result<Void, RPCError>
-	static func decode(_: readableMessage) -> Result<RPCMessage, RPCError>
+
+	// Returns the ID to identify this type. Only applies to call or return
+	// types.
 	func id() -> UInt64
 }
 
+// RPCCallServer is the internal protocol for server implementations. It is not
+// meant to be used directly by users of rpckit2.
 protocol RPCCallServer {
+	// The protocol ID that this server... Serves.
 	func id() -> UInt64
-	func handle(methodID: UInt64, rmsg: readableMessage) -> Result<RPCMessage, RPCError>;
+
+	// Processes a method call for the specified ID, using the specified message
+	// body. Returns the result body, or a connection/protocol error.
+	func handle(methodID: UInt64, rmsg: readableMessage) -> Result<RPCSerializable, RPCError>
 }
 
+// callSlot is the device installed for each pending method call, containing
+// the decoding callback that will be used when a return for this call ID is
+// received.
 fileprivate class callSlot {
-	let callback: (readableMessage) -> Result<Void, RPCError>
+	let callback: (Result<readableMessage, RPCError>) -> Result<Void, RPCError>
 
-	init(callback: @escaping (readableMessage) -> Result<Void, RPCError>) {
+	init(callback: @escaping (Result<readableMessage, RPCError>) -> Result<Void, RPCError>) {
 		self.callback = callback
 	}
 }
@@ -418,12 +440,22 @@ fileprivate enum rpcReaderState {
 	case readingBody
 }
 
+// RPCConnection contains and services Input/Output streams, and dispatches
+// messages read therefrom.
+//
+// NOTE: If one wishes to break out the connection handling, look at gotMessage
+// and send. These are what must be called and implemented externally,
+// respectively.
+//
+// NOTE: Not thread-safe. To make this thread-safe, lock all access to
+// writeBuffer (both append and flush), as well as access to nextID/slots. This
+// should be sufficient to allow arbitrary writes.
 class RPCConnection: NSObject, StreamDelegate {
 	// Protocol state
 	private var nextID: UInt64 = 0
 	private var slots: [UInt64: callSlot] = [:]
 
-	// Immutable paramters
+	// Immutable parameters.
 	private let host: String
 	private let port: Int
 	private let tls: Bool
@@ -443,6 +475,8 @@ class RPCConnection: NSObject, StreamDelegate {
 	private var disconnectHook: (RPCConnection) -> ()
 
 	init(host: String, port: Int, tls: Bool, servers: [RPCCallServer], disconnectHook: @escaping (RPCConnection) -> ()) {
+		// TODO: Move host/port/tls to connect - without reconnect, there's no
+		// point in storing them.
 		self.host = host
 		self.port = port
 		self.tls = tls
@@ -466,6 +500,7 @@ class RPCConnection: NSObject, StreamDelegate {
 			return
 		}
 
+		// Send the preamble
 		self.writeBuffer = [82, 80, 67, 75, 73, 84, 0, 0, 0, 1]
 		self.writeBuffer.reserveCapacity(1024)
 		self.connectionState = .connecting
@@ -521,11 +556,19 @@ class RPCConnection: NSObject, StreamDelegate {
 			self.inputStream = nil
 			self.outputStream = nil
 			self.writeBuffer.removeAll()
+
+			// Terminate all callbacks
+			for (_, slot) in self.slots {
+				_ = slot.callback(.failure(RPCError.connectionError))
+			}
+			self.slots = [:]
 			self.disconnectHook(self)
 		}
 	}
 
-	fileprivate func acquireCallSlot(callback: @escaping (readableMessage) -> Result<Void, RPCError>) -> UInt64 {
+	// Acquires the next avialable call slot and assigns the specified callback.
+	// Must be released with findAndReleaseCallSlot, or by disconnect.
+	fileprivate func acquireCallSlot(callback: @escaping (Result<readableMessage, RPCError>) -> Result<Void, RPCError>) -> UInt64 {
 		var n: UInt64 = 0
 		var taken = true
 		while taken {
@@ -542,11 +585,13 @@ class RPCConnection: NSObject, StreamDelegate {
 		return self.slots.removeValue(forKey: id)
 	}
 
+	// Sends a written, serialized message
 	fileprivate func send(wmsg: writableMessage) {
 		self.writeBuffer.append(contentsOf: wmsg.buf)
 		self.flushWriteBuffer(stream: self.outputStream)
 	}
 
+	// Services input from the connection
 	fileprivate func hasBytesAvailable(stream: InputStream) {
 		// This routine implements a simple, singular message buffer. First a
 		// header is read, then the body, then the positions are cleared.
@@ -558,6 +603,11 @@ class RPCConnection: NSObject, StreamDelegate {
 		// back every time a message is handled.
 		//
 		// Anyway, back to the video.
+		//
+		// NOTE: Do I want to do this in a `while stream.hasBytesAvailable` loop?
+		// We'll be called again anyway, but might incur a performance hit when
+		// receiving many small messages.
+		//
 		while self.readPos + self.readNeeds > self.readBuffer.count {
 			// This is a dumb way to grow an array.
 			self.readBuffer.append(contentsOf: Data(repeating: 0, count: self.readBuffer.count))
@@ -582,18 +632,18 @@ class RPCConnection: NSObject, StreamDelegate {
 			self.readNeeds = 4
 			self.readState = .readingHeader
 			if (self.readBuffer[0..<10] != [82, 80, 67, 75, 73, 84, 0, 0, 0, 1]) {
+				// Wrong preamble
 				self.disconnect()
 			}
 			break
 		case .readingHeader:
-			// TODO: Check if the endianness is correct here.
 			let header = Data(self.readBuffer[0..<4])
 			let size = Int(header.withUnsafeBytes { $0.load(as: UInt32.self) }.bigEndian)
 			self.readNeeds = size
 			self.readState = .readingBody
 			break
 		case .readingBody:
-			// This is terrible. This does a copy. We'll need to use a
+			// TODO: This is terrible. This does a copy. We'll need to use a
 			// native array to be able to get an ArraySlice, but that makes
 			// the pointer part really ugly...
 			let header = Data(self.readBuffer[0..<4])
@@ -609,6 +659,8 @@ class RPCConnection: NSObject, StreamDelegate {
 		}
 	}
 
+	// Flushes the current write buffer if there is anything in it, the
+	// connection is ready, and the stream has space available to it.
 	fileprivate func flushWriteBuffer(stream: OutputStream) {
 		// Just like the case with hasBytesAvailable, the buffer management
 		// here is simple but dumb.
@@ -629,6 +681,7 @@ class RPCConnection: NSObject, StreamDelegate {
 		}
 	}
 
+	// Services stream events
 	func stream(_ aStream: Stream, handle eventCode: Stream.Event) {
 		switch eventCode {
 		case Stream.Event.openCompleted:
@@ -651,6 +704,7 @@ class RPCConnection: NSObject, StreamDelegate {
 		}
 	}
 
+	// Processes a received message
 	fileprivate func gotMessage(msg: readableMessage) -> Result<Void, RPCError> {
 		do {
 			let mtraw = try msg.readVarUInt().get()
@@ -662,11 +716,13 @@ class RPCConnection: NSObject, StreamDelegate {
 				let callID = try msg.readVarUInt().get();
 				let protocolID = try msg.readVarUInt().get();
 				let server = self.servers[protocolID]
+				var resp: RPCSerializable
 				if server == nil {
-					return .failure(RPCError.protocolError)
+					resp = rpcError(("no such server", RPCErrorType.proto))
+				} else {
+					let methodID = try msg.readVarUInt().get();
+					resp = try server!.handle(methodID: methodID, rmsg: msg).get();
 				}
-				let methodID = try msg.readVarUInt().get();
-				let resp = try server!.handle(methodID: methodID, rmsg: msg).get();
 
 				let wmsg = writableMessage()
 				wmsg.writeVarUInt(value: RPCMessageType.methodReturn.rawValue)
@@ -685,7 +741,7 @@ class RPCConnection: NSObject, StreamDelegate {
 				if callSlot == nil {
 					return .failure(RPCError.protocolError)
 				}
-				try callSlot!.callback(msg).get()
+				try callSlot!.callback(.success(msg)).get()
 				return .success(())
 			}
 		} catch {
@@ -726,9 +782,9 @@ class RPCPingpongServer : RPCCallServer {
 		return 1
 	}
 
-	func handle(methodID: UInt64, rmsg: readableMessage) -> Result<RPCMessage, RPCError> {
+	func handle(methodID: UInt64, rmsg: readableMessage) -> Result<RPCSerializable, RPCError> {
 		guard let method = protocolPingpongMethod(rawValue: methodID) else {
-			return .failure(RPCError.protocolError)
+			return .success(rpcError(("no such method", RPCErrorType.proto)))
 		}
 
 		switch method {
@@ -739,12 +795,12 @@ class RPCPingpongServer : RPCCallServer {
 		}
 	}
 
-	func handleSimpleTest(_ rmsg: readableMessage) -> Result<RPCMessage, RPCError> {
+	func handleSimpleTest(_ rmsg: readableMessage) -> Result<RPCSerializable, RPCError> {
 		// Get the message class for the call and decode into it
 		let args: pingpongMethodSimpleTestCall
 		switch pingpongMethodSimpleTestCall.decode(rmsg) {
 		case .success(let v):
-			args = v as! pingpongMethodSimpleTestCall
+			args = v
 		case .failure(let error):
 			return .failure(error)
 		}
@@ -762,12 +818,12 @@ class RPCPingpongServer : RPCCallServer {
 		}
 	}
 
-	func handleArrayTest(_ rmsg: readableMessage) -> Result<RPCMessage, RPCError> {
+	func handleArrayTest(_ rmsg: readableMessage) -> Result<RPCSerializable, RPCError> {
 		// Get the message class for the call and decode into it
 		let args: pingpongMethodArrayTestCall
 		switch pingpongMethodArrayTestCall.decode(rmsg) {
 		case .success(let v):
-			args = v as! pingpongMethodArrayTestCall
+			args = v
 		case .failure(let error):
 			return .failure(error)
 		}
@@ -803,7 +859,16 @@ class RPCPingpongClient {
 
 		// Names prefixed with __rpckit2 to avoid argument name collisions
 
-		let __rpckit2_callID = self.conn.acquireCallSlot(callback: { (rmsg) -> Result<Void, RPCError> in
+		let __rpckit2_callID = self.conn.acquireCallSlot(callback: { (res) -> Result<Void, RPCError> in
+			let rmsg: readableMessage
+			switch res {
+			case .success(let val):
+				rmsg = val
+			case .failure(let error):
+				callback(.failure(error))
+				return .failure(error)
+			}
+
 			guard let resultTypeID = try? rmsg.readVarUInt().get() else {
 				callback(.failure(RPCError.protocolError))
 				return .failure(RPCError.protocolError)
@@ -811,8 +876,7 @@ class RPCPingpongClient {
 			switch resultTypeID {
 			case protocolPingpongMethod.SimpleTest.rawValue:
 				switch pingpongMethodSimpleTestReturn.decode(rmsg) {
-				case .success(let v):
-					let ret = v as! pingpongMethodSimpleTestReturn
+				case .success(let ret):
 					callback(.success((ret.vinteger, ret.vint64, ret.vfloat, ret.vdouble, ret.vbool, ret.vstring, ret.vbytes)))
 					return .success(())
 				case .failure(let error):
@@ -821,9 +885,21 @@ class RPCPingpongClient {
 				}
 			case UInt64.max:
 				switch rpcError.decode(rmsg) {
-				case .success(let v):
-					let ret = v as! rpcError
-					callback(.failure(RPCError.applicationError(ret.error)))
+				case .success(let ret):
+					switch ret.errorType {
+					case RPCErrorType.generic:
+						callback(.failure(RPCError.connectionError))
+					case RPCErrorType.timeout:
+						callback(.failure(RPCError.connectionError))
+					case RPCErrorType.proto:
+						callback(.failure(RPCError.protocolError))
+					case RPCErrorType.application:
+						callback(.failure(RPCError.applicationError(ret.error)))
+					case RPCErrorType.connection:
+						callback(.failure(RPCError.connectionError))
+					case RPCErrorType.shutdown:
+						callback(.failure(RPCError.connectionError))
+					}
 					return .success(())
 				case .failure(let error):
 					callback(.failure(error))
@@ -866,7 +942,16 @@ class RPCPingpongClient {
 
 		// Names prefixed with __rpckit2 to avoid argument name collisions
 
-		let __rpckit2_callID = self.conn.acquireCallSlot(callback: { (rmsg) -> Result<Void, RPCError> in
+		let __rpckit2_callID = self.conn.acquireCallSlot(callback: { (res) -> Result<Void, RPCError> in
+			let rmsg: readableMessage
+			switch res {
+			case .success(let val):
+				rmsg = val
+			case .failure(let error):
+				callback(.failure(error))
+				return .failure(error)
+			}
+
 			guard let resultTypeID = try? rmsg.readVarUInt().get() else {
 				callback(.failure(RPCError.protocolError))
 				return .failure(RPCError.protocolError)
@@ -874,8 +959,7 @@ class RPCPingpongClient {
 			switch resultTypeID {
 			case protocolPingpongMethod.ArrayTest.rawValue:
 				switch pingpongMethodArrayTestReturn.decode(rmsg) {
-				case .success(let v):
-					let ret = v as! pingpongMethodArrayTestReturn
+				case .success(let ret):
 					callback(.success((ret.vinteger, ret.vint64, ret.vfloat, ret.vdouble, ret.vbool, ret.vstring, ret.vbytes)))
 					return .success(())
 				case .failure(let error):
@@ -884,9 +968,21 @@ class RPCPingpongClient {
 				}
 			case UInt64.max:
 				switch rpcError.decode(rmsg) {
-				case .success(let v):
-					let ret = v as! rpcError
-					callback(.failure(RPCError.applicationError(ret.error)))
+				case .success(let ret):
+					switch ret.errorType {
+					case RPCErrorType.generic:
+						callback(.failure(RPCError.connectionError))
+					case RPCErrorType.timeout:
+						callback(.failure(RPCError.connectionError))
+					case RPCErrorType.proto:
+						callback(.failure(RPCError.protocolError))
+					case RPCErrorType.application:
+						callback(.failure(RPCError.applicationError(ret.error)))
+					case RPCErrorType.connection:
+						callback(.failure(RPCError.connectionError))
+					case RPCErrorType.shutdown:
+						callback(.failure(RPCError.connectionError))
+					}
 					return .success(())
 				case .failure(let error):
 					callback(.failure(error))
@@ -922,9 +1018,9 @@ class RPCPingpongClient {
 }
 
 
-class rpcError : RPCMessage {
+class rpcError : RPCSerializable {
 	fileprivate var error: String
-	private var errorType: RPCErrorType
+	fileprivate var errorType: RPCErrorType
 
 	init() {
 		self.error = ""
@@ -945,7 +1041,7 @@ class rpcError : RPCMessage {
 		return .success(())
 	}
 
-	static func decode(_ rmsg: readableMessage) -> Result<RPCMessage, RPCError> {
+	static func decode(_ rmsg: readableMessage) -> Result<rpcError, RPCError> {
 		var error: String = ""
 		var errorType: RPCErrorType = .generic
 		do {
@@ -978,101 +1074,7 @@ class rpcError : RPCMessage {
 }
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-fileprivate class pingpongMethodSimpleTestCall : RPCMessage {
+fileprivate class pingpongMethodSimpleTestCall : RPCSerializable {
 	var vinteger: Int64
 	var vint64: Int64
 	var vfloat: Float
@@ -1111,7 +1113,7 @@ __rpckit2_wmsg.writePBBytes(fieldNumber: 7, value: self.vbytes)
 		return .success(())
 	}
 
-	static func decode(_ __rpckit2_rmsg: readableMessage) -> Result<RPCMessage, RPCError> {
+	static func decode(_ __rpckit2_rmsg: readableMessage) -> Result<pingpongMethodSimpleTestCall, RPCError> {
 		var args: (vinteger: Int64, vint64: Int64, vfloat: Float, vdouble: Double, vbool: Bool, vstring: String, vbytes: ArraySlice<UInt8>) = (0, 0, 0.0, 0.0, false, "", [])
 		do {
 			while true {
@@ -1153,7 +1155,7 @@ args.vbytes = try __rpckit2_rmsg.readBytes().get()
 		return .success(pingpongMethodSimpleTestCall(args))
 	}
 }
-fileprivate class pingpongMethodSimpleTestReturn : RPCMessage {
+fileprivate class pingpongMethodSimpleTestReturn : RPCSerializable {
 	var vinteger: Int64
 	var vint64: Int64
 	var vfloat: Float
@@ -1192,7 +1194,7 @@ __rpckit2_wmsg.writePBBytes(fieldNumber: 7, value: self.vbytes)
 		return .success(())
 	}
 
-	static func decode(_ __rpckit2_rmsg: readableMessage) -> Result<RPCMessage, RPCError> {
+	static func decode(_ __rpckit2_rmsg: readableMessage) -> Result<pingpongMethodSimpleTestReturn, RPCError> {
 		var args: (vinteger: Int64, vint64: Int64, vfloat: Float, vdouble: Double, vbool: Bool, vstring: String, vbytes: ArraySlice<UInt8>) = (0, 0, 0.0, 0.0, false, "", [])
 		do {
 			while true {
@@ -1235,7 +1237,7 @@ args.vbytes = try __rpckit2_rmsg.readBytes().get()
 	}
 }
 	
-fileprivate class pingpongMethodArrayTestCall : RPCMessage {
+fileprivate class pingpongMethodArrayTestCall : RPCSerializable {
 	var vinteger: [Int64]
 	var vint64: [Int64]
 	var vfloat: [Float]
@@ -1288,7 +1290,7 @@ for v in self.vbytes {
 		return .success(())
 	}
 
-	static func decode(_ __rpckit2_rmsg: readableMessage) -> Result<RPCMessage, RPCError> {
+	static func decode(_ __rpckit2_rmsg: readableMessage) -> Result<pingpongMethodArrayTestCall, RPCError> {
 		var args: (vinteger: [Int64], vint64: [Int64], vfloat: [Float], vdouble: [Double], vbool: [Bool], vstring: [String], vbytes: [ArraySlice<UInt8>]) = ([], [], [], [], [], [], [])
 		do {
 			while true {
@@ -1344,7 +1346,7 @@ args.vbytes.append(v)
 		return .success(pingpongMethodArrayTestCall(args))
 	}
 }
-fileprivate class pingpongMethodArrayTestReturn : RPCMessage {
+fileprivate class pingpongMethodArrayTestReturn : RPCSerializable {
 	var vinteger: [Int64]
 	var vint64: [Int64]
 	var vfloat: [Float]
@@ -1397,7 +1399,7 @@ for v in self.vbytes {
 		return .success(())
 	}
 
-	static func decode(_ __rpckit2_rmsg: readableMessage) -> Result<RPCMessage, RPCError> {
+	static func decode(_ __rpckit2_rmsg: readableMessage) -> Result<pingpongMethodArrayTestReturn, RPCError> {
 		var args: (vinteger: [Int64], vint64: [Int64], vfloat: [Float], vdouble: [Double], vbool: [Bool], vstring: [String], vbytes: [ArraySlice<UInt8>]) = ([], [], [], [], [], [], [])
 		do {
 			while true {

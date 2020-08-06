@@ -75,12 +75,13 @@ type PropertyType interface {
 	IsMarshalled() bool
 	InnerValue() PropertyType
 	InnerKey() PropertyType
+	AsStruct() *Struct
 }
 
 type simpleType struct {
-	rpckitType string
-	golangType string
-	swiftType string
+	rpckitType   string
+	golangType   string
+	swiftType    string
 	swiftDefault string
 }
 
@@ -94,22 +95,23 @@ func (simpleType) IsStruct() bool           { return false }
 func (simpleType) IsMarshalled() bool       { return false }
 func (simpleType) InnerValue() PropertyType { return nil }
 func (simpleType) InnerKey() PropertyType   { return nil }
+func (simpleType) AsStruct() *Struct        { return nil }
 
 func newSimpleType(rpckittype, golangtype, swiftType, swiftDefault string) *simpleType {
 	return &simpleType{
-		rpckitType: rpckittype,
-		golangType: golangtype,
-		swiftType: swiftType,
+		rpckitType:   rpckittype,
+		golangType:   golangtype,
+		swiftType:    swiftType,
 		swiftDefault: swiftDefault,
 	}
 }
 
 type marshalledType struct {
-	rpckitType string
-	golangType string
-	swiftType string
+	rpckitType   string
+	golangType   string
+	swiftType    string
 	swiftDefault string
-	_import    string
+	_import      string
 }
 
 func (s *marshalledType) String() string        { return s.rpckitType }
@@ -123,14 +125,15 @@ func (marshalledType) IsStruct() bool           { return false }
 func (marshalledType) IsMarshalled() bool       { return true }
 func (marshalledType) InnerValue() PropertyType { return nil }
 func (marshalledType) InnerKey() PropertyType   { return nil }
+func (marshalledType) AsStruct() *Struct        { return nil }
 
 func newMarshalledType(rpckittype, golangtype, swiftType, swiftDefault, _import string) *marshalledType {
 	return &marshalledType{
-		rpckitType: rpckittype,
-		golangType: golangtype,
-		swiftType: swiftType,
+		rpckitType:   rpckittype,
+		golangType:   golangtype,
+		swiftType:    swiftType,
 		swiftDefault: swiftDefault,
-		_import:    _import,
+		_import:      _import,
 	}
 }
 
@@ -141,8 +144,10 @@ func Int() PropertyType      { return newSimpleType("Int", "int64", "Int64", "0"
 func Float() PropertyType    { return newSimpleType("Float", "float32", "Float", "0.0") }
 func Double() PropertyType   { return newSimpleType("Double", "float64", "Double", "0.0") }
 func Bytes() PropertyType    { return newSimpleType("Bytes", "[]byte", "ArraySlice<UInt8>", "[]") }
-func DateTime() PropertyType { return newMarshalledType("DateTime", "time.Time", "", "","time") }
-func UUID() PropertyType     { return newMarshalledType("UUID", "uuid.UUID", "", "", "github.com/satori/go.uuid") }
+func DateTime() PropertyType { return newMarshalledType("DateTime", "time.Time", "", "", "time") }
+func UUID() PropertyType {
+	return newMarshalledType("UUID", "uuid.UUID", "", "", "github.com/satori/go.uuid")
+}
 
 type MarshalledProperty interface {
 	Import() string
@@ -155,14 +160,15 @@ type arrayType struct {
 func Array(T PropertyType) PropertyType       { return &arrayType{inner: T} }
 func (arrayType) String() string              { return "Array" }
 func (t *arrayType) GoType() string           { return "[]" + t.inner.GoType() }
-func (t *arrayType) SwiftType() string        { return "[" + t.inner.SwiftType() + "]"}
-func (t *arrayType) SwiftDefault() string     { return "[]"}
+func (t *arrayType) SwiftType() string        { return "[" + t.inner.SwiftType() + "]" }
+func (t *arrayType) SwiftDefault() string     { return "[]" }
 func (arrayType) IsArray() bool               { return true }
 func (arrayType) IsMap() bool                 { return false }
 func (arrayType) IsStruct() bool              { return false }
 func (arrayType) IsMarshalled() bool          { return false }
 func (t *arrayType) InnerValue() PropertyType { return t.inner }
 func (arrayType) InnerKey() PropertyType      { return nil }
+func (arrayType) AsStruct() *Struct           { return nil }
 
 type mapType struct {
 	key   PropertyType
@@ -186,6 +192,22 @@ func (t *mapType) SwiftType() string {
 func (t *mapType) SwiftDefault() string {
 	return "[:]"
 }
+func (t *mapType) AsStruct() *Struct {
+	return &Struct{
+		Fields: []Property{
+			Property{
+				ID:   1,
+				Name: "key",
+				T:    t.key,
+			},
+			Property{
+				ID:   2,
+				Name: "value",
+				T:    t.value,
+			},
+		},
+	}
+}
 
 type StructField struct {
 	Key   string
@@ -206,6 +228,7 @@ func (structType) IsStruct() bool           { return true }
 func (structType) IsMarshalled() bool       { return false }
 func (structType) InnerValue() PropertyType { return nil }
 func (structType) InnerKey() PropertyType   { return nil }
+func (structType) AsStruct() *Struct        { return nil }
 func (t *structType) GoType() string {
 	return strings.Title(t.name)
 }
