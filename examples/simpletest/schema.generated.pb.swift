@@ -544,7 +544,6 @@ class RPCConnection: NSObject, StreamDelegate {
 
 	fileprivate func send(wmsg: writableMessage) {
 		self.writeBuffer.append(contentsOf: wmsg.buf)
-		self.flushWriteBuffer(stream: self.outputStream)
 	}
 
 	fileprivate func hasBytesAvailable(stream: InputStream) {
@@ -558,56 +557,54 @@ class RPCConnection: NSObject, StreamDelegate {
 		// back every time a message is handled.
 		//
 		// Anyway, back to the video.
-		while stream.hasBytesAvailable {
-			while self.readPos + self.readNeeds > self.readBuffer.count {
-				// This is a dumb way to grow an array.
-				self.readBuffer.append(contentsOf: Data(repeating: 0, count: self.readBuffer.count))
-			}
+		while self.readPos + self.readNeeds > self.readBuffer.count {
+			// This is a dumb way to grow an array.
+			self.readBuffer.append(contentsOf: Data(repeating: 0, count: self.readBuffer.count))
+		}
 
-			let read = self.readBuffer.withUnsafeMutableBytes { ptr -> Int in
-				let posptr = ptr.baseAddress!             // Get a raw pointer
-					.assumingMemoryBound(to: UInt8.self)  // Make it a UInt8 pointer
-					.advanced(by: self.readPos)           // Move it self.readPos bytes forward
-				return stream.read(posptr, maxLength: self.readNeeds - self.readPos)
-			}
+		let read = self.readBuffer.withUnsafeMutableBytes { ptr -> Int in
+			let posptr = ptr.baseAddress!             // Get a raw pointer
+				.assumingMemoryBound(to: UInt8.self)  // Make it a UInt8 pointer
+				.advanced(by: self.readPos)           // Move it self.readPos bytes forward
+			return stream.read(posptr, maxLength: self.readNeeds - self.readPos)
+		}
 
-			self.readPos += read
+		self.readPos += read
 
-			if self.readPos < self.readNeeds {
-				continue
-			}
+		if self.readPos < self.readNeeds {
+			return
+		}
 
-			switch self.readState {
-			case .readingPreamble:
-				self.readPos = 0
-				self.readNeeds = 4
-				self.readState = .readingHeader
-				if (self.readBuffer[0..<10] != [82, 80, 67, 75, 73, 84, 0, 0, 0, 1]) {
-					self.disconnect()
-				}
-				break
-			case .readingHeader:
-				// TODO: Check if the endianness is correct here.
-				let header = Data(self.readBuffer[0..<4])
-				let size = Int(header.withUnsafeBytes { $0.load(as: UInt32.self) }.bigEndian)
-				self.readNeeds = size
-				self.readState = .readingBody
-				break
-			case .readingBody:
-				// This is terrible. This does a copy. We'll need to use a
-				// native array to be able to get an ArraySlice, but that makes
-				// the pointer part really ugly...
-				let header = Data(self.readBuffer[0..<4])
-				let size = Int(header.withUnsafeBytes { $0.load(as: UInt32.self) }.bigEndian)
-				let message = readableMessage(slice: self.readBuffer[..<size])!
-				self.readPos = 0
-				self.readNeeds = 4
-				self.readState = .readingHeader
-				if case .failure(_) = self.gotMessage(msg: message) {
-					self.disconnect()
-				}
-				break
+		switch self.readState {
+		case .readingPreamble:
+			self.readPos = 0
+			self.readNeeds = 4
+			self.readState = .readingHeader
+			if (self.readBuffer[0..<10] != [82, 80, 67, 75, 73, 84, 0, 0, 0, 1]) {
+				self.disconnect()
 			}
+			break
+		case .readingHeader:
+			// TODO: Check if the endianness is correct here.
+			let header = Data(self.readBuffer[0..<4])
+			let size = Int(header.withUnsafeBytes { $0.load(as: UInt32.self) }.bigEndian)
+			self.readNeeds = size
+			self.readState = .readingBody
+			break
+		case .readingBody:
+			// This is terrible. This does a copy. We'll need to use a
+			// native array to be able to get an ArraySlice, but that makes
+			// the pointer part really ugly...
+			let header = Data(self.readBuffer[0..<4])
+			let size = Int(header.withUnsafeBytes { $0.load(as: UInt32.self) }.bigEndian)
+			let message = readableMessage(slice: self.readBuffer[..<size])!
+			self.readPos = 0
+			self.readNeeds = 4
+			self.readState = .readingHeader
+			if case .failure(_) = self.gotMessage(msg: message) {
+				self.disconnect()
+			}
+			break
 		}
 	}
 
@@ -846,7 +843,7 @@ class RPCPingpongClient {
 
 		let __rpckit2_callarg = pingpongMethodSimpleTestCall((vinteger, vint64, vfloat, vdouble, vbool, vstring, vbytes))
 		if case .failure(let error) = __rpckit2_callarg.encode(__rpckit2_wmsg) {
-				callback(.failure(RPCError.protocolError))
+			let _ = self.conn.findAndReleaseCallSlot(id: __rpckit2_callID)
 			callback(.failure(error))
 			return ()
 		}
@@ -909,7 +906,7 @@ class RPCPingpongClient {
 
 		let __rpckit2_callarg = pingpongMethodArrayTestCall((vinteger, vint64, vfloat, vdouble, vbool, vstring, vbytes))
 		if case .failure(let error) = __rpckit2_callarg.encode(__rpckit2_wmsg) {
-				callback(.failure(RPCError.protocolError))
+			let _ = self.conn.findAndReleaseCallSlot(id: __rpckit2_callID)
 			callback(.failure(error))
 			return ()
 		}
