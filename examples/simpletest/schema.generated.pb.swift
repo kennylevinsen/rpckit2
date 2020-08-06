@@ -264,10 +264,10 @@ class writableMessage {
 	func writeVarUInt(value: UInt64) {
 		var v = value
 		while v >= 0x80 {
-			self.buf.append(UInt8(v) | 0x80)
+			self.buf.append(UInt8(v & 0xFF) | 0x80)
 			v >>= 7
 		}
-		self.buf.append(UInt8(v))
+		self.buf.append(UInt8(v & 0xFF))
 	}
 
 	func writeVarInt(value: Int64) {
