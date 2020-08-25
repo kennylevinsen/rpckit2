@@ -760,23 +760,26 @@ class RPCConnection: NSObject, StreamDelegate {
 {{- /* Utilitities */ -}}
 {{- /*             */ -}}
 
-{{ define "swift-pb/property-to-wiretype" -}}
-{{- /* Internal rpckit to writetype constant converter */ -}}
-{{- if eq . "String" -}}RPCWireType.lengthDelimited
-{{- else if eq . "Bool" -}}RPCWireType.varInt
-{{- else if eq . "Int64" -}}RPCWireType.fixed64Bit
-{{- else if eq . "Int" -}}RPCWireType.varInt
-{{- else if eq . "Float" -}}RPCWireType.fixed32Bit
-{{- else if eq . "Double" -}}RPCWireType.fixed64Bit
-{{- else if eq . "Bytes" }}RPCWireType.lengthDelimited
-{{- else if eq . "Array" }}RPCWireType.lengthDelimited
-{{- else if eq . "Map" }}RPCWireType.lengthDelimited
-{{- else if eq . "Struct" }}RPCWireType.lengthDelimited
+{{ define "swift-pb/property-to-wiretype-2" -}}
+{{- if .IsArray }}RPCWireType.lengthDelimited
+{{- else if .IsMarshalled }}RPCWireType.lengthDelimited
+{{- else if .IsMap }}RPCWireType.lengthDelimited
+{{- else if .IsStruct }}RPCWireType.lengthDelimited
+{{- else if eq .String "String" -}}RPCWireType.lengthDelimited
+{{- else if eq .String "Bool" -}}RPCWireType.varInt
+{{- else if eq .String "Int64" -}}RPCWireType.fixed64Bit
+{{- else if eq .String "Int" -}}RPCWireType.varInt
+{{- else if eq .String "Float" -}}RPCWireType.fixed32Bit
+{{- else if eq .String "Double" -}}RPCWireType.fixed64Bit
+{{- else if eq .String "Bytes" -}}RPCWireType.lengthDelimited
 {{- else -}}{{ error . }}
 {{- end -}}
 {{ end }}
 
-
+{{ define "swift-pb/property-to-wiretype" -}}
+{{- /* Internal rpckit to writetype constant converter */ -}}
+{{- if .IsArray }}{{ template "swift-pb/property-to-wiretype-2" .InnerValue }}{{ else }}{{ template "swift-pb/property-to-wiretype-2" . }}{{ end }}
+{{ end }}
 
 {{- /*                              */ -}}
 {{- /* Per-protocol method ID enums */ -}}
@@ -818,7 +821,7 @@ for v in {{ required .Accessor }} {
 
 {{ define "swift-pb/marshal-map" -}}
 {{- /* Marshal map, using a custom encoder */ -}}
-{{- $vname := retrieve (format "rpcMap-%s" .Field.SwiftType) -}}
+{{- $vname := retrieve (format "rpcMap-%s" .Field.String) -}}
 for (key, value) in {{ required .Accessor }} {
 	let em = writableMessage(embedded: true)
 	let vs = {{ $vname }}((key, value))
@@ -832,12 +835,14 @@ for (key, value) in {{ required .Accessor }} {
 {{- define "swift-pb/marshal-struct" -}}
 {{- /* Marshal struct, using custom encoder */ -}}
 do {
-	let em = writableMessage(embedded: true)
-	let vs: rpcGlobalStruct{{ required .Field.SwiftType }} = rpcGlobalStruct{{ required .Field.SwiftType }}({{ required .Accessor }})
-	if case .failure(let error) = vs.encode(em) {
-		return .failure(error)
+	if let value = {{ required .Accessor }} {
+		let em = writableMessage(embedded: true)
+		let vs: rpcGlobal{{ required .Field.String }} = rpcGlobal{{ required .Field.String }}(value)
+		if case .failure(let error) = vs.encode(em) {
+			return .failure(error)
+		}
+		{{ required .Message }}.writePBMessage(fieldNumber: {{ required .ID}}, msg: em)
 	}
-	{{ required .Message }}.writePBMessage(fieldNumber: {{ required .ID}}, msg: em)
 }
 {{- end }}
 
@@ -881,7 +886,7 @@ let v: {{ required .Field.InnerValue.SwiftType }}
 
 {{ define "swift-pb/unmarshal-map" -}}
 {{- /* Map<Type, Type>, handled by a custom struct decoder */ -}}
-{{- $vname := retrieve (format "rpcMap-%s" .Field.SwiftType) -}}
+{{- $vname := retrieve (format "rpcMap-%s" .Field.String) -}}
 let em = try {{ required .Message }}.readEmbeddedMessage().get()
 switch {{ $vname }}.decode(em) {
 case .success(let val):
@@ -894,7 +899,7 @@ case .failure(let error):
 {{ define "swift-pb/unmarshal-struct" -}}
 {{- /* Global struct, handled by a custom decoder */ -}}
 let em = try {{ required .Message }}.readEmbeddedMessage().get()
-switch rpcGlobalStruct{{ required .Field.SwiftType }}.decode(em) {
+switch rpcGlobal{{ required .Field.String }}.decode(em) {
 case .success(let val):
 	{{ required .Accessor }} = val.v
 case .failure(let error):
@@ -1239,7 +1244,7 @@ fileprivate class {{ required $typeName }} : RPCSerializable {
 				{{- if eq (len .Fields) 1 -}}
 				{{- $accessor := "args" }}
 				{{- range .Fields }}
-				if (try __rpckit2_rmsg.readVarUInt().get() == {{ required .ID }} << 3 | {{ if .T.IsArray }}{{ template "swift-pb/property-to-wiretype" .T.InnerValue.String}}{{ else if .T.IsMarshalled}}{{ template "swift-pb/property-to-wiretype" "String"}}{{ else }}{{ template "swift-pb/property-to-wiretype" .T.String}}{{ end }}.rawValue) {
+				if (try __rpckit2_rmsg.readVarUInt().get() == {{ required .ID }} << 3 | {{ template "swift-pb/property-to-wiretype" .T }}.rawValue) {
 {{ template "swift-pb/unmarshal" dict "Field" .T "Accessor" $accessor "Message" "__rpckit2_rmsg" "ProtoName" $.ProtoName }}
 				} else {
 					return .failure(RPCError.protocolError)
@@ -1250,7 +1255,7 @@ fileprivate class {{ required $typeName }} : RPCSerializable {
 				switch tag {
 				{{- range .Fields }}
 				{{- $accessor := format "args.%s" (required .Name) }}
-				case ({{ required .ID }} << 3 | {{ if .T.IsArray }}{{ template "swift-pb/property-to-wiretype" .T.InnerValue.String}}{{ else if .T.IsMarshalled}}{{ template "swift-pb/property-to-wiretype" "String"}}{{ else }}{{ template "swift-pb/property-to-wiretype" .T.String}}{{ end }}.rawValue):
+				case ({{ required .ID }} << 3 | {{ template "swift-pb/property-to-wiretype" .T }}.rawValue):
 {{ template "swift-pb/unmarshal" dict "Field" .T "Accessor" $accessor "Message" "__rpckit2_rmsg" "ProtoName" $.ProtoName }}
 					break
 				{{- end }}
@@ -1274,11 +1279,11 @@ fileprivate class {{ required $typeName }} : RPCSerializable {
 {{- end -}}
 
 {{- define "swift-pb/serialization-map" -}}
-{{ $name := format "rpcMap-%s" .T.SwiftType }}
+{{ $name := format "rpcMap-%s" .T.String }}
 {{ if ifnotexists $name -}}
 {{ $mapcnt := counter "rpcMap" }}
 {{ $name := format "rpcMap%d" $mapcnt }}
-{{- store (format "rpcMap-%s" .T.SwiftType) $name -}}
+{{- store (format "rpcMap-%s" .T.String) $name -}}
 {{- $typeName := required $name -}}
 {{ template "swift-pb/serialization" dict "TypeName" $name "TypeID" 0 "Fields" .T.AsStruct.Fields "ProtoName" .ProtoName }}
 {{- end -}}
@@ -1314,14 +1319,14 @@ public class {{ required .Name | capitalize }} {
 {{- /* Struct-serialization differ in that they use read to/write from an  */ -}}
 {{- /* external struct. A little annoying to have the duplication, but at  */ -}}
 {{- /* at least this impl is simpler than the big serialization mess above */ -}}
-{{ $name := format "rpcGlobalStruct%s" (required .Name | capitalize) }}
+{{ $name := format "rpcGlobalStruct_%s" (required .Name) }}
 {{ if ifnotexists $name -}}
 {{ store $name $name }}
 {{- if eq (len .Fields) 0 -}}
 {{- /*  Pretty implementation of message with 0 args */ -}}
 
 fileprivate class {{ required $name }} : RPCSerializable {
-	var s: {{ required .Name | capitalize }}
+	var s: {{ required .Name | capitalize }}?
 	init() {}
 	func encode(_ wmsg: writableMessage) -> Result<(), RPCError> { return .success(()) }
 	static func decode(_ rmsg: readableMessage) -> Result<{{ required $name }}, RPCError> { return .success({{ required $name }}()) }
@@ -1361,7 +1366,7 @@ fileprivate class {{ required $name }} : RPCSerializable {
 				switch tag {
 				{{- range .Fields }}
 				{{- $accessor := format "args.%s" (required .Name | capitalize) }}
-				case ({{ required .ID }} << 3 | {{ if .T.IsArray }}{{ template "swift-pb/property-to-wiretype" .T.InnerValue.String}}{{ else if .T.IsMarshalled}}{{ template "swift-pb/property-to-wiretype" "String"}}{{ else }}{{ template "swift-pb/property-to-wiretype" .T.String}}{{ end }}.rawValue):
+				case ({{ required .ID }} << 3 | {{ template "swift-pb/property-to-wiretype" .T }}.rawValue):
 {{ template "swift-pb/unmarshal" dict "Field" .T "Accessor" $accessor "Message" "__rpckit2_rmsg" "ProtoName" $.ProtoName }}
 					break
 				{{- end }}

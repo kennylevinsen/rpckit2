@@ -67,7 +67,7 @@ func testRPC() {
 					"thirtysix": map[string]int64{"thirtysix": 36, "threethousandandthirtysix": 3636, "threehundredsixtythreethousandthirtysix": 363636},
 				},
 				map[string]int64{"cpu": 12345},
-				EchoThing{
+				&EchoThing{
 					Wee:         "asdf",
 					Stuff:       map[string]int64{"cpu": 1234},
 					Anothertime: now,
@@ -136,7 +136,7 @@ func testHTTP() {
 		"five":      map[string]int64{"five": 5, "fiftyfive": 55, "fivehundredandfiftyfive": 555},
 		"two":       map[string]int64{"two": 2, "twentytwo": 22, "twohundredandtwentytwo": 222},
 		"thirtysix": map[string]int64{"thirtysix": 36, "threethousandandthirtysix": 3636, "threehundredsixtythreethousandthirtysix": 363636},
-	}, map[string]int64{"cpu": 12345}, EchoThing{Wee: "asdf", Stuff: map[string]int64{"cpu": 1234}}, now, uuid.UUID{})
+	}, map[string]int64{"cpu": 12345}, &EchoThing{Wee: "asdf", Stuff: map[string]int64{"cpu": 1234}}, now, uuid.UUID{})
 	if err != nil {
 		panic(err)
 	}
@@ -192,7 +192,7 @@ type echoServer struct {
 	authenticated bool
 }
 
-func (s *echoServer) Echo(ctx context.Context, input string, names []string, values map[string]map[string]int64, values2 map[string]int64, echoThing EchoThing, atime time.Time, id uuid.UUID) (string, time.Time, error) {
+func (s *echoServer) Echo(ctx context.Context, input string, names []string, values map[string]map[string]int64, values2 map[string]int64, echoThing *EchoThing, atime time.Time, id uuid.UUID) (string, time.Time, error) {
 	fmt.Printf("VALUES: %#v, %#v, %#v, %v, %v\n", values, values2, echoThing, atime, id)
 	return input, time.Time{}, nil
 }

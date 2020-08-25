@@ -72,6 +72,7 @@ type httpReqProtoPingpongMethodSimpleTest struct {
 	Vbool    bool    `json:"vbool"`
 	Vstring  string  `json:"vstring"`
 	Vbytes   []byte  `json:"vbytes"`
+	Vstruct  *Ssss   `json:"vstruct"`
 }
 
 type httpRespProtoPingpongMethodSimpleTest struct {
@@ -82,10 +83,11 @@ type httpRespProtoPingpongMethodSimpleTest struct {
 	Vbool    bool    `json:"vbool"`
 	Vstring  string  `json:"vstring"`
 	Vbytes   []byte  `json:"vbytes"`
+	Vstruct  *Ssss   `json:"vstruct"`
 }
 
 // The simplest of tests
-func (c *HTTPPingpongClient) SimpleTest(ctx context.Context, reqVinteger int64, reqVint64 int64, reqVfloat float32, reqVdouble float64, reqVbool bool, reqVstring string, reqVbytes []byte) (respVinteger int64, respVint64 int64, respVfloat float32, respVdouble float64, respVbool bool, respVstring string, respVbytes []byte, err error) {
+func (c *HTTPPingpongClient) SimpleTest(ctx context.Context, reqVinteger int64, reqVint64 int64, reqVfloat float32, reqVdouble float64, reqVbool bool, reqVstring string, reqVbytes []byte, reqVstruct *Ssss) (respVinteger int64, respVint64 int64, respVfloat float32, respVdouble float64, respVbool bool, respVstring string, respVbytes []byte, respVstruct *Ssss, err error) {
 	var (
 		b        []byte
 		req      *http.Request
@@ -102,6 +104,7 @@ func (c *HTTPPingpongClient) SimpleTest(ctx context.Context, reqVinteger int64, 
 		Vbool:    reqVbool,
 		Vstring:  reqVstring,
 		Vbytes:   reqVbytes,
+		Vstruct:  reqVstruct,
 	}
 
 	if b, err = json.Marshal(&reqbody); err != nil {
@@ -146,6 +149,7 @@ func (c *HTTPPingpongClient) SimpleTest(ctx context.Context, reqVinteger int64, 
 	respVbool = respbody.Vbool
 	respVstring = respbody.Vstring
 	respVbytes = respbody.Vbytes
+	respVstruct = respbody.Vstruct
 
 	return
 }
@@ -158,6 +162,7 @@ type httpReqProtoPingpongMethodArrayTest struct {
 	Vbool    []bool    `json:"vbool"`
 	Vstring  []string  `json:"vstring"`
 	Vbytes   [][]byte  `json:"vbytes"`
+	Vstruct  []*Ssss   `json:"vstruct"`
 }
 
 type httpRespProtoPingpongMethodArrayTest struct {
@@ -168,10 +173,11 @@ type httpRespProtoPingpongMethodArrayTest struct {
 	Vbool    []bool    `json:"vbool"`
 	Vstring  []string  `json:"vstring"`
 	Vbytes   [][]byte  `json:"vbytes"`
+	Vstruct  []*Ssss   `json:"vstruct"`
 }
 
 // The simplest of tests, but with arrays
-func (c *HTTPPingpongClient) ArrayTest(ctx context.Context, reqVinteger []int64, reqVint64 []int64, reqVfloat []float32, reqVdouble []float64, reqVbool []bool, reqVstring []string, reqVbytes [][]byte) (respVinteger []int64, respVint64 []int64, respVfloat []float32, respVdouble []float64, respVbool []bool, respVstring []string, respVbytes [][]byte, err error) {
+func (c *HTTPPingpongClient) ArrayTest(ctx context.Context, reqVinteger []int64, reqVint64 []int64, reqVfloat []float32, reqVdouble []float64, reqVbool []bool, reqVstring []string, reqVbytes [][]byte, reqVstruct []*Ssss) (respVinteger []int64, respVint64 []int64, respVfloat []float32, respVdouble []float64, respVbool []bool, respVstring []string, respVbytes [][]byte, respVstruct []*Ssss, err error) {
 	var (
 		b        []byte
 		req      *http.Request
@@ -188,6 +194,7 @@ func (c *HTTPPingpongClient) ArrayTest(ctx context.Context, reqVinteger []int64,
 		Vbool:    reqVbool,
 		Vstring:  reqVstring,
 		Vbytes:   reqVbytes,
+		Vstruct:  reqVstruct,
 	}
 
 	if b, err = json.Marshal(&reqbody); err != nil {
@@ -232,6 +239,7 @@ func (c *HTTPPingpongClient) ArrayTest(ctx context.Context, reqVinteger []int64,
 	respVbool = respbody.Vbool
 	respVstring = respbody.Vstring
 	respVbytes = respbody.Vbytes
+	respVstruct = respbody.Vstruct
 
 	return
 }
@@ -270,7 +278,7 @@ func (c *httpCallServerForPingpong) RegisterToMux(m *http.ServeMux) {
 			return
 		}
 
-		respbody.Vinteger, respbody.Vint64, respbody.Vfloat, respbody.Vdouble, respbody.Vbool, respbody.Vstring, respbody.Vbytes, err = c.methods.SimpleTest(r.Context(), reqbody.Vinteger, reqbody.Vint64, reqbody.Vfloat, reqbody.Vdouble, reqbody.Vbool, reqbody.Vstring, reqbody.Vbytes)
+		respbody.Vinteger, respbody.Vint64, respbody.Vfloat, respbody.Vdouble, respbody.Vbool, respbody.Vstring, respbody.Vbytes, respbody.Vstruct, err = c.methods.SimpleTest(r.Context(), reqbody.Vinteger, reqbody.Vint64, reqbody.Vfloat, reqbody.Vdouble, reqbody.Vbool, reqbody.Vstring, reqbody.Vbytes, reqbody.Vstruct)
 		if err != nil {
 			if header, ok := err.(interface{ StatusCode() int }); ok {
 				w.WriteHeader(header.StatusCode())
@@ -326,7 +334,7 @@ func (c *httpCallServerForPingpong) RegisterToMux(m *http.ServeMux) {
 			return
 		}
 
-		respbody.Vinteger, respbody.Vint64, respbody.Vfloat, respbody.Vdouble, respbody.Vbool, respbody.Vstring, respbody.Vbytes, err = c.methods.ArrayTest(r.Context(), reqbody.Vinteger, reqbody.Vint64, reqbody.Vfloat, reqbody.Vdouble, reqbody.Vbool, reqbody.Vstring, reqbody.Vbytes)
+		respbody.Vinteger, respbody.Vint64, respbody.Vfloat, respbody.Vdouble, respbody.Vbool, respbody.Vstring, respbody.Vbytes, respbody.Vstruct, err = c.methods.ArrayTest(r.Context(), reqbody.Vinteger, reqbody.Vint64, reqbody.Vfloat, reqbody.Vdouble, reqbody.Vbool, reqbody.Vstring, reqbody.Vbytes, reqbody.Vstruct)
 		if err != nil {
 			if header, ok := err.(interface{ StatusCode() int }); ok {
 				w.WriteHeader(header.StatusCode())

@@ -1287,6 +1287,39 @@ var protoMap = map[uint64]protoDescriptor{
 	},
 }
 
+type rpcGlobalStruct_ssss struct {
+	v *Ssss
+}
+
+func (s *rpcGlobalStruct_ssss) RPCEncode(m *message) error {
+	m.WritePBString(1, s.v.Wee)
+	return nil
+}
+
+func (s *rpcGlobalStruct_ssss) RPCDecode(m *message) error {
+	var (
+		err error
+		tag uint64
+	)
+	s.v = &Ssss{}
+	for err == nil {
+		tag, err = m.ReadVarint()
+		switch tag {
+		case uint64(1<<3) | uint64(wireTypeLengthDelimited):
+			s.v.Wee, err = m.ReadString()
+
+		default:
+			if err != io.EOF {
+				err = m.ReadPBSkip(tag)
+			}
+		}
+	}
+	if err == io.EOF {
+		return nil
+	}
+	return err
+}
+
 type rpcReqProtoPingpongMethodSimpleTest struct {
 	Vinteger int64
 	Vint64   int64
@@ -1295,6 +1328,7 @@ type rpcReqProtoPingpongMethodSimpleTest struct {
 	Vbool    bool
 	Vstring  string
 	Vbytes   []byte
+	Vstruct  *Ssss
 }
 
 func (s *rpcReqProtoPingpongMethodSimpleTest) RPCEncode(m *message) error {
@@ -1305,6 +1339,15 @@ func (s *rpcReqProtoPingpongMethodSimpleTest) RPCEncode(m *message) error {
 	m.WritePBBool(5, s.Vbool)
 	m.WritePBString(6, s.Vstring)
 	m.WritePBBytes(7, s.Vbytes)
+	if s.Vstruct != nil {
+		em := newEmbeddedMessage(messageCapacity)
+		var vs rpcGlobalStruct_ssss
+		vs.v = s.Vstruct
+		if err := vs.RPCEncode(em); err != nil {
+			return err
+		}
+		m.WritePBMessage(8, em)
+	}
 	return nil
 }
 
@@ -1337,6 +1380,23 @@ func (s *rpcReqProtoPingpongMethodSimpleTest) RPCDecode(m *message) error {
 		case uint64(7<<3) | uint64(wireTypeLengthDelimited):
 			s.Vbytes, err = m.ReadBytes()
 
+		case uint64(8<<3) | uint64(wireTypeLengthDelimited):
+			var em *message
+
+			em, err = m.ReadEmbeddedMessageNoCopy()
+			if err != nil {
+				break
+			}
+
+			var vs rpcGlobalStruct_ssss
+			if err = vs.RPCDecode(em); err == io.EOF {
+				err = nil
+			} else if err != nil {
+				break
+			}
+
+			s.Vstruct = vs.v
+
 		default:
 			if err != io.EOF {
 				err = m.ReadPBSkip(tag)
@@ -1361,6 +1421,7 @@ type rpcRespProtoPingpongMethodSimpleTest struct {
 	Vbool    bool
 	Vstring  string
 	Vbytes   []byte
+	Vstruct  *Ssss
 }
 
 func (s *rpcRespProtoPingpongMethodSimpleTest) RPCEncode(m *message) error {
@@ -1371,6 +1432,15 @@ func (s *rpcRespProtoPingpongMethodSimpleTest) RPCEncode(m *message) error {
 	m.WritePBBool(5, s.Vbool)
 	m.WritePBString(6, s.Vstring)
 	m.WritePBBytes(7, s.Vbytes)
+	if s.Vstruct != nil {
+		em := newEmbeddedMessage(messageCapacity)
+		var vs rpcGlobalStruct_ssss
+		vs.v = s.Vstruct
+		if err := vs.RPCEncode(em); err != nil {
+			return err
+		}
+		m.WritePBMessage(8, em)
+	}
 	return nil
 }
 
@@ -1403,6 +1473,23 @@ func (s *rpcRespProtoPingpongMethodSimpleTest) RPCDecode(m *message) error {
 		case uint64(7<<3) | uint64(wireTypeLengthDelimited):
 			s.Vbytes, err = m.ReadBytes()
 
+		case uint64(8<<3) | uint64(wireTypeLengthDelimited):
+			var em *message
+
+			em, err = m.ReadEmbeddedMessageNoCopy()
+			if err != nil {
+				break
+			}
+
+			var vs rpcGlobalStruct_ssss
+			if err = vs.RPCDecode(em); err == io.EOF {
+				err = nil
+			} else if err != nil {
+				break
+			}
+
+			s.Vstruct = vs.v
+
 		default:
 			if err != io.EOF {
 				err = m.ReadPBSkip(tag)
@@ -1427,6 +1514,7 @@ type rpcReqProtoPingpongMethodArrayTest struct {
 	Vbool    []bool
 	Vstring  []string
 	Vbytes   [][]byte
+	Vstruct  []*Ssss
 }
 
 func (s *rpcReqProtoPingpongMethodArrayTest) RPCEncode(m *message) error {
@@ -1450,6 +1538,17 @@ func (s *rpcReqProtoPingpongMethodArrayTest) RPCEncode(m *message) error {
 	}
 	for _, v := range s.Vbytes {
 		m.WritePBBytes(7, v)
+	}
+	for _, v := range s.Vstruct {
+		if v != nil {
+			em := newEmbeddedMessage(messageCapacity)
+			var vs rpcGlobalStruct_ssss
+			vs.v = v
+			if err := vs.RPCEncode(em); err != nil {
+				return err
+			}
+			m.WritePBMessage(8, em)
+		}
 	}
 	return nil
 }
@@ -1497,6 +1596,25 @@ func (s *rpcReqProtoPingpongMethodArrayTest) RPCDecode(m *message) error {
 			v, err = m.ReadBytes()
 			s.Vbytes = append(s.Vbytes, v)
 
+		case uint64(8<<3) | uint64(wireTypeLengthDelimited):
+			var v *Ssss
+			var em *message
+
+			em, err = m.ReadEmbeddedMessageNoCopy()
+			if err != nil {
+				break
+			}
+
+			var vs rpcGlobalStruct_ssss
+			if err = vs.RPCDecode(em); err == io.EOF {
+				err = nil
+			} else if err != nil {
+				break
+			}
+
+			v = vs.v
+			s.Vstruct = append(s.Vstruct, v)
+
 		default:
 			if err != io.EOF {
 				err = m.ReadPBSkip(tag)
@@ -1521,6 +1639,7 @@ type rpcRespProtoPingpongMethodArrayTest struct {
 	Vbool    []bool
 	Vstring  []string
 	Vbytes   [][]byte
+	Vstruct  []*Ssss
 }
 
 func (s *rpcRespProtoPingpongMethodArrayTest) RPCEncode(m *message) error {
@@ -1544,6 +1663,17 @@ func (s *rpcRespProtoPingpongMethodArrayTest) RPCEncode(m *message) error {
 	}
 	for _, v := range s.Vbytes {
 		m.WritePBBytes(7, v)
+	}
+	for _, v := range s.Vstruct {
+		if v != nil {
+			em := newEmbeddedMessage(messageCapacity)
+			var vs rpcGlobalStruct_ssss
+			vs.v = v
+			if err := vs.RPCEncode(em); err != nil {
+				return err
+			}
+			m.WritePBMessage(8, em)
+		}
 	}
 	return nil
 }
@@ -1591,6 +1721,25 @@ func (s *rpcRespProtoPingpongMethodArrayTest) RPCDecode(m *message) error {
 			v, err = m.ReadBytes()
 			s.Vbytes = append(s.Vbytes, v)
 
+		case uint64(8<<3) | uint64(wireTypeLengthDelimited):
+			var v *Ssss
+			var em *message
+
+			em, err = m.ReadEmbeddedMessageNoCopy()
+			if err != nil {
+				break
+			}
+
+			var vs rpcGlobalStruct_ssss
+			if err = vs.RPCDecode(em); err == io.EOF {
+				err = nil
+			} else if err != nil {
+				break
+			}
+
+			v = vs.v
+			s.Vstruct = append(s.Vstruct, v)
+
 		default:
 			if err != io.EOF {
 				err = m.ReadPBSkip(tag)
@@ -1620,7 +1769,7 @@ func RPCPingpongServer(methods PingpongProtocol) RPCServer {
 }
 
 func (args *rpcReqProtoPingpongMethodSimpleTest) call(ctx context.Context, s rpcCallServer) (resp rpcMessage) {
-	vinteger, vint64, vfloat, vdouble, vbool, vstring, vbytes, err := s.(*rpcCallServerForPingpong).methods.SimpleTest(ctx, args.Vinteger, args.Vint64, args.Vfloat, args.Vdouble, args.Vbool, args.Vstring, args.Vbytes)
+	vinteger, vint64, vfloat, vdouble, vbool, vstring, vbytes, vstruct, err := s.(*rpcCallServerForPingpong).methods.SimpleTest(ctx, args.Vinteger, args.Vint64, args.Vfloat, args.Vdouble, args.Vbool, args.Vstring, args.Vbytes, args.Vstruct)
 	if err != nil {
 		if rpcMsg, ok := err.(rpcMessage); ok {
 			return rpcMsg
@@ -1635,11 +1784,12 @@ func (args *rpcReqProtoPingpongMethodSimpleTest) call(ctx context.Context, s rpc
 		Vbool:    vbool,
 		Vstring:  vstring,
 		Vbytes:   vbytes,
+		Vstruct:  vstruct,
 	}
 }
 
 func (args *rpcReqProtoPingpongMethodArrayTest) call(ctx context.Context, s rpcCallServer) (resp rpcMessage) {
-	vinteger, vint64, vfloat, vdouble, vbool, vstring, vbytes, err := s.(*rpcCallServerForPingpong).methods.ArrayTest(ctx, args.Vinteger, args.Vint64, args.Vfloat, args.Vdouble, args.Vbool, args.Vstring, args.Vbytes)
+	vinteger, vint64, vfloat, vdouble, vbool, vstring, vbytes, vstruct, err := s.(*rpcCallServerForPingpong).methods.ArrayTest(ctx, args.Vinteger, args.Vint64, args.Vfloat, args.Vdouble, args.Vbool, args.Vstring, args.Vbytes, args.Vstruct)
 	if err != nil {
 		if rpcMsg, ok := err.(rpcMessage); ok {
 			return rpcMsg
@@ -1654,6 +1804,7 @@ func (args *rpcReqProtoPingpongMethodArrayTest) call(ctx context.Context, s rpcC
 		Vbool:    vbool,
 		Vstring:  vstring,
 		Vbytes:   vbytes,
+		Vstruct:  vstruct,
 	}
 }
 
@@ -1687,7 +1838,7 @@ func NewRPCPingpongClient(c *RPCConnection) *RPCPingpongClient {
 }
 
 // The simplest of tests
-func (c *RPCPingpongClient) SimpleTest(ctx context.Context, reqVinteger int64, reqVint64 int64, reqVfloat float32, reqVdouble float64, reqVbool bool, reqVstring string, reqVbytes []byte) (respVinteger int64, respVint64 int64, respVfloat float32, respVdouble float64, respVbool bool, respVstring string, respVbytes []byte, err error) {
+func (c *RPCPingpongClient) SimpleTest(ctx context.Context, reqVinteger int64, reqVint64 int64, reqVfloat float32, reqVdouble float64, reqVbool bool, reqVstring string, reqVbytes []byte, reqVstruct *Ssss) (respVinteger int64, respVint64 int64, respVfloat float32, respVdouble float64, respVbool bool, respVstring string, respVbytes []byte, respVstruct *Ssss, err error) {
 
 	var decoderErr error
 	decoder := func(msg *message) error {
@@ -1710,6 +1861,7 @@ func (c *RPCPingpongClient) SimpleTest(ctx context.Context, reqVinteger int64, r
 			respVbool = r.Vbool
 			respVstring = r.Vstring
 			respVbytes = r.Vbytes
+			respVstruct = r.Vstruct
 			return nil
 		default:
 			var isPrivate bool
@@ -1731,6 +1883,7 @@ func (c *RPCPingpongClient) SimpleTest(ctx context.Context, reqVinteger int64, r
 		Vbool:    reqVbool,
 		Vstring:  reqVstring,
 		Vbytes:   reqVbytes,
+		Vstruct:  reqVstruct,
 	})
 
 	if decoderErr != nil {
@@ -1741,7 +1894,7 @@ func (c *RPCPingpongClient) SimpleTest(ctx context.Context, reqVinteger int64, r
 }
 
 // The simplest of tests, but with arrays
-func (c *RPCPingpongClient) ArrayTest(ctx context.Context, reqVinteger []int64, reqVint64 []int64, reqVfloat []float32, reqVdouble []float64, reqVbool []bool, reqVstring []string, reqVbytes [][]byte) (respVinteger []int64, respVint64 []int64, respVfloat []float32, respVdouble []float64, respVbool []bool, respVstring []string, respVbytes [][]byte, err error) {
+func (c *RPCPingpongClient) ArrayTest(ctx context.Context, reqVinteger []int64, reqVint64 []int64, reqVfloat []float32, reqVdouble []float64, reqVbool []bool, reqVstring []string, reqVbytes [][]byte, reqVstruct []*Ssss) (respVinteger []int64, respVint64 []int64, respVfloat []float32, respVdouble []float64, respVbool []bool, respVstring []string, respVbytes [][]byte, respVstruct []*Ssss, err error) {
 
 	var decoderErr error
 	decoder := func(msg *message) error {
@@ -1764,6 +1917,7 @@ func (c *RPCPingpongClient) ArrayTest(ctx context.Context, reqVinteger []int64, 
 			respVbool = r.Vbool
 			respVstring = r.Vstring
 			respVbytes = r.Vbytes
+			respVstruct = r.Vstruct
 			return nil
 		default:
 			var isPrivate bool
@@ -1785,6 +1939,7 @@ func (c *RPCPingpongClient) ArrayTest(ctx context.Context, reqVinteger []int64, 
 		Vbool:    reqVbool,
 		Vstring:  reqVstring,
 		Vbytes:   reqVbytes,
+		Vstruct:  reqVstruct,
 	})
 
 	if decoderErr != nil {

@@ -158,7 +158,7 @@ type arrayType struct {
 }
 
 func Array(T PropertyType) PropertyType       { return &arrayType{inner: T} }
-func (arrayType) String() string              { return "Array" }
+func (t *arrayType) String() string           { return "Array_val_" + t.inner.String() + "__" }
 func (t *arrayType) GoType() string           { return "[]" + t.inner.GoType() }
 func (t *arrayType) SwiftType() string        { return "[" + t.inner.SwiftType() + "]" }
 func (t *arrayType) SwiftDefault() string     { return "[]" }
@@ -176,7 +176,7 @@ type mapType struct {
 }
 
 func Map(K, V PropertyType) PropertyType    { return &mapType{key: K, value: V} }
-func (mapType) String() string              { return "Map" }
+func (t *mapType) String() string           { return "Map_key_" + t.key.String() + "_value_" + t.value.String() + "__" }
 func (mapType) IsArray() bool               { return false }
 func (mapType) IsMap() bool                 { return true }
 func (mapType) IsStruct() bool              { return false }
@@ -221,7 +221,7 @@ type structType struct {
 func StructName(name string) PropertyType {
 	return &structType{name: name}
 }
-func (structType) String() string           { return "Struct" }
+func (t *structType) String() string        { return "Struct_" + t.name }
 func (structType) IsArray() bool            { return false }
 func (structType) IsMap() bool              { return false }
 func (structType) IsStruct() bool           { return true }
@@ -229,16 +229,14 @@ func (structType) IsMarshalled() bool       { return false }
 func (structType) InnerValue() PropertyType { return nil }
 func (structType) InnerKey() PropertyType   { return nil }
 func (structType) AsStruct() *Struct        { return nil }
+func (structType) SwiftDefault() string     { return "nil" }
 func (t *structType) GoType() string {
-	return strings.Title(t.name)
+	return "*" + strings.Title(t.name)
 }
 func (t *structType) SwiftType() string {
-	return strings.Title(t.name)
+	return strings.Title(t.name) + "?"
 }
 
-func (t *structType) SwiftDefault() string {
-	return strings.Title(t.name) + "()"
-}
 
 type Property struct {
 	T           PropertyType

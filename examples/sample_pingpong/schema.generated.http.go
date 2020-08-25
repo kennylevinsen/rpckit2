@@ -471,7 +471,7 @@ type httpReqProtoEchoMethodEcho struct {
 	Names     []string                    `json:"names"`
 	Values    map[string]map[string]int64 `json:"values"`
 	Values2   map[string]int64            `json:"values2"`
-	Something EchoThing                   `json:"something"`
+	Something *EchoThing                  `json:"something"`
 	Mytime    time.Time                   `json:"mytime"`
 	Id        uuid.UUID                   `json:"id"`
 }
@@ -482,7 +482,7 @@ type httpRespProtoEchoMethodEcho struct {
 }
 
 // Echo is yet another type test
-func (c *HTTPEchoClient) Echo(ctx context.Context, reqInput string, reqNames []string, reqValues map[string]map[string]int64, reqValues2 map[string]int64, reqSomething EchoThing, reqMytime time.Time, reqId uuid.UUID) (respOutput string, respOuputTime time.Time, err error) {
+func (c *HTTPEchoClient) Echo(ctx context.Context, reqInput string, reqNames []string, reqValues map[string]map[string]int64, reqValues2 map[string]int64, reqSomething *EchoThing, reqMytime time.Time, reqId uuid.UUID) (respOutput string, respOuputTime time.Time, err error) {
 	var (
 		b        []byte
 		req      *http.Request

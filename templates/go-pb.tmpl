@@ -2,20 +2,25 @@
 {{/* Utilitities */}}
 {{/*             */}}
 
-{{ define "go-pb/property-to-wiretype" -}}
-{{- /* Internal rpckit to writetype constant converter */ -}}
-{{- if eq . "String" -}}wireTypeLengthDelimited
-{{- else if eq . "Bool" -}}wireTypeVarint
-{{- else if eq . "Int64" -}}wireType64bit
-{{- else if eq . "Int" -}}wireTypeVarint
-{{- else if eq . "Float" -}}wireType32bit
-{{- else if eq . "Double" -}}wireType64bit
-{{- else if eq . "Bytes" }}wireTypeLengthDelimited
-{{- else if eq . "Array" }}wireTypeLengthDelimited
-{{- else if eq . "Map" }}wireTypeLengthDelimited
-{{- else if eq . "Struct" }}wireTypeLengthDelimited
+{{ define "go-pb/property-to-wiretype-2" -}}
+{{- if .IsArray -}}RPCWireType.wireTypeLengthDelimited
+{{- else if .IsMarshalled -}}wireTypeLengthDelimited
+{{- else if .IsMap -}}wireTypeLengthDelimited
+{{- else if .IsStruct -}}wireTypeLengthDelimited
+{{- else if eq .String "String" -}}wireTypeLengthDelimited
+{{- else if eq .String "Bool" -}}wireTypeVarint
+{{- else if eq .String "Int64" -}}wireType64bit
+{{- else if eq .String "Int" -}}wireTypeVarint
+{{- else if eq .String "Float" -}}wireType32bit
+{{- else if eq .String "Double" -}}wireType64bit
+{{- else if eq .String "Bytes" -}}wireTypeLengthDelimited
 {{- else -}}{{ error . }}
 {{- end -}}
+{{ end }}
+
+{{ define "go-pb/property-to-wiretype" -}}
+{{- /* Internal rpckit to writetype constant converter */ -}}
+{{- if .IsArray }}{{ template "go-pb/property-to-wiretype-2" .InnerValue }}{{ else }}{{ template "go-pb/property-to-wiretype-2" . }}{{ end -}}
 {{ end }}
 
 {{/*                         */}}
@@ -180,11 +185,11 @@ func (e *rpcError) RPCDecode(m *message) error {
     for err == nil {
         tag, err = m.ReadVarint()
 		switch tag {
-		case uint64(1 << 3) | uint64({{ template "go-pb/property-to-wiretype" "Int" }}):
+		case uint64(1 << 3) | uint64(wireTypeVarint):
 			var id int64
 			id, err = m.ReadInt()
 			e.id = RPCErrorID(id)
-		case uint64(2 << 3) | uint64({{ template "go-pb/property-to-wiretype" "String" }}):
+		case uint64(2 << 3) | uint64(wireTypeLengthDelimited):
 			e.error, err = m.ReadString()
         default:
             if err != io.EOF {
@@ -1318,7 +1323,7 @@ func unmarshalUUID(s string) (uuid.UUID, error) {
 
 {{ define "go-pb/marshal-map" -}}
 	{{- /* Marshal map, using a custom encoder */ -}}
-	{{- $vname := retrieve (format "rpcMap-%s" .Field.GoType) -}}
+	{{- $vname := retrieve (format "rpcMap-%s" .Field.String) -}}
 	for k, v := range {{ required .Accessor }} {
 	    em := newEmbeddedMessage(messageCapacity)
 	    vv := {{ $vname }}{
@@ -1334,9 +1339,9 @@ func unmarshalUUID(s string) (uuid.UUID, error) {
 
 {{ define "go-pb/marshal-struct" -}}
 	{{- /* Marshal struct, using custom encoder */ -}}
-	{
+	if {{ required .Accessor }} != nil {
 	    em := newEmbeddedMessage(messageCapacity)
-	    var vs rpcGlobalStruct{{ required .Field.GoType }}
+	    var vs rpcGlobal{{ required .Field.String }}
 		vs.v = {{ required .Accessor }}
 	    if err := vs.RPCEncode(em); err != nil {
 	        return err
@@ -1385,7 +1390,7 @@ func unmarshalUUID(s string) (uuid.UUID, error) {
 	}
 
 	outer := {{ required .Accessor }}
-	{{ $vname := retrieve (format "rpcMap-%s" .Field.GoType) }}
+	{{ $vname := retrieve (format "rpcMap-%s" .Field.String) }}
 	var v {{ required $vname }}
 
 	if em, err = m.ReadEmbeddedMessageNoCopy(); err != nil {
@@ -1410,7 +1415,7 @@ func unmarshalUUID(s string) (uuid.UUID, error) {
 	    break
 	}
 
-	var vs rpcGlobalStruct{{ required .Field.GoType }}
+	var vs rpcGlobal{{ required .Field.String }}
 	if err = vs.RPCDecode(em); err == io.EOF {
 	    err = nil
 	} else if err != nil {
@@ -1454,10 +1459,10 @@ func unmarshalUUID(s string) (uuid.UUID, error) {
 		{{ template "go-pb/serialization-map" dict "T" .T.InnerKey "ProtoName" .ProtoName }}
 		{{ template "go-pb/serialization-map" dict "T" .T.InnerValue "ProtoName" .ProtoName }}
 		{{ $name := format "rpcMapKey%sValue%s" .T.InnerKey .T.InnerValue }}
-		{{ if ifnotexists (format "rpcMap%s" .T.GoType) }}
+		{{ if ifnotexists (format "rpcMap%s" .T.String) }}
 			{{ $mapcnt := counter "rpcMap" }}
 			{{ $name := format "rpcMap%d" $mapcnt }}
-			{{ store (format "rpcMap-%s" .T.GoType) $name }}
+			{{ store (format "rpcMap-%s" .T.String) $name }}
 			type {{ required $name }} struct {
 			    Key {{ required .T.InnerKey.GoType}}
 			    Value {{ required .T.InnerValue.GoType }}
@@ -1477,10 +1482,10 @@ func unmarshalUUID(s string) (uuid.UUID, error) {
 			    for err == nil {
 			        tag, err = m.ReadVarint()
 			        switch tag {
-			        case uint64(1 << 3) | uint64({{ if .T.InnerKey.IsMarshalled}}{{ template "go-pb/property-to-wiretype" "String"}}{{else}}{{ template "go-pb/property-to-wiretype" .T.InnerKey.String}}{{end}}):
-			            {{- template "go-pb/unmarshal" dict "Field" .T.InnerKey "Accessor" "s.Key" "Message" "m" "ProtoName" .ProtoName -}}
-			        case uint64(2 << 3) | uint64({{if .T.InnerValue.IsMarshalled}}{{ template "go-pb/property-to-wiretype" "String"}}{{else}}{{ template "go-pb/property-to-wiretype" .T.InnerValue.String}}{{end}}):
-			            {{- template "go-pb/unmarshal" dict "Field" .T.InnerValue "Accessor" "s.Value" "Message" "m" "ProtoName" .ProtoName -}}
+			        case uint64(1 << 3) | uint64({{ template "go-pb/property-to-wiretype" .T }}):
+			            {{ template "go-pb/unmarshal" dict "Field" .T.InnerKey "Accessor" "s.Key" "Message" "m" "ProtoName" .ProtoName -}}
+			        case uint64(2 << 3) | uint64({{ template "go-pb/property-to-wiretype" .T }}):
+			            {{ template "go-pb/unmarshal" dict "Field" .T.InnerValue "Accessor" "s.Value" "Message" "m" "ProtoName" .ProtoName -}}
 			        default:
 			            if err != io.EOF {
 			                err = m.ReadPBSkip(tag)
@@ -1499,7 +1504,7 @@ func unmarshalUUID(s string) (uuid.UUID, error) {
 {{ define "go-pb/serialization-struct" -}}
 	{{- /* Custom (de)serializer for structs */ -}}
 	type {{ required .TypeName }} struct {
-	    v {{ required .Name | capitalize }}
+	    v  *{{ required .Name | capitalize }}
 	}
 
 	func (s *{{ required .TypeName }}) RPCEncode(m *message) error {
@@ -1515,12 +1520,13 @@ func unmarshalUUID(s string) (uuid.UUID, error) {
 	        err error
 	        tag uint64
 	    )
+	    s.v = &{{ required .Name | capitalize }}{}
 	    for err == nil {
 	        tag, err = m.ReadVarint()
 	        switch tag {
 	        {{- range required .Fields }}
-	        case uint64({{ .ID }} << 3) | uint64({{ if .T.IsArray }}{{ template "go-pb/property-to-wiretype" .T.InnerValue.String}}{{ else if .T.IsMarshalled}}{{ template "go-pb/property-to-wiretype" "String"}}{{ else }}{{ template "go-pb/property-to-wiretype" .T.String}}{{ end }}):
-	            {{- template "go-pb/unmarshal" dict "Field" .T "Accessor" (format "s.v.%s" (required .Name | capitalize)) "Message" "m" "ProtoName" $.ProtoName -}}
+	        case uint64({{ .ID }} << 3) | uint64({{ template "go-pb/property-to-wiretype" .T }}):
+	            {{ template "go-pb/unmarshal" dict "Field" .T "Accessor" (format "s.v.%s" (required .Name | capitalize)) "Message" "m" "ProtoName" $.ProtoName -}}
 	        {{- end }}
 	        default:
 	            if err != io.EOF {
@@ -1576,11 +1582,11 @@ var protoMap = map[uint64]protoDescriptor{
     {{- $protoName := required .Name -}}
     {{- $protoID := required .ID -}}
     {{ range required .Structs }}
-        {{ if ifnotexists (format "rpcGlobalStruct%s" (required .Name | capitalize)) -}}
+        {{ if ifnotexists (format "rpcGlobalStruct_%s" (required .Name)) -}}
         {{ range required .Fields }}
             {{ template "go-pb/serialization-map" dict "T" .T "ProtoName" $protoName }}
         {{ end }}
-        {{ template "go-pb/serialization-struct" dict "TypeName" (format "rpcGlobalStruct%s" (required .Name | capitalize)) "Name" .Name "Fields" .Fields "ProtoName" $protoName }}
+        {{ template "go-pb/serialization-struct" dict "TypeName" (format "rpcGlobalStruct_%s" (required .Name)) "Name" .Name "Fields" .Fields "ProtoName" $protoName }}
         {{- end }}
     {{ end }}
     {{ range required .Methods }}
@@ -1629,8 +1635,8 @@ var protoMap = map[uint64]protoDescriptor{
 		        tag, err = m.ReadVarint()
 		        switch tag {
 		        {{- range .Fields }}
-		        case uint64({{ required .ID }} << 3) | uint64({{ if .T.IsArray }}{{ template "go-pb/property-to-wiretype" .T.InnerValue.String}}{{ else if .T.IsMarshalled}}{{ template "go-pb/property-to-wiretype" "String"}}{{ else }}{{ template "go-pb/property-to-wiretype" .T.String}}{{ end }}):
-		            {{- template "go-pb/unmarshal" dict "Field" .T "Accessor" (format "s.%s" (required .Name | capitalize)) "ProtoName" $.ProtoName -}}
+		        case uint64({{ required .ID }} << 3) | uint64({{ template "go-pb/property-to-wiretype" .T }}):
+		            {{ template "go-pb/unmarshal" dict "Field" .T "Accessor" (format "s.%s" (required .Name | capitalize)) "ProtoName" $.ProtoName -}}
 		        {{- end }}
 		        default:
 		            if err != io.EOF {

@@ -1323,7 +1323,7 @@ func (s *rpcMap0) RPCDecode(m *message) error {
 		switch tag {
 		case uint64(1<<3) | uint64(wireTypeLengthDelimited):
 			s.Key, err = m.ReadString()
-		case uint64(2<<3) | uint64(wireTypeVarint):
+		case uint64(2<<3) | uint64(wireTypeLengthDelimited):
 			s.Value, err = m.ReadInt()
 		default:
 			if err != io.EOF {
@@ -1384,11 +1384,11 @@ func (s *rpcMap1) RPCDecode(m *message) error {
 	return err
 }
 
-type rpcGlobalStructEchoThing struct {
-	v EchoThing
+type rpcGlobalStruct_echoThing struct {
+	v *EchoThing
 }
 
-func (s *rpcGlobalStructEchoThing) RPCEncode(m *message) error {
+func (s *rpcGlobalStruct_echoThing) RPCEncode(m *message) error {
 	m.WritePBString(1, s.v.Wee)
 	m.WritePBString(2, s.v.Woo)
 	for k, v := range s.v.Stuff {
@@ -1418,11 +1418,12 @@ func (s *rpcGlobalStructEchoThing) RPCEncode(m *message) error {
 	return nil
 }
 
-func (s *rpcGlobalStructEchoThing) RPCDecode(m *message) error {
+func (s *rpcGlobalStruct_echoThing) RPCDecode(m *message) error {
 	var (
 		err error
 		tag uint64
 	)
+	s.v = &EchoThing{}
 	for err == nil {
 		tag, err = m.ReadVarint()
 		switch tag {
@@ -1832,7 +1833,7 @@ type rpcReqProtoEchoMethodEcho struct {
 	Names     []string
 	Values    map[string]map[string]int64
 	Values2   map[string]int64
-	Something EchoThing
+	Something *EchoThing
 	Mytime    time.Time
 	Id        uuid.UUID
 }
@@ -1864,9 +1865,9 @@ func (s *rpcReqProtoEchoMethodEcho) RPCEncode(m *message) error {
 		}
 		m.WritePBMessage(4, em)
 	}
-	{
+	if s.Something != nil {
 		em := newEmbeddedMessage(messageCapacity)
-		var vs rpcGlobalStructEchoThing
+		var vs rpcGlobalStruct_echoThing
 		vs.v = s.Something
 		if err := vs.RPCEncode(em); err != nil {
 			return err
@@ -1946,7 +1947,7 @@ func (s *rpcReqProtoEchoMethodEcho) RPCDecode(m *message) error {
 				break
 			}
 
-			var vs rpcGlobalStructEchoThing
+			var vs rpcGlobalStruct_echoThing
 			if err = vs.RPCDecode(em); err == io.EOF {
 				err = nil
 			} else if err != nil {
@@ -2459,7 +2460,7 @@ func (c *RPCPingpongClient) TestMethod(ctx context.Context, reqString string, re
 }
 
 // Echo is yet another type test
-func (c *RPCEchoClient) Echo(ctx context.Context, reqInput string, reqNames []string, reqValues map[string]map[string]int64, reqValues2 map[string]int64, reqSomething EchoThing, reqMytime time.Time, reqId uuid.UUID) (respOutput string, respOuputTime time.Time, err error) {
+func (c *RPCEchoClient) Echo(ctx context.Context, reqInput string, reqNames []string, reqValues map[string]map[string]int64, reqValues2 map[string]int64, reqSomething *EchoThing, reqMytime time.Time, reqId uuid.UUID) (respOutput string, respOuputTime time.Time, err error) {
 
 	var decoderErr error
 	decoder := func(msg *message) error {
